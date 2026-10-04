@@ -1,0 +1,194 @@
+{
+  "info": {
+    "name": "EPSA HU-026 Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "api_url",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "supabase_url",
+      "value": "https://TU-PROYECTO.supabase.co"
+    },
+    {
+      "key": "supabase_anon_key",
+      "value": ""
+    },
+    {
+      "key": "email",
+      "value": "gerente@epsamotor.test"
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "codubi",
+      "value": ""
+    },
+    {
+      "key": "nombre_prueba",
+      "value": "QA {{$timestamp}}"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Iniciar sesión (Supabase Auth)",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "apikey",
+            "value": "{{supabase_anon_key}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{supabase_url}}/auth/v1/token?grant_type=password",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Sesión válida', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('access_token', body.access_token || '');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Listar catálogo",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{api_url}}/api/ubicaciones"
+      }
+    },
+    {
+      "name": "3. Seleccionar ubicaciones activas",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{api_url}}/api/ubicaciones?activo=true"
+      }
+    },
+    {
+      "name": "4. Crear ubicación QA",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{api_url}}/api/ubicaciones",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nomubi\": \"{{nombre_prueba}}\",\n  \"tipubi\": \"Proveedor\",\n  \"dirubi\": null\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) pm.collectionVariables.set('codubi', String(pm.response.json().data.codubi));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Editar ubicación QA",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{api_url}}/api/ubicaciones/{{codubi}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nomubi\": \"{{nombre_prueba}}\",\n  \"tipubi\": \"Proveedor\",\n  \"dirubi\": null\n}"
+        }
+      }
+    },
+    {
+      "name": "6. Desactivar ubicación QA",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{api_url}}/api/ubicaciones/{{codubi}}/estado",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"estubi\": false\n}"
+        }
+      }
+    },
+    {
+      "name": "7. Reactivar ubicación QA",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{api_url}}/api/ubicaciones/{{codubi}}/estado",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"estubi\": true\n}"
+        }
+      }
+    }
+  ]
+}
