@@ -1,0 +1,25 @@
+export default function MotoIllustration({ className = "" }) {
+  return (
+    <svg viewBox="0 0 240 170" className={className} xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="motoBody" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0e2c52" />
+          <stop offset="100%" stopColor="#071e3d" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="120" cy="140" rx="86" ry="9" fill="#071e3d" opacity=".08" />
+      <path
+        d="M44 118 L44 80 Q44 62 64 62 L148 62 Q174 62 184 86 L196 118 Z"
+        fill="url(#motoBody)"
+      />
+      <rect x="148" y="84" width="42" height="32" rx="4" className="fill-white/90 dark:fill-white/80" />
+      <path d="M64 62 L78 62 L78 80 L44 80 Z" fill="#c62828" />
+      <rect x="44" y="104" width="58" height="15" rx="3" fill="#061731" />
+      <rect x="104" y="92" width="30" height="5" rx="2.5" fill="#c62828" />
+      <circle cx="72" cy="124" r="18" fill="#061731" />
+      <circle cx="72" cy="124" r="6.5" fill="#c7d2e0" />
+      <circle cx="174" cy="124" r="18" fill="#061731" />
+      <circle cx="174" cy="124" r="6.5" fill="#c7d2e0" />
+    </svg>
+  );
+}

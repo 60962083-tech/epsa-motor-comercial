@@ -113,4 +113,4 @@ Postman:
 
 El backend corresponde a una API Node.js/Express.
 
-El despliegue del frontend en Netlify no implica automáticamente el despliegue de la API, por lo que el alojamiento del backend debe configurarse de manera independiente para los ambientes de integración y QA.
+El despliegue del frontend en Netlify no despliega automáticamente este backend, por lo que el equipo deberá definir el alojamiento de la API de manera independiente para el entorno de integración y QA.
