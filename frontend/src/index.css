@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html { scroll-behavior: smooth; }
+body { @apply font-sans text-[#0a0a0a] bg-white dark:bg-[#0b1220] dark:text-[#e7edf5]; }
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-[15px] font-semibold
+         transition-all duration-150 active:translate-y-px;
+}
+.btn-primary {
+  @apply bg-marino-700 text-white hover:bg-marino hover:shadow-card;
+}
+.btn-secondary {
+  @apply bg-white dark:bg-[#121a2b] text-marino-700 dark:text-white border border-marino-700/70
+         hover:bg-marino-50 dark:hover:bg-white/5;
+}
+.btn-whatsapp {
+  @apply bg-whatsapp text-white hover:bg-whatsapp-600;
+}
+.field-label { @apply block text-[13px] font-semibold mb-1.5; }
+.field-input {
+  @apply w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#121a2b]
+         px-3.5 py-2.5 text-[14px] outline-none transition
+         focus:border-marino-700 focus:ring-4 focus:ring-marino-700/10;
+}
