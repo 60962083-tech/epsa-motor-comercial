@@ -1,8 +1,6 @@
-# epsa-motor-comercial
-
-Transformación digital de la gestión comercial de EPSA Motor - Grupo 7 (ISIL 2026-2)
-
 # EPSA Motor - Sistema Web de Gestión Comercial y Control de Stock Multisede
+
+Transformación digital de la gestión comercial de EPSA Motor - Grupo 7 (ISIL 2026-2).
 
 Proyecto del curso **Proyecto Tecnológico (NRC 3710)** - Periodo Académico 2026-2.
 
@@ -19,86 +17,139 @@ Proyecto del curso **Proyecto Tecnológico (NRC 3710)** - Periodo Académico 202
 - **Gestión:** Jira Software Cloud
 - **Base de Datos & Auth:** Supabase (PostgreSQL)
 - **Backend:** Node.js + Express + TypeScript
-- **Despliegue:** Netlify CI/CD
+- **Frontend / CI/CD:** Netlify
 
 ## 🌿 Convención de Ramas
 
 - `main`: Producción
-- `staging`: Entorno de Pruebas / QA
+- `staging`: Entorno de pruebas / QA
 - `develop`: Desarrollo activo
 - `feature/HU-XXX`: Ramas por Historia de Usuario
 
 ---
 
-## Backend - HU-026 Administrar ubicaciones
-
-Esta HU implementa el catálogo interno de ubicaciones y su administración desde el backend.
-
-### Funcionalidades
-
-- Consulta de ubicaciones.
-- Filtro por activas/inactivas.
-- Registro de nuevas ubicaciones.
-- Edición de nombre, tipo y dirección.
-- Activación y desactivación lógica.
-- Validación de nombres duplicados normalizados.
-- Restricción de desactivación cuando existen unidades o traslados activos.
-- Autenticación con Supabase Auth.
-- Permisos por rol:
-  - Gerente: consulta y gestión.
-  - Administradora: consulta y gestión.
-  - Vendedor: solo consulta.
-
-### Inicio local
+## 🚀 Inicio local
 
 1. Instalar dependencias:
 
    `npm ci`
 
-2. Copiar `.env.example` a `.env` y completar las variables del proyecto de Supabase.
+2. Copiar `.env.example` a `.env` y completar las variables de Supabase.
 
-3. Aplicar la migración:
-
-   `supabase/migrations/202610030001_hu026_ubicaciones.sql`
-
-4. Ejecutar la API:
+3. Ejecutar la API:
 
    `npm run dev`
 
-5. La API estará disponible en:
+4. API local:
 
    `http://localhost:3000`
 
-6. Ejecutar las validaciones:
+5. Ejecutar pruebas:
 
    `npm test`
 
+6. Verificar compilación:
+
    `npm run build`
 
-### Seguridad
+## 🔐 Seguridad
 
-No usar una clave `service_role` en esta API.
+No utilizar una clave `service_role` en la API.
 
-Cada petición autenticada transmite el token del usuario a Supabase para que se apliquen RLS y los permisos correspondientes.
+Las peticiones autenticadas transmiten el token del usuario a Supabase para aplicar RLS y los permisos correspondientes.
 
 El archivo `.env` no debe versionarse.
 
-### Documentación y QA
+---
 
-La documentación específica de la HU se encuentra en:
+## 📍 HU-026 - Administrar ubicaciones
+
+Implementa el catálogo interno de ubicaciones y su administración.
+
+Incluye:
+
+- Consulta y filtrado de ubicaciones.
+- Registro y edición.
+- Activación y desactivación lógica.
+- Validación de duplicados.
+- Restricciones para unidades y traslados activos.
+- Permisos para Gerente, Administradora y Vendedor.
+
+Migración:
+
+`supabase/migrations/202610030001_hu026_ubicaciones.sql`
+
+Documentación:
 
 `docs/HU-026.md`
 
-La colección de Postman para pruebas se encuentra en:
+Postman:
 
 `docs/HU-026.postman_collection.json`
 
-La pantalla del catálogo corresponde al frontend.
+---
 
-El login general corresponde a HU-007; HU-026 consume los tokens generados por Supabase Auth.
+## 🧾 HU-034 - Registrar compra pendiente de factura
 
-### Despliegue
+Implementa el registro y consulta de compras pendientes, manteniendo la continuidad posterior con la identificación de unidades.
 
-La API es un servidor Node.js/Express.
+Migración:
 
-El despliegue del frontend en Netlify no despliega automáticamente este backend, por lo que el equipo deberá definir el alojamiento de la API para el entorno de QA.
+`supabase/migrations/202610040001_hu034_compra_pendiente.sql`
+
+Debe aplicarse después de la migración de HU-026.
+
+Documentación:
+
+`docs/HU-034.md`
+
+Postman:
+
+`docs/HU-034.postman_collection.json`
+
+---
+
+## 🏍️ HU-002 - Completar identificación de motos compradas
+
+Implementa la identificación individual de las motos pertenecientes a una compra previamente registrada.
+
+Incluye:
+
+- Registro de metadatos de la factura recibida.
+- Identificación de unidades por lotes.
+- Registro único de número de motor y chasis.
+- Validación de modelo y color respecto a la compra original.
+- Identificación parcial de una compra.
+- Cálculo de unidades identificadas y pendientes.
+- Prevención de unidades adicionales a la cantidad comprada.
+- Detección de motor o chasis duplicado.
+- Protección ante operaciones concurrentes.
+- Permisos para Gerente y Administradora.
+- Estado `Pendiente de identificación` para compras parcialmente identificadas.
+- Identificación independiente de la recepción física, ubicación y disponibilidad de la unidad.
+
+Migración:
+
+`supabase/migrations/202610060001_hu002_identificacion_unidades.sql`
+
+Debe aplicarse después de las migraciones de HU-026 y HU-034.
+
+Documentación:
+
+`docs/HU-002.md`
+
+Postman:
+
+`docs/HU-002.postman_collection.json`
+
+La factura registrada funciona como fuente de información para validar la cantidad de motos de la compra.
+
+La carga física del archivo de factura todavía requiere definir un mecanismo de almacenamiento privado y no forma parte de la implementación actual.
+
+---
+
+## 🌐 Despliegue
+
+El backend corresponde a una API Node.js/Express.
+
+El despliegue del frontend en Netlify no despliega automáticamente este backend, por lo que el equipo deberá definir el alojamiento de la API de manera independiente para el entorno de integración y QA.
