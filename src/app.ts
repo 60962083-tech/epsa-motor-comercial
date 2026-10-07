@@ -6,6 +6,7 @@ import type { FabricaCliente } from './middleware/autenticacion';
 
 import { crearRutasUbicacion } from './routes/ubicacion.routes';
 import { crearRutasCompra } from './routes/compra.routes';
+import { crearRutasUnidad } from './routes/unidad.routes';
 
 export function crearApp(fabrica?: FabricaCliente) {
   const app = express();
@@ -22,6 +23,11 @@ export function crearApp(fabrica?: FabricaCliente) {
   app.use(
     '/api/ubicaciones',
     crearRutasUbicacion(fabrica)
+  );
+
+  app.use(
+    '/api/compras',
+    crearRutasUnidad(fabrica)
   );
 
   app.use(

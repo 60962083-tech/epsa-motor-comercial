@@ -23,7 +23,7 @@ export function autenticar(crearCliente: FabricaCliente = crearClienteSupabase):
 }
 export const exigirGestion: RequestHandler = (_req, res, next) => {
   if (!['Gerente', 'Administradora'].includes(res.locals.rol))
-    return void res.status(403).json({ ok: false, message: 'Solo gerente y administradora pueden gestionar ubicaciones' });
+    return void res.status(403).json({ ok: false, message: 'Solo gerente y administradora pueden realizar esta operación de gestión' });
   next();
 };
 
