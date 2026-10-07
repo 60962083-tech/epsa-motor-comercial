@@ -9,7 +9,7 @@ async function entorno(fn: (request: any, calls: any[]) => Promise<void>, result
   const factory=(token:string)=>({
     auth:{getUser:async()=>({data:{user:token==='expired'?null:{id:token}},error:null})},
     rpc:async(name:string,args:any)=>{
-      if(name==='hu026_rol_actual') return {data:token==='inactive'?null:token,error:null};
+      if(name==='hu007_usuario_actual') return {data:token==='inactive'?null:{codusu:'1',uuidusu:token,rol:token},error:null};
       calls.push({name,args,token}); return resultado;
     }
   } as unknown as SupabaseClient);
