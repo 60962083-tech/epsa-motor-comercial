@@ -1,0 +1,236 @@
+{
+  "info": {
+    "name": "EPSA HU-002 Identificación de unidades",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "api_url",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "supabase_url",
+      "value": "https://TU-PROYECTO.supabase.co"
+    },
+    {
+      "key": "supabase_anon_key",
+      "value": ""
+    },
+    {
+      "key": "email",
+      "value": "gerente@epsamotor.test"
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "codcom",
+      "value": ""
+    },
+    {
+      "key": "codmod",
+      "value": "1"
+    },
+    {
+      "key": "color",
+      "value": "Azul"
+    },
+    {
+      "key": "numero_factura",
+      "value": "F001-QA-001"
+    },
+    {
+      "key": "fecha_factura",
+      "value": "2026-10-01"
+    },
+    {
+      "key": "emisor_factura",
+      "value": "Emisor ficticio QA"
+    },
+    {
+      "key": "motor_1",
+      "value": "QA-MOTOR-001"
+    },
+    {
+      "key": "chasis_1",
+      "value": "QA-CHASIS-001"
+    },
+    {
+      "key": "motor_2",
+      "value": "QA-MOTOR-002"
+    },
+    {
+      "key": "chasis_2",
+      "value": "QA-CHASIS-002"
+    },
+    {
+      "key": "idempotencia_compra",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Iniciar sesión",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "apikey",
+            "value": "{{supabase_anon_key}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{supabase_url}}/auth/v1/token?grant_type=password",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Sesión válida', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('access_token', pm.response.json().access_token || '');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Crear compra QA de dos motos (HU-034)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotencia_compra}}"
+          }
+        ],
+        "url": "{{api_url}}/api/compras",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"codmod\": \"{{codmod}}\",\n  \"colcom\": \"{{color}}\",\n  \"cancom\": 2\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('idempotencia_compra')) pm.collectionVariables.set('idempotencia_compra', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if ([200,201].includes(pm.response.code)) pm.collectionVariables.set('codcom', pm.response.json().data.codcom);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Registrar factura recibida (solo metadatos)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{api_url}}/api/compras/{{codcom}}/factura",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"emisor\": \"{{emisor_factura}}\",\n  \"numero\": \"{{numero_factura}}\",\n  \"fecha_emision\": \"{{fecha_factura}}\",\n  \"cantidad_motos\": 2\n}"
+        }
+      }
+    },
+    {
+      "name": "4. Identificar primera unidad",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{api_url}}/api/compras/{{codcom}}/unidades",
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"unidades\": [\r\n    {\r\n      \"nummotuni\": \"{{motor_1}}\",\r\n      \"chauni\": \"{{chasis_1}}\",\r\n      \"codmod\": \"{{codmod}}\",\r\n      \"coluni\": \"{{color}}\"\r\n    }\r\n  ]\r\n}"
+        }
+      }
+    },
+    {
+      "name": "5. Consultar unidades y cantidad pendiente",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{api_url}}/api/compras/{{codcom}}/unidades"
+      }
+    },
+    {
+      "name": "6. Completar segunda unidad (puede iniciar sesión como Administradora)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{api_url}}/api/compras/{{codcom}}/unidades",
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"unidades\": [\r\n    {\r\n      \"nummotuni\": \"{{motor_2}}\",\r\n      \"chauni\": \"{{chasis_2}}\",\r\n      \"codmod\": \"{{codmod}}\",\r\n      \"coluni\": \"{{color}}\"\r\n    }\r\n  ]\r\n}"
+        }
+      }
+    },
+    {
+      "name": "7. Lista de pendientes HU-034",
+      "request": {
+        "method": "GET",
+        "url": "{{api_url}}/api/compras?limite=50&offset=0"
+      }
+    }
+  ]
+}
