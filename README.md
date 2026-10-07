@@ -109,6 +109,45 @@ Postman:
 
 ---
 
+## 🏍️ HU-002 - Completar identificación de motos compradas
+
+Implementa la identificación individual de las motos pertenecientes a una compra previamente registrada.
+
+Incluye:
+
+- Registro de metadatos de la factura recibida.
+- Identificación de unidades por lotes.
+- Registro único de número de motor y chasis.
+- Validación de modelo y color respecto a la compra original.
+- Identificación parcial de una compra.
+- Cálculo de unidades identificadas y pendientes.
+- Prevención de unidades adicionales a la cantidad comprada.
+- Detección de motor o chasis duplicado.
+- Protección ante operaciones concurrentes.
+- Permisos para Gerente y Administradora.
+- Estado `Pendiente de identificación` para compras parcialmente identificadas.
+- Identificación independiente de la recepción física, ubicación y disponibilidad de la unidad.
+
+Migración:
+
+`supabase/migrations/202610060001_hu002_identificacion_unidades.sql`
+
+Debe aplicarse después de las migraciones de HU-026 y HU-034.
+
+Documentación:
+
+`docs/HU-002.md`
+
+Postman:
+
+`docs/HU-002.postman_collection.json`
+
+La factura registrada funciona como fuente de información para validar la cantidad de motos de la compra.
+
+La carga física del archivo de factura todavía requiere definir un mecanismo de almacenamiento privado y no forma parte de la implementación actual.
+
+---
+
 ## 🌐 Despliegue
 
 El backend corresponde a una API Node.js/Express.

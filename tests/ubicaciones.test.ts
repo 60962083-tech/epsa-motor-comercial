@@ -15,7 +15,7 @@ async function entorno(fn: (request: Function, calls: any[]) => Promise<void>, r
     query.then = (resolve: Function, reject: Function) => Promise.resolve(result).then(resolve as any, reject as any);
     return {
       auth: { getUser: async () => token === 'expired' ? { data: { user: null }, error: {} } : { data: { user: { id: token } }, error: null } },
-      rpc: async () => ({ data: token === 'inactive' ? null : token, error: null }),
+      rpc: async () => ({ data: token === 'inactive' ? null : { codusu: '1', uuidusu: token, rol: token }, error: null }),
       from: () => query
     } as unknown as SupabaseClient;
   };
