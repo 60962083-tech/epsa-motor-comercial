@@ -1,0 +1,18 @@
+<svg viewBox="0 0 1200 500" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g4" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0e2c52"/><stop offset="100%" stop-color="#0a1e3f"/>
+  </linearGradient></defs>
+  <rect width="1200" height="500" fill="url(#g4)"/>
+  <circle cx="1000" cy="400" r="240" fill="#C8102E" opacity=".05"/>
+  <g transform="translate(720,140) scale(2.2)" opacity=".92">
+    <rect x="0" y="0" width="200" height="4" rx="2" fill="#fff" opacity=".15"/>
+    <path d="M44 118 L44 80 Q44 62 64 62 L148 62 Q174 62 184 86 L196 118 Z" fill="#1a3a63"/>
+    <path d="M142 64 L190 64 Q196 64 196 76 L196 92 L170 92 L150 72 Z" fill="#eef3f9" opacity=".85"/>
+    <rect x="42" y="102" width="62" height="16" rx="3" fill="#061731"/>
+    <circle cx="72" cy="124" r="18" fill="#061731"/><circle cx="72" cy="124" r="6.5" fill="#c7d2e0"/>
+    <circle cx="176" cy="124" r="18" fill="#061731"/><circle cx="176" cy="124" r="6.5" fill="#c7d2e0"/>
+  </g>
+  <text x="90" y="210" font-family="Arial" font-weight="800" font-size="50" fill="#fff">Modelo Cross,</text>
+  <text x="90" y="258" font-family="Arial" font-weight="800" font-size="50" fill="#fff">para trabajo pesado</text>
+  <text x="90" y="300" font-family="Arial" font-size="19" fill="#b9c4d3">Conoce sus características en la ficha técnica</text>
+</svg>

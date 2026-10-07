@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
-import { Logo, IconMenu, IconClose, IconSun, IconMoon } from "../Icons";
+import { IconMenu, IconClose, IconSun, IconMoon } from "../Icons";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../ThemeContext";
 
@@ -38,8 +38,7 @@ export default function DashboardLayout() {
           <button className="md:hidden" onClick={() => setOpen((o) => !o)} aria-label="Abrir menú">
             {open ? <IconClose /> : <IconMenu />}
           </button>
-          <Logo />
-          <span className="font-bold">EPSA MOTOR</span>
+          <img src="/images/logo-epsa-transparente.png" alt="EPSA Motor" className="h-10 w-auto" />
           <span className="hidden text-white/50 sm:inline">| Gestión comercial</span>
         </div>
         <div className="flex items-center gap-3 text-[14px]">

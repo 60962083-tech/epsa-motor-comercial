@@ -1,0 +1,16 @@
+<svg viewBox="0 0 1200 500" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0b2140"/><stop offset="100%" stop-color="#132c4e"/>
+  </linearGradient></defs>
+  <rect width="1200" height="500" fill="url(#g3)"/>
+  <g fill="#fff" opacity=".9">
+    <circle cx="300" cy="230" r="7"/><circle cx="600" cy="230" r="7"/><circle cx="900" cy="230" r="7"/>
+    <text x="300" y="275" font-family="Arial" font-size="20" fill="#fff" text-anchor="middle">Comas</text>
+    <text x="600" y="275" font-family="Arial" font-size="20" fill="#fff" text-anchor="middle">Ventanilla</text>
+    <text x="900" y="275" font-family="Arial" font-size="20" fill="#fff" text-anchor="middle">Puente Piedra</text>
+  </g>
+  <line x1="300" y1="230" x2="600" y2="230" stroke="#C8102E" stroke-width="2" opacity=".5"/>
+  <line x1="600" y1="230" x2="900" y2="230" stroke="#C8102E" stroke-width="2" opacity=".5"/>
+  <text x="600" y="140" font-family="Arial" font-weight="800" font-size="46" fill="#fff" text-anchor="middle">Tres sedes en Lima y Callao</text>
+  <text x="600" y="330" font-family="Arial" font-size="19" fill="#b9c4d3" text-anchor="middle">Visítanos de lunes a sábado, de 9:00 a. m. a 5:00 p. m.</text>
+</svg>

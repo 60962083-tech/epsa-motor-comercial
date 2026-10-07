@@ -1,23 +1,19 @@
-import { useState } from "react";
-import { UBICACIONES as INICIAL } from "../../data/mockData";
+import { useCatalog } from "../../store/catalogStore.jsx";
 import Badge from "../../components/Badge";
 import HUBadge from "../../components/HUBadge";
 
 /**
- * Ubicaciones.jsx — HU-026
- * "Administrar las ubicaciones de trabajo" (catálogo y desactivación)
- * -----------------------------------------------------------------
- * Lista las sedes propias y los proveedores/almacenes externos.
- * El botón Activar/Desactivar sí cambia el estado en pantalla (useState
- * local), para que se sienta real; lo único que falta es que, en vez
- * de vivir en memoria del navegador, quede guardado en Supabase.
- * -----------------------------------------------------------------
+ * Ubicaciones.jsx — HU-026 "Administrar las ubicaciones de trabajo"
+ * Desactivar una sede aquí la saca de verdad de la web pública (/sedes),
+ * porque ambas pantallas comparten el mismo catálogo (useCatalog).
  */
 export default function Ubicaciones() {
-  const [lista, setLista] = useState(INICIAL);
+  const { ubicaciones: lista, toggleActivoUbicacion } = useCatalog();
 
-  function alternar(id) {
-    setLista((prev) => prev.map((u) => (u.id === id ? { ...u, activo: !u.activo } : u)));
+  function alternar(u) {
+    const accion = u.activo ? "desactivar" : "activar";
+    if (!window.confirm(`¿Seguro que quieres ${accion} "${u.nombre}"?`)) return;
+    toggleActivoUbicacion(u.id);
   }
 
   return (
@@ -43,7 +39,7 @@ export default function Ubicaciones() {
                 <td className="px-4 py-3 text-slate-500">{u.tipo}</td>
                 <td className="px-4 py-3"><Badge estado={u.activo ? "Activo" : "Inactivo"} /></td>
                 <td className="px-4 py-3">
-                  <button onClick={() => alternar(u.id)} className="font-medium text-marino-700 hover:underline dark:text-white/70">
+                  <button onClick={() => alternar(u)} className="font-medium text-marino-700 hover:underline dark:text-white/70">
                     {u.activo ? "Desactivar" : "Activar"}
                   </button>
                 </td>

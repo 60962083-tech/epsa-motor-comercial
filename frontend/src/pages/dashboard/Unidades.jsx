@@ -17,6 +17,9 @@ export default function Unidades() {
           <h1 className="text-2xl font-bold text-marino dark:text-white">Unidades</h1>
           <p className="text-slate-500">Una unidad puede estar en una sede y, aun así, no estar disponible para la venta.</p>
         </div>
+        <Link to="/dashboard/unidades/nueva-compra" className="btn btn-primary btn-sm">
+          + Registrar compra
+        </Link>
       </div>
 
       <div className="mt-6 overflow-x-auto rounded-xl2 border border-slate-200 dark:border-white/10">

@@ -1,26 +1,19 @@
-import { useState } from "react";
-import { MODELOS as INICIAL } from "../../data/mockData";
+import { useCatalog } from "../../store/catalogStore.jsx";
 import Badge from "../../components/Badge";
 import HUBadge from "../../components/HUBadge";
 
 /**
- * ModelosAdmin.jsx — HU-012
- * "Administrar modelos publicados" (borrador / publicado)
- * -----------------------------------------------------------------
- * Publicar/retirar un modelo aquí SÍ cambia lo que ves en /modelos
- * (la web pública), porque ambas pantallas leen del mismo arreglo
- * MODELOS de mockData.js. El día que exista Supabase, las dos
- * pantallas van a leer la misma tabla, así que el comportamiento
- * ya queda correcto desde ahora.
- * -----------------------------------------------------------------
+ * ModelosAdmin.jsx — HU-012 "Administrar modelos publicados"
+ * Publicar/retirar aquí cambia de verdad lo que se ve en /modelos,
+ * porque las dos pantallas leen del mismo catálogo (useCatalog).
  */
 export default function ModelosAdmin() {
-  const [modelos, setModelos] = useState(INICIAL);
+  const { modelos, togglePublicadoModelo } = useCatalog();
 
-  function alternarPublicacion(id) {
-    setModelos((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, estado: m.estado === "Publicado" ? "Borrador" : "Publicado" } : m))
-    );
+  function alternarPublicacion(m) {
+    const accion = m.estado === "Publicado" ? "retirar" : "publicar";
+    if (!window.confirm(`¿Seguro que quieres ${accion} "${m.nombre}"?`)) return;
+    togglePublicadoModelo(m.id);
   }
 
   return (
@@ -46,7 +39,7 @@ export default function ModelosAdmin() {
                 <td className="px-4 py-3"><Badge estado={m.estado} /></td>
                 <td className="px-4 py-3 space-x-3">
                   <button className="font-medium text-marino-700 hover:underline dark:text-white/70">Editar</button>
-                  <button onClick={() => alternarPublicacion(m.id)} className="font-medium text-marino-700 hover:underline dark:text-white/70">
+                  <button onClick={() => alternarPublicacion(m)} className="font-medium text-marino-700 hover:underline dark:text-white/70">
                     {m.estado === "Publicado" ? "Retirar" : "Publicar"}
                   </button>
                 </td>

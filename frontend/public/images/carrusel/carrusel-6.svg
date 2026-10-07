@@ -1,0 +1,15 @@
+<svg viewBox="0 0 1200 500" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g6" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0a1e3f"/><stop offset="100%" stop-color="#0e2c52"/>
+  </linearGradient></defs>
+  <rect width="1200" height="500" fill="url(#g6)"/>
+  <text x="600" y="210" font-family="Arial" font-weight="800" font-size="46" fill="#fff" text-anchor="middle">Más de 12 años</text>
+  <text x="600" y="260" font-family="Arial" font-weight="800" font-size="46" fill="#fff" text-anchor="middle">en el mercado</text>
+  <text x="600" y="306" font-family="Arial" font-size="19" fill="#b9c4d3" text-anchor="middle">Distribuidor autorizado Bajaj, respaldado por Crosland Perú</text>
+  <g fill="#fff" opacity=".85" font-family="Arial" font-size="15" text-anchor="middle">
+    <rect x="430" y="340" width="120" height="34" rx="6" fill="#ffffff" opacity=".08"/>
+    <text x="490" y="362">BAJAJ</text>
+    <rect x="570" y="340" width="150" height="34" rx="6" fill="#ffffff" opacity=".08"/>
+    <text x="645" y="362">RE · TORITO</text>
+  </g>
+</svg>

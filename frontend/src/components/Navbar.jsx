@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { IconSun, IconMoon, IconMenu, IconClose, Logo } from "./Icons";
+import { IconSun, IconMoon, IconMenu, IconClose } from "./Icons";
 import { useTheme } from "../ThemeContext";
 
 const LINKS = [
@@ -23,10 +23,9 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-30 bg-marino/95 backdrop-blur supports-[backdrop-filter]:bg-marino/90">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <NavLink to="/" className="flex items-center gap-2 text-white">
-          <Logo className="text-white" />
-          <span className="text-[17px] font-bold tracking-tight">EPSA MOTOR</span>
+      <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-6">
+        <NavLink to="/" className="flex items-center">
+          <img src="/images/logo-epsa-transparente.png" alt="EPSA Motor" className="h-16 w-auto" />
         </NavLink>
 
         <nav className="hidden items-center gap-8 md:flex">
@@ -38,6 +37,13 @@ export default function Navbar() {
         </nav>
 
         <div className="flex items-center gap-2">
+          {/* Acceso al dashboard interno (solo personal de EPSA Motor) */}
+          <NavLink
+            to="/dashboard/login"
+            className="hidden rounded-md border border-white/25 px-3 py-1.5 text-[13px] font-medium text-white/85 transition hover:bg-white/10 sm:block"
+          >
+            Ingresar
+          </NavLink>
           <button
             onClick={toggle}
             aria-label="Cambiar tema"
@@ -72,6 +78,9 @@ export default function Navbar() {
               {l.label}
             </NavLink>
           ))}
+          <NavLink to="/dashboard/login" onClick={() => setOpen(false)} className="py-2 text-[15px] font-medium text-white/85">
+            Ingresar (personal EPSA Motor)
+          </NavLink>
         </div>
       </nav>
     </header>

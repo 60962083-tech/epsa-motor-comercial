@@ -1,0 +1,19 @@
+<svg viewBox="0 0 1200 500" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#17345c"/><stop offset="100%" stop-color="#0a2240"/>
+  </linearGradient></defs>
+  <rect width="1200" height="500" fill="url(#g2)"/>
+  <circle cx="200" cy="100" r="220" fill="#ffffff" opacity=".04"/>
+  <g transform="translate(120,130) scale(2.3)">
+    <rect x="10" y="40" width="70" height="4" rx="2" fill="#fff" opacity=".5"/>
+    <rect x="10" y="40" width="20" height="4" rx="2" fill="#c62828"/>
+    <path d="M44 118 L44 80 Q44 62 64 62 L148 62 Q174 62 184 86 L196 118 Z" fill="#1f4068"/>
+    <rect x="148" y="84" width="42" height="32" rx="4" fill="#eef3f9" opacity=".9"/>
+    <rect x="44" y="104" width="58" height="15" rx="3" fill="#061731"/>
+    <circle cx="72" cy="124" r="18" fill="#061731"/><circle cx="72" cy="124" r="6.5" fill="#c7d2e0"/>
+    <circle cx="174" cy="124" r="18" fill="#061731"/><circle cx="174" cy="124" r="6.5" fill="#c7d2e0"/>
+  </g>
+  <text x="620" y="200" font-family="Arial" font-weight="800" font-size="48" fill="#fff">Techo clásico o</text>
+  <text x="620" y="248" font-family="Arial" font-weight="800" font-size="48" fill="#fff">fibra deportiva</text>
+  <text x="620" y="292" font-family="Arial" font-size="19" fill="#b9c4d3">Configura tu unidad según el uso que le vas a dar</text>
+</svg>

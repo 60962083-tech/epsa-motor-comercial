@@ -7,6 +7,7 @@ import Home from "./pages/Home";
 import Modelos from "./pages/Modelos.HU-008";
 import ModeloDetalle from "./pages/ModeloDetalle.HU-009";
 import Nosotros from "./pages/Nosotros.HU-010";
+import Sedes from "./pages/Sedes.HU-010"; // corrige DEF-001: "/sedes" en blanco
 
 // --- Capa interna (dashboard) ---
 import DashboardLayout from "./components/dashboard/DashboardLayout";
@@ -20,6 +21,7 @@ import Techo from "./pages/dashboard/Techo.HU-004";
 import Ubicaciones from "./pages/dashboard/Ubicaciones.HU-026";
 import ModelosAdmin from "./pages/dashboard/ModelosAdmin.HU-012";
 import Leads from "./pages/dashboard/Leads.HU-014";
+import RegistrarCompra from "./pages/dashboard/RegistrarCompra.HU-034";
 
 /**
  * App.jsx
@@ -48,6 +50,7 @@ function SitioPublico() {
           <Route path="/modelos" element={<Modelos />} />
           <Route path="/modelos/:id" element={<ModeloDetalle />} />
           <Route path="/nosotros" element={<Nosotros />} />
+          <Route path="/sedes" element={<Sedes />} />
         </Routes>
       </main>
       <Footer />
@@ -66,6 +69,7 @@ export default function App() {
       <Route path="/dashboard" element={<DashboardLayout />}>
         <Route index element={<Resumen />} />
         <Route path="unidades" element={<Unidades />} />
+        <Route path="unidades/nueva-compra" element={<RegistrarCompra />} />
         <Route path="unidades/:id/vincular" element={<VincularUnidad />} />
         <Route path="unidades/:id/techo" element={<Techo />} />
         <Route path="ubicaciones" element={<ProtectedRoute seccion="ubicaciones"><Ubicaciones /></ProtectedRoute>} />

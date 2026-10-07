@@ -1,6 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { MODELOS } from "../data/mockData";
-import MotoIllustration from "../components/MotoIllustration";
+import { useCatalog } from "../store/catalogStore.jsx";
 import WhatsAppButton from "../components/WhatsAppButton.HU-013";
 import HUBadge from "../components/HUBadge";
 
@@ -16,7 +15,8 @@ import HUBadge from "../components/HUBadge";
  */
 export default function ModeloDetalle() {
   const { id } = useParams();
-  const modelo = MODELOS.find((m) => m.id === id && m.estado === "Publicado");
+  const { modelos } = useCatalog();
+  const modelo = modelos.find((m) => m.id === id && m.estado === "Publicado");
 
   if (!modelo) {
     // ---------- Estado de error: modelo no publicado o enlace inválido ----------
@@ -44,24 +44,41 @@ export default function ModeloDetalle() {
         <Link to="/modelos" className="hover:underline">Modelos</Link> / {modelo.nombre}
       </p>
       <div className="mt-4 grid gap-10 lg:grid-cols-2">
-        <div className="rounded-xl2 bg-marino-50 p-8 dark:bg-white/5">
-          <MotoIllustration className="w-full" />
+        <div className="overflow-hidden rounded-xl2 bg-marino-50 dark:bg-white/5">
+          <img src={modelo.imagen} alt={modelo.nombre} className="aspect-[4/3] w-full object-cover" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold text-marino dark:text-white">{modelo.nombre}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="text-3xl font-bold text-marino dark:text-white">{modelo.nombre}</h1>
+            <span className="shrink-0 rounded-full bg-marino-50 px-3 py-1.5 text-[13px] font-semibold text-marino-700 dark:bg-white/10 dark:text-white/70">{modelo.precio}</span>
+          </div>
           <p className="mt-1 text-slate-500">Motocar Bajaj</p>
 
+          {/* Escenario 2 de HU-009: color ofrecido */}
+          {modelo.colores.length > 0 && (
+            <div className="mt-5">
+              <h2 className="text-[13px] font-semibold text-slate-500">Colores ofrecidos</h2>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {modelo.colores.map((c) => (
+                  <span key={c} className="rounded-full border border-slate-200 px-3 py-1 text-[13px] text-marino dark:border-white/15 dark:text-white/80">{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-5 rounded-lg bg-marino-50 p-4 text-[14px] text-marino dark:bg-white/5 dark:text-white/80">
-            Precio, colores y disponibilidad se confirman con un asesor.
+            Precio final, disponibilidad del color y stock se confirman con un asesor.
           </div>
 
           <h2 className="mt-6 text-[17px] font-semibold">Características</h2>
           <dl className="mt-3 divide-y divide-slate-100 dark:divide-white/10">
             {[
-              ["Techo", modelo.techo],
+              ["Tipo de motor", modelo.tipoMotor],
+              ["Combustible", modelo.combustible],
               ["Uso", modelo.uso],
-              ["Capacidad", modelo.capacidad],
-              ["Motor", modelo.motor],
+              ["Cilindrada", modelo.cilindrada],
+              ["Potencia", modelo.potencia],
+              ["Techo", modelo.techo],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between py-2.5 text-[14px]">
                 <dt className="font-semibold">{k}</dt>
@@ -71,7 +88,10 @@ export default function ModeloDetalle() {
           </dl>
 
           <div className="mt-7 flex flex-wrap gap-3">
-            <Link to="/#consulta" className="btn btn-primary">Consultar por este modelo</Link>
+            {/* DEF-003: antes mandaba a "/#consulta" sin preseleccionar nada.
+                Ahora manda el id del modelo por la URL; Home.jsx lo lee y
+                preselecciona el modelo + baja hasta el formulario. */}
+            <Link to={`/?modelo=${modelo.id}#consulta`} className="btn btn-primary">Consultar por este modelo</Link>
             <WhatsAppButton mensaje={`Hola, quisiera información sobre el ${modelo.nombre}.`} />
           </div>
         </div>

@@ -1,22 +1,28 @@
-import { UBICACIONES } from "../data/mockData";
-import MotoIllustration from "../components/MotoIllustration";
-import WhatsAppButton from "../components/WhatsAppButton.HU-013";
-import { IconPin } from "../components/Icons";
+import { Link } from "react-router-dom";
 import HUBadge from "../components/HUBadge";
+import { IconShield, IconMapArea, IconCreditCard, IconDocument } from "../components/Icons";
+
+// Fotos en /public/images/nosotros/socio-1.jpg ... socio-4.jpg, mismo
+// patrón que las fotos de modelos: se reemplaza el archivo con el
+// mismo nombre y no hay que tocar el código.
+const SOCIO = [
+  { imagen: "/images/nosotros/socio-1.jpg", stat: "+12 años", statNota: "EN EL MERCADO", titulo: "Respaldo comercial", texto: "Experiencia acompañando la compra y el financiamiento de tu herramienta de trabajo.", Icono: IconShield },
+  { imagen: "/images/nosotros/socio-2.jpg", stat: "3 sedes", statNota: "LIMA Y CALLAO", titulo: "Presencia local", texto: "INVERSIONES EPSA MOTOR S.A.C., empresa formal y distribuidor autorizado de Torito Bajaj.", Icono: IconMapArea },
+  { imagen: "/images/nosotros/socio-3.jpg", stat: "A tu medida", statNota: "CON UN ASESOR", titulo: "Crédito Directo Flexible", texto: "Opciones de financiamiento que se coordinan directamente con un asesor.", Icono: IconCreditCard },
+  { imagen: "/images/nosotros/socio-4.jpg", stat: "Trámite", statNota: "ACOMPAÑADO", titulo: "Placa y Tarjeta de Propiedad", texto: "Acompañamiento en el trámite de documentos de la unidad.", Icono: IconDocument },
+];
 
 /**
  * Nosotros.jsx — HU-010 "Ver información de EPSA Motor y sus sedes"
  * -----------------------------------------------------------------
- * Sección institucional corta + tarjetas de sedes. Solo se listan
- * las ubicaciones con tipo "Sede propia" (los almacenes/proveedores
- * de HU-026 son información interna, no van aquí).
- * Las tarjetas se apilan en 1 columna en celular y pasan a 3 en
- * pantallas grandes (mobile-first, como pide la historia).
+ * Corrige OBS-002: antes esta pantalla repetía las tarjetas de sede
+ * que también estaban en Sedes.jsx, con riesgo de quedar
+ * desactualizadas una respecto a la otra. Ahora "Quiénes somos" solo
+ * cuenta quién es la empresa y enlaza a /sedes para el detalle
+ * completo (dirección, horario, mapa), que vive en un solo lugar.
  * -----------------------------------------------------------------
  */
 export default function Nosotros() {
-  const sedes = UBICACIONES.filter((u) => u.tipo === "Sede propia" && u.activo);
-
   return (
     <div className="fade-in">
       <HUBadge code="HU-010" titulo="Información de EPSA Motor y sus sedes" />
@@ -30,8 +36,8 @@ export default function Nosotros() {
               Más de 12 años en el mercado ofreciendo motocars en Lima Norte y Callao.
             </p>
           </div>
-          <div className="rounded-xl2 bg-white/60 p-6 shadow-card dark:bg-white/5">
-            <MotoIllustration className="w-full" />
+          <div className="rounded-xl2 bg-white/60 p-8 shadow-card dark:bg-white/5">
+            <img src="/images/torito.svg" alt="EPSA Motor" className="w-full" />
           </div>
         </div>
       </section>
@@ -43,25 +49,47 @@ export default function Nosotros() {
           Crosland Perú S.A.C. Atendemos en tres sedes de Lima Norte y Callao.
         </p>
 
-        <h2 className="mt-10 text-xl font-bold text-marino dark:text-white">Dónde atendemos</h2>
-        {/* grid-cols-1 por defecto (375px y en general móvil) → sm:grid-cols-2 → lg:grid-cols-3 */}
-        <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {sedes.map((s) => (
-            <div key={s.id} className="rounded-xl2 border border-slate-100 bg-white p-5 shadow-card dark:border-white/5 dark:bg-[#121a2b]">
-              <h3 className="flex items-center gap-2 text-[16px] font-semibold text-marino dark:text-white">
-                <IconPin /> Sede {s.nombre}
-              </h3>
-              <p className="mt-2 text-[13.5px] text-slate-500">{s.direccion}</p>
-              <p className="mt-1 text-[12.5px] text-slate-400">Horario: por confirmar</p>
-              <WhatsAppButton className="mt-4 w-full" />
-            </div>
-          ))}
-        </div>
-
-        <p className="mt-6 text-[12.5px] text-slate-400">
-          Los datos de contacto y las características comerciales mostradas están sujetos a
-          confirmación de EPSA Motor.
+        <h2 className="mt-10 text-xl font-bold text-marino dark:text-white">Qué ofrecemos</h2>
+        <p className="mt-2 max-w-3xl text-slate-600 dark:text-slate-400">
+          Venta de motocars Bajaj con distintas configuraciones de techo, y orientación sobre
+          modelos, sedes y formas de contacto.
         </p>
+
+        <div className="mt-10 flex flex-wrap items-center gap-4 rounded-xl2 bg-marino-50 p-6 dark:bg-white/5">
+          <p className="text-[14.5px] text-marino dark:text-white/80">
+            ¿Buscas la dirección, el horario o cómo llegar a una sede?
+          </p>
+          <Link to="/sedes" className="btn btn-primary">Ver todas las sedes →</Link>
+        </div>
+      </section>
+
+      {/* Franja oscura, para romper el blanco y resaltar este bloque */}
+      <section className="bg-marino py-16 text-white">
+        <div className="mx-auto max-w-6xl px-6">
+          <span className="text-[12.5px] font-semibold uppercase tracking-wider text-acento">Por qué EPSA Motor</span>
+          <h2 className="mt-2 text-2xl font-bold sm:text-3xl">Tu socio en movilidad de trabajo</h2>
+          <div className="mt-8 grid gap-6 sm:grid-cols-2">
+            {SOCIO.map(({ imagen, stat, statNota, titulo, texto, Icono }) => (
+              <div key={titulo} className="overflow-hidden rounded-xl2 bg-white/5">
+                <div className="relative aspect-[4/3]">
+                  <img src={imagen} alt={titulo} className="h-full w-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                  <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-white text-marino">
+                    <Icono className="h-5 w-5" />
+                  </span>
+                  <div className="absolute inset-x-0 bottom-0 p-4">
+                    <p className="text-2xl font-bold leading-none">{stat}</p>
+                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-white/80">{statNota}</p>
+                  </div>
+                </div>
+                <div className="p-5">
+                  <h3 className="text-[14.5px] font-semibold uppercase tracking-wide">{titulo}</h3>
+                  <p className="mt-1.5 text-[13px] text-white/70">{texto}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
     </div>
   );
