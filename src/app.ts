@@ -6,13 +6,16 @@ import type { FabricaCliente } from './middleware/autenticacion';
 
 import { crearRutasUbicacion } from './routes/ubicacion.routes';
 import { crearRutasCompra } from './routes/compra.routes';
+import { crearRutasModelo } from './routes/modelo.routes';
+import type { FabricaClientePublico } from './types/modelo.types';
 import { crearRutasUnidad } from './routes/unidad.routes';
 
-export function crearApp(fabrica?: FabricaCliente) {
+export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClientePublico) {
   const app = express();
 
   app.use(cors());
   app.use(express.json({ limit: '32kb' }));
+  app.use('/api/modelos', crearRutasModelo(fabricaPublica));
 
   app.get('/', (_req, res) => {
     res.json({
