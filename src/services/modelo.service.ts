@@ -7,3 +7,9 @@ export async function listarModelosPublicados(db: SupabaseClient): Promise<Model
   if (error) throw error;
   return data ?? [];
 }
+
+export async function listarModeloPublicadoPorId(db: SupabaseClient, codmod: string): Promise<ModeloPublico | null> {
+  const { data, error } = await db.rpc('hu009_modelo_publicado_por_id', { p_codmod: codmod });
+  if (error) throw error;
+  return data;
+}

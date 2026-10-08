@@ -55,3 +55,68 @@ test('HU-012: errores de consulta no exponen detalles internos', async () => {
       assert.deepEqual(await respuesta.json(), { ok: false, message: 'Error al consultar el catálogo de modelos' });
     });
 });
+
+test('HU-009: ficha pública usa la RPC por ID sin sesión y devuelve solo modelo e imágenes activas', async () => {
+  const llamadas: unknown[][] = [];
+  const fabrica = (...args: unknown[]) => {
+    assert.deepEqual(args, []);
+    return { rpc: async (nombre: string, parametros?: unknown) => {
+      llamadas.push([nombre, parametros]);
+      return { data: {
+        codmod: '1', nommod: 'Modelo prueba 1', marmod: 'Bajaj',
+        desmod: 'Modelo registrado para pruebas', carmod: 'Configuración estándar',
+        imagenes: [{ urlimo: 'https://example.test/foto-1.jpg', ordimo: 1 }]
+      }, error: null };
+    } } as unknown as SupabaseClient;
+  };
+  await entorno(fabrica, async base => {
+    const respuesta = await fetch(`${base}/1`);
+    assert.equal(respuesta.status, 200);
+    assert.equal(respuesta.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await respuesta.json(), { ok: true, data: {
+      codmod: '1', nommod: 'Modelo prueba 1', marmod: 'Bajaj',
+      desmod: 'Modelo registrado para pruebas', carmod: 'Configuración estándar',
+      imagenes: [{ urlimo: 'https://example.test/foto-1.jpg', ordimo: 1 }]
+    } });
+    assert.deepEqual(llamadas, [['hu009_modelo_publicado_por_id', { p_codmod: '1' }]]);
+    for (const id of ['0', '-1', '1.2', 'abc', '9223372036854775808']) {
+      const invalida = await fetch(`${base}/${id}`);
+      assert.equal(invalida.status, 400);
+      assert.deepEqual(await invalida.json(), { ok: false, message: 'Identificador de modelo inválido' });
+    }
+    for (const filtros of ['estmod=Borrador', 'select=*', 'or=(estmod.eq.Borrador)']) {
+      assert.equal((await fetch(`${base}/1?${filtros}`)).status, 400);
+      assert.equal((await fetch(`${base}?${filtros}`)).status, 400);
+    }
+    assert.equal(llamadas.length, 1);
+  });
+});
+
+test('HU-009: inexistente, Borrador, No publicado y despublicado comparten 404', async () => {
+  const fabrica = () => ({ rpc: async (_nombre: string, parametros: { p_codmod: string }) => ({
+    data: parametros.p_codmod === '1' ? {
+      codmod: '1', nommod: 'Modelo', marmod: 'Bajaj', desmod: 'Descripción', carmod: 'Características', imagenes: []
+    } : null,
+    error: null
+  }) }) as unknown as SupabaseClient;
+  await entorno(fabrica, async base => {
+    for (const id of ['2', '3', '999']) {
+      const respuesta = await fetch(`${base}/${id}`);
+      assert.equal(respuesta.status, 404);
+      assert.equal(respuesta.headers.get('cache-control'), 'no-store');
+      assert.deepEqual(await respuesta.json(), { ok: false, message: 'Modelo no disponible' });
+    }
+    const sinImagenes = await fetch(`${base}/1`);
+    assert.equal(sinImagenes.status, 200);
+    assert.deepEqual((await sinImagenes.json()).data.imagenes, []);
+  });
+});
+
+test('HU-009: falla con respuesta genérica si Supabase falla', async () => {
+  const fabrica = () => ({ rpc: async () => ({ data: null, error: { code: 'XX000', message: 'SQL privado' } }) }) as unknown as SupabaseClient;
+  await entorno(fabrica, async base => {
+    const respuesta = await fetch(`${base}/1`);
+    assert.equal(respuesta.status, 500);
+    assert.deepEqual(await respuesta.json(), { ok: false, message: 'Error interno al consultar el modelo' });
+  });
+});
