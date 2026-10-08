@@ -142,7 +142,7 @@ export function PageHeader({ titulo, subtitulo, children }) {
 }
 
 export function Card({ children, className = "" }) {
-  return <div className={`rounded-xl2 border border-slate-100 bg-white p-5 shadow-card dark:border-white/10 dark:bg-[#121a2b] ${className}`}>{children}</div>;
+  return <div className={`rounded-xl2 border border-slate-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#121a2b] sm:p-5 ${className}`}>{children}</div>;
 }
 
 export function Stat({ etiqueta, valor, nota, tono = "marino" }) {
@@ -150,7 +150,8 @@ export function Stat({ etiqueta, valor, nota, tono = "marino" }) {
   return (
     <Card>
       <p className="text-[12px] font-semibold uppercase tracking-wide text-slate-400">{etiqueta}</p>
-      <p className={`mt-1 text-3xl font-bold ${col}`}>{valor}</p>
+      {/* En celular los montos largos (S/ 456,072) bajan de tamaño para no partirse en dos líneas */}
+      <p className={`cifra mt-1 whitespace-nowrap font-bold tracking-tight ${String(valor).length > 7 ? "text-[1.2rem] min-[380px]:text-2xl" : "text-[1.75rem]"} sm:text-3xl ${col}`}>{valor}</p>
       {nota && <p className="mt-1 text-[12.5px] text-slate-500">{nota}</p>}
     </Card>
   );

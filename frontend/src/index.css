@@ -18,33 +18,41 @@
   }
 }
 
-.btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-5 py-3 text-[15px] font-semibold
-         transition-colors duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50;
-}
-.btn-primary { @apply bg-marino-700 text-white hover:bg-marino; }
-.btn-acento { @apply bg-acento text-white hover:bg-acento-600; }
-.btn-secondary {
-  @apply border border-slate-300 bg-white text-marino hover:border-marino-700 hover:bg-marino-50
-         dark:border-white/15 dark:bg-transparent dark:text-white dark:hover:bg-white/5;
-}
-.btn-claro { @apply border border-white/30 text-white hover:bg-white/10; }
-.btn-whatsapp { @apply bg-whatsapp text-white hover:bg-whatsapp-600; }
+/*
+ * Componentes en @layer components: así cualquier utilidad (hidden, sm:inline-flex, max-w-4xl…)
+ * puede ajustarlos. Antes estaban fuera de la capa y ganaban a las utilidades; por eso el botón
+ * «Cotizar» se veía en celular y empujaba el menú fuera de la pantalla.
+ */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-5 py-3 text-[15px] font-semibold
+           transition-colors duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary { @apply bg-marino-700 text-white hover:bg-marino; }
+  .btn-acento { @apply bg-acento text-white hover:bg-acento-600; }
+  .btn-secondary {
+    @apply border border-slate-300 bg-white text-marino hover:border-marino-700 hover:bg-marino-50
+           dark:border-white/15 dark:bg-transparent dark:text-white dark:hover:bg-white/5;
+  }
+  .btn-claro { @apply border border-white/30 text-white hover:bg-white/10; }
+  .btn-whatsapp { @apply bg-whatsapp text-white hover:bg-whatsapp-600; }
 
-.field-label { @apply mb-1.5 block text-[13px] font-semibold; }
-.field-input {
-  @apply w-full rounded-[10px] border border-slate-300 bg-white px-3.5 py-2.5 text-[14.5px] outline-none transition
-         focus:border-marino-700 focus:ring-4 focus:ring-marino-700/10
-         dark:border-slate-700 dark:bg-[#101c33];
+  .field-label { @apply mb-1.5 block text-[13px] font-semibold; }
+  .field-input {
+    @apply w-full rounded-[10px] border border-slate-300 bg-white px-3.5 py-2.5 text-[14.5px] outline-none transition
+           focus:border-marino-700 focus:ring-4 focus:ring-marino-700/10
+           dark:border-slate-700 dark:bg-[#101c33];
+  }
+
+  /* Contenedor de página */
+  .wrap { @apply mx-auto w-full max-w-[1320px] px-4 sm:px-8 lg:px-10; }
+
+  /* Tipografía de marca */
+  .titulo { @apply font-display text-[2.1rem] font-bold uppercase leading-[0.95] tracking-tight text-marino sm:text-[2.75rem] dark:text-white; }
+  .titulo-sm { @apply font-display text-[1.6rem] font-bold uppercase leading-none tracking-tight text-marino dark:text-white; }
+  .bajada { @apply max-w-2xl text-[16px] leading-relaxed text-slate-600 dark:text-slate-300; }
 }
 
-/* Contenedor de página */
-.wrap { @apply mx-auto w-full max-w-[1320px] px-4 sm:px-8 lg:px-10; }
-
-/* Tipografía de marca */
-.titulo { @apply font-display text-[2.1rem] font-bold uppercase leading-[0.95] tracking-tight text-marino sm:text-[2.75rem] dark:text-white; }
-.titulo-sm { @apply font-display text-[1.6rem] font-bold uppercase leading-none tracking-tight text-marino dark:text-white; }
-.bajada { @apply max-w-2xl text-[16px] leading-relaxed text-slate-600 dark:text-slate-300; }
 .cifra { font-variant-numeric: tabular-nums; }
 
 /* "backwards": al terminar, la animación deja de aplicar transform; así los modales fijos se ubican respecto a la ventana */

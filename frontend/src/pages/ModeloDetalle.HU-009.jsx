@@ -108,7 +108,7 @@ function ModeloDetalle({ id }) {
                 </div>
                 <p className="max-w-[16rem] pb-1 text-[12px] leading-snug text-slate-400">Precio estándar sin techo de fibra. No incluye matrícula ni SOAT; puede variar por zona o accesorios.</p>
               </div>
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap">
                 <button onClick={pedir} className="btn btn-acento">Quiero que me contacten</button>
                 <WhatsAppButton mensaje={`Hola, quisiera información sobre el ${m.nombre} en color ${colorSel}.`} />
               </div>

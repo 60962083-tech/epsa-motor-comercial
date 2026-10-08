@@ -47,7 +47,7 @@ export default function Nosotros() {
             <p className="mt-5 max-w-lg text-[16px] text-white/75">
               Distribuidor oficial autorizado de motocars Torito Bajaj. Con más de 12 años en el mercado ofreciendo venta y financiamiento en Lima Norte y el Callao.
             </p>
-            <div className="mt-7 flex flex-wrap gap-3">
+            <div className="mt-7 grid gap-3 sm:flex sm:flex-wrap">
               <button onClick={() => cotizar()} className="btn btn-acento">Evaluar mi crédito en 1 minuto</button>
               <a className="btn btn-whatsapp" target="_blank" rel="noopener noreferrer" href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent("Hola, quisiera cotizar un Torito.")}`}><IconWhatsapp /> Cotizar por WhatsApp</a>
             </div>
@@ -74,7 +74,7 @@ export default function Nosotros() {
           <p className="mt-3 text-slate-600 dark:text-slate-400">INVERSIONES EPSA MOTOR S.A.C. es distribuidor autorizado de motocars Bajaj, adquiridos a través de Crosland Perú S.A.C. Atendemos en tres sedes de Lima Norte y Callao.</p>
           <h2 className="titulo mt-10">Qué ofrecemos</h2>
           <p className="mt-3 text-slate-600 dark:text-slate-400">Venta de motocars Torito con distintas configuraciones de techo, financiamiento directo, acompañamiento en placa y tarjeta de propiedad, y orientación sobre modelos, sedes y formas de contacto.</p>
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap">
             <Link to="/modelos" className="btn btn-primary">Ver modelos</Link>
             <Link to="/sedes" className="btn btn-secondary">Ver todas las sedes</Link>
           </div>

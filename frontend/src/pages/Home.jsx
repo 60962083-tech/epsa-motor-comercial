@@ -37,7 +37,10 @@ export default function Home() {
   const [familia, setFamilia] = useState("Todas");
   const stock = (id) => unidades.filter((u) => u.modelo === id && u.disponibilidad === "Disponible").length;
   const slides = SLIDES.map((x) => ({ ...x, modelo: publicos.find((m) => m.id === x.modeloId) })).filter((x) => x.modelo);
-  const lista = publicos.filter((m) => familia === "Todas" || m.familia === familia);
+  const lista = publicos.filter((m) => familia === "Todas" || m.familia === familia).slice(0, 8);
+  // Para que no se vean todas rojas: los modelos con foto oficial en azul se alternan azul / rojo.
+  const conAzul = lista.filter((m) => m.fotosColor?.Azul).map((m) => m.id);
+  const colorDe = (m) => (conAzul.indexOf(m.id) % 2 === 0 ? "Azul" : m.colores?.[0]);
 
   return (
     <div className="fade-in">
@@ -79,7 +82,7 @@ export default function Home() {
           <p className="mt-10 rounded-2xl border border-dashed border-slate-300 py-12 text-center text-slate-500 dark:border-white/15">Por ahora no hay modelos publicados en esta familia. Escríbenos por WhatsApp.</p>
         ) : (
           <div className="mt-10 grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {lista.slice(0, 8).map((m) => <TarjetaModelo key={m.id} m={m} stock={stock(m.id)} />)}
+            {lista.map((m) => <TarjetaModelo key={`${m.id}-${colorDe(m)}`} m={m} stock={stock(m.id)} colores={false} colorInicial={colorDe(m)} />)}
           </div>
         )}
       </section>
@@ -120,7 +123,7 @@ export default function Home() {
           <div className="min-w-0">
             <h2 className="font-display text-[2.4rem] font-bold uppercase leading-[0.95] tracking-tight sm:text-[3rem]">Cuéntanos qué buscas</h2>
             <p className="mt-4 max-w-md text-[16px] leading-relaxed text-white/70">Elige tu modelo, tu sede y la forma de pago. Un asesor te contacta con tu cotización lista.</p>
-            <div className="mt-7 flex flex-wrap gap-3">
+            <div className="mt-7 grid gap-3 sm:flex sm:flex-wrap">
               <button onClick={() => cotizar()} className="btn btn-acento">Cotizar mi Torito</button>
               <a className="btn btn-whatsapp" target="_blank" rel="noopener noreferrer" href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent("Hola, quisiera cotizar un Torito.")}`}><IconWhatsapp /> WhatsApp</a>
             </div>

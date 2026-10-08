@@ -23,9 +23,9 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-marino">
-      <div className="wrap flex h-[72px] items-center gap-4">
+      <div className="wrap flex h-16 items-center gap-3 sm:h-[72px] sm:gap-4">
         <NavLink to="/" className="shrink-0" aria-label="EPSA Motor, inicio">
-          <img src="/images/logo-epsa-transparente.png" alt="EPSA Motor" className="h-12 w-auto" />
+          <img src="/images/logo-epsa-transparente.png" alt="EPSA Motor" className="h-10 w-auto sm:h-12" />
         </NavLink>
 
         <nav className="ml-auto hidden items-center gap-1 md:flex" aria-label="Principal">
@@ -34,7 +34,7 @@ export default function Navbar() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2 md:ml-3">
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2 md:ml-3">
           <button onClick={toggle} aria-label={dark ? "Usar tema claro" : "Usar tema oscuro"}
             className="grid h-10 w-10 place-items-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white">
             {dark ? <IconSun /> : <IconMoon />}

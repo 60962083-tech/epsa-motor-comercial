@@ -11,10 +11,13 @@ import { IconBuscar, IconClose, IconFiltros } from "../components/Icons";
 
 const HEX = { Rojo: "#c62828", Blanco: "#f4f4f5", Azul: "#1e4896", Negro: "#111827", Plateado: "#c0c4cc", Verde: "#15803d" };
 
-/** Tarjeta de modelo: foto sobre escenario, nombre en estilo Torito, precio y colores. Se usa en Inicio, catálogo y ficha. */
-export function TarjetaModelo({ m, stock }) {
+/**
+ * Tarjeta de modelo: foto sobre escenario, nombre en estilo Torito, precio y colores. Se usa en Inicio, catálogo y ficha.
+ * colores={false} oculta los círculos de color (Inicio); colorInicial elige con qué foto aparece (por ejemplo, "Azul").
+ */
+export function TarjetaModelo({ m, stock, colores = true, colorInicial }) {
   const cotizar = useCotizar();
-  const [color, setColor] = useState(m.colores?.[0]);
+  const [color, setColor] = useState(colorInicial || m.colores?.[0]);
   const badge = (m.badges || [])[0];
   const potencia = m.resumen?.Potencia && !/ver/i.test(m.resumen.Potencia) ? m.resumen.Potencia : null;
   return (
@@ -28,7 +31,7 @@ export function TarjetaModelo({ m, stock }) {
       <div className="flex flex-1 flex-col pt-4">
         <div className="flex items-center justify-between gap-3">
           <p className="truncate text-[12.5px] font-medium text-slate-500">{m.familia}</p>
-          {(m.colores || []).length > 1 && (
+          {colores && (m.colores || []).length > 1 && (
             <div className="flex shrink-0 gap-1.5">
               {m.colores.map((c) => (
                 <button key={c} type="button" title={c} aria-label={`Ver en color ${c}`} aria-pressed={color === c} onClick={() => setColor(c)} onMouseEnter={() => setColor(c)}

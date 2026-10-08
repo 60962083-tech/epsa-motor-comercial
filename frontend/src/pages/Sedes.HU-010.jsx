@@ -56,15 +56,15 @@ export default function Sedes() {
             <p className="text-[15px] font-medium text-white/60">Visítanos</p>
             <h1 className="mt-2 font-display text-[3.2rem] font-bold uppercase leading-[0.9] tracking-tight sm:text-[4.5rem]">Sedes y sucursales</h1>
             <p className="mt-3 max-w-xl text-[15.5px] text-white/75">Conoce las unidades en persona, haz tu prueba de manejo y sal con tu crédito evaluado. Estamos en Lima Norte y el Callao.</p>
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap">
               <a href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent("Hola, quisiera coordinar una visita a una sede de EPSA Motor.")}`} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp">Coordinar visita por WhatsApp</a>
               <Link to="/modelos" className="btn btn-claro">Ver modelos</Link>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {[[String(sedes.length), "sedes activas"], ["L - S", "9:00 a 17:00"], ["+12", "años en el mercado"]].map(([n, t]) => (
-              <div key={t} className="rounded-2xl bg-white/5 p-4 text-center ring-1 ring-white/10">
-                <p className="cifra font-display text-[2.2rem] font-bold leading-none sm:text-[2.6rem]">{n}</p>
+            {[[String(sedes.length), "sedes activas"], ["L–S", "9:00 a 17:00"], ["+12", "años en el mercado"]].map(([n, t]) => (
+              <div key={t} className="rounded-2xl bg-white/5 px-2 py-4 text-center ring-1 ring-white/10 sm:p-4">
+                <p className="cifra whitespace-nowrap font-display text-[1.9rem] font-bold leading-none min-[380px]:text-[2.2rem] sm:text-[2.6rem]">{n}</p>
                 <p className="mt-1 text-[12px] text-white/60">{t}</p>
               </div>
             ))}
