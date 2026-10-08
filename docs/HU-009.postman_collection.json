@@ -1,0 +1,48 @@
+{
+  "info": {
+    "name": "EPSA HU-009 Ficha pública de modelo",
+    "description": "Consulta catálogo HU-012 y abre la ficha pública HU-009. No requiere token de autenticación.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "api_url", "value": "http://localhost:3000" },
+    { "key": "codmod", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Listar modelos publicados (HU-012)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{api_url}}/api/modelos"
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+          "const modelos = pm.response.json().data || [];",
+          "if (modelos.length) pm.collectionVariables.set('codmod', modelos[0].codmod);"
+        ] }
+      }]
+    },
+    {
+      "name": "Consultar ficha pública del modelo (HU-009)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{api_url}}/api/modelos/{{codmod}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+          "pm.test('La ficha contiene solo campos de modelo e imágenes', () => {",
+          "  const data = pm.response.json().data;",
+          "  pm.expect(Object.keys(data).sort()).to.eql(['carmod','codmod','desmod','imagenes','marmod','nommod']);",
+          "});",
+          "pm.test('La caché HTTP está desactivada', () => pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'));"
+        ] }
+      }]
+    }
+  ]
+}
