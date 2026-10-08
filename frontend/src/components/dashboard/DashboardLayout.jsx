@@ -1,91 +1,101 @@
-import { useState } from "react";
-import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate, Link } from "react-router-dom";
 import { IconMenu, IconClose, IconSun, IconMoon } from "../Icons";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../ThemeContext";
+import { ROLES } from "../../data/mockData";
+import { MODO_REAL } from "../../lib/config";
+import Login from "../../pages/dashboard/Login.HU-007";
 
-// Cada ítem declara qué "sección" representa; AuthContext.puedeVer()
-// decide si el rol actual puede verlo (ver ROLES en mockData.js).
-const ITEMS = [
-  { to: "/dashboard", label: "Resumen", seccion: "resumen", end: true },
-  { to: "/dashboard/unidades", label: "Unidades", seccion: "unidades" },
-  { to: "/dashboard/modelos", label: "Modelos", seccion: "modelos" },
-  { to: "/dashboard/ubicaciones", label: "Ubicaciones", seccion: "ubicaciones" },
-  { to: "/dashboard/leads", label: "Leads", seccion: "leads" },
+const IC = {
+  resumen: "M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z",
+  leads: "M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0ZM4 20a8 8 0 0 1 16 0",
+  seguimiento: "M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+  ventas: "M3 17l5-5 4 4 8-9M15 7h5v5",
+  metas: "M12 3v3m0 12v3M3 12h3m12 0h3M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z",
+  modelos: "M3 14l2-5h9l4 3h3v4H3Zm4 4a2 2 0 1 0 0-4m10 4a2 2 0 1 0 0-4",
+  inventario: "M3 7l9-4 9 4v10l-9 4-9-4V7Zm9 4v10M3 7l9 4 9-4",
+  ubicaciones: "M12 21s-7-6-7-11.5a7 7 0 0 1 14 0C19 15 12 21 12 21Zm0-8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z",
+  compras: "M3 4h2l2 12h11l2-8H6M9 20a1 1 0 1 0 0-.01M17 20a1 1 0 1 0 0-.01",
+  equipo: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm9 0a3 3 0 1 0 0-6M2 19a6 6 0 0 1 12 0m1-5a5 5 0 0 1 7 5",
+  integracion: "M8 7h8M8 12h8M8 17h5M5 3h14a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z",
+};
+const Ico = ({ n }) => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={IC[n]} /></svg>
+);
+
+const GRUPOS = [
+  { titulo: "Inicio", items: [{ to: "/admin", label: "Resumen", seccion: "resumen", end: true }] },
+  { titulo: "Comercial", items: [
+    { to: "/admin/leads", label: "Leads", seccion: "leads" },
+    { to: "/admin/seguimiento", label: "Seguimiento", seccion: "seguimiento" },
+    { to: "/admin/ventas", label: "Ventas a clientes", seccion: "ventas" },
+    { to: "/admin/metas", label: "Metas", seccion: "metas" },
+  ] },
+  { titulo: "Operaciones", items: [
+    { to: "/admin/modelos", label: "Modelos", seccion: "modelos" },
+    { to: "/admin/inventario", label: "Inventario", seccion: "inventario" },
+    { to: "/admin/ubicaciones", label: "Ubicaciones", seccion: "ubicaciones" },
+    { to: "/admin/compras", label: "Compras a proveedor", seccion: "compras" },
+  ] },
+  { titulo: "Administración", items: [{ to: "/admin/equipo", label: "Equipo", seccion: "equipo" }, { to: "/admin/integracion", label: "Integración backend", seccion: "integracion" }] },
 ];
 
-/**
- * DashboardLayout
- * -----------------------------------------------------------------
- * Envuelve TODAS las pantallas internas. Si no hay nadie "logueado"
- * (AuthContext.user es null) manda al login. El menú lateral solo
- * muestra lo que el rol actual tiene permitido ver (HU-007).
- * -----------------------------------------------------------------
- */
+/** Estructura del panel: barra superior, menú lateral por grupos (según rol) y contenido. */
 export default function DashboardLayout() {
   const { user, logout, puedeVer } = useAuth();
   const { dark, toggle } = useTheme();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  useEffect(() => setOpen(false), [pathname]);
 
-  if (!user) return <Navigate to="/dashboard/login" replace />;
+  if (!user) return <Login />;
 
   return (
-    <div className="flex min-h-screen flex-col">
-      {/* Barra superior */}
-      <header className="flex h-14 items-center justify-between bg-marino px-5 text-white">
+    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-[#0b1220]">
+      <header className="sticky top-0 z-40 flex h-16 items-center justify-between bg-marino px-4 text-white sm:px-6">
         <div className="flex items-center gap-3">
-          <button className="md:hidden" onClick={() => setOpen((o) => !o)} aria-label="Abrir menú">
-            {open ? <IconClose /> : <IconMenu />}
-          </button>
-          <img src="/images/logo-epsa-transparente.png" alt="EPSA Motor" className="h-10 w-auto" />
-          <span className="hidden text-white/50 sm:inline">| Gestión comercial</span>
+          <button className="grid h-9 w-9 place-items-center rounded-md hover:bg-white/10 lg:hidden" onClick={() => setOpen((o) => !o)} aria-label="Abrir menú">{open ? <IconClose /> : <IconMenu />}</button>
+          <Link to="/admin"><img src="/images/logo-epsa-transparente.png" alt="EPSA Motor" className="h-11 w-auto" /></Link>
+          <span className="hidden border-l border-white/20 pl-3 text-[14px] text-white/60 sm:inline">Gestión comercial</span>
         </div>
-        <div className="flex items-center gap-3 text-[14px]">
-          <button onClick={toggle} aria-label="Cambiar tema" className="grid h-8 w-8 place-items-center rounded-full border border-white/25 hover:bg-white/10">
-            {dark ? <IconSun /> : <IconMoon />}
-          </button>
-          <span className="hidden sm:inline">{user.nombre} · {user.rol}</span>
-          <button
-            onClick={() => { logout(); navigate("/dashboard/login"); }}
-            className="rounded-md border border-white/25 px-3 py-1.5 text-[13px] hover:bg-white/10"
-          >
-            Salir
-          </button>
+        <div className="flex items-center gap-2 text-[14px] sm:gap-3">
+          <button onClick={toggle} aria-label="Cambiar tema" className="grid h-9 w-9 place-items-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white">{dark ? <IconSun /> : <IconMoon />}</button>
+          <div className="hidden items-center gap-2.5 border-l border-white/15 pl-3 sm:flex" aria-label="Sesión actual">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-[14px] font-bold">{user.nombre?.[0]}</span>
+            <span className="leading-tight"><span className="block text-[14px] font-semibold">{user.nombre}</span><span className="block text-[12px] text-white/60">{ROLES[user.rol]?.nombre}</span></span>
+          </div>
+          <Link to="/" className="hidden rounded-lg px-3 py-1.5 text-[13.5px] text-white/80 transition hover:bg-white/10 hover:text-white md:block">Ver web</Link>
+          <button onClick={() => { logout(); navigate("/admin"); }} className="rounded-lg border border-white/20 px-3 py-1.5 text-[13.5px] transition hover:bg-white/10">Salir</button>
         </div>
       </header>
 
       <div className="flex flex-1">
-        {/* Menú lateral: filtrado por rol con puedeVer() */}
-        <aside
-          className={`${open ? "block" : "hidden"} md:block fixed md:static top-14 bottom-0 z-20 w-56 border-r
-                      border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-[#0f1830]`}
-        >
-          <nav className="flex flex-col py-3">
-            {ITEMS.filter((it) => puedeVer(it.seccion)).map((it) => (
-              <NavLink
-                key={it.to}
-                to={it.to}
-                end={it.end}
-                onClick={() => setOpen(false)}
-                className={({ isActive }) =>
-                  `border-l-[3px] px-5 py-3 text-[14.5px] font-medium transition-colors ${
-                    isActive
-                      ? "border-marino-700 bg-white text-marino dark:bg-white/5 dark:text-white"
-                      : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5"
-                  }`
-                }
-              >
-                {it.label}
-              </NavLink>
-            ))}
+        {open && <div className="fixed inset-0 top-16 z-20 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />}
+        <aside className={`${open ? "translate-x-0" : "-translate-x-full"} fixed bottom-0 top-16 z-30 w-64 overflow-y-auto border-r border-slate-200 bg-white transition-transform dark:border-white/10 dark:bg-[#0f1830] lg:static lg:translate-x-0`}>
+          <nav className="flex min-h-full flex-col px-3 py-4">
+            {GRUPOS.map((g) => {
+              const items = g.items.filter((i) => puedeVer(i.seccion));
+              if (!items.length) return null;
+              return (
+                <div key={g.titulo} className="mb-5">
+                  <p className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">{g.titulo}</p>
+                  {items.map((it) => (
+                    <NavLink key={it.to} to={it.to} end={it.end}
+                      className={({ isActive }) => `mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium transition-colors ${isActive ? "bg-marino text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"}`}>
+                      <Ico n={it.seccion} />{it.label}
+                    </NavLink>
+                  ))}
+                </div>
+              );
+            })}
+            <p className="mt-auto flex items-center gap-2 px-3 pt-4 text-[12px] text-slate-400" title={MODO_REAL ? "Datos desde la API y Supabase" : "Los datos se guardan en este navegador"}>
+              <span className={`h-2 w-2 rounded-full ${MODO_REAL ? "bg-emerald-500" : "bg-amber-400"}`} />{MODO_REAL ? "Conectado a Supabase" : "Modo demostración"}
+            </p>
           </nav>
         </aside>
-
-        <main className="fade-in flex-1 p-6 md:p-8">
-          {/* Aquí se dibuja la pantalla actual (Resumen, Unidades, etc.) */}
-          <Outlet />
-        </main>
+        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8"><div className="fade-in mx-auto max-w-[1500px]"><Outlet /></div></main>
       </div>
     </div>
   );

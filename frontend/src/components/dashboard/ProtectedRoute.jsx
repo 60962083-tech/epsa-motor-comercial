@@ -6,12 +6,12 @@ import { useAuth } from "../../context/AuthContext";
  * -----------------------------------------------------------------
  * Envuelve una pantalla que requiere un permiso puntual.
  * Si el rol actual no tiene ese permiso, en vez de mostrar la
- * pantalla, redirige a /dashboard/403.
+ * pantalla, redirige a /admin/403.
  * Uso: <ProtectedRoute seccion="modelos"><ModelosAdmin /></ProtectedRoute>
  * -----------------------------------------------------------------
  */
 export default function ProtectedRoute({ seccion, children }) {
   const { puedeVer } = useAuth();
-  if (!puedeVer(seccion)) return <Navigate to="/dashboard/403" replace />;
+  if (!puedeVer(seccion)) return <Navigate to="/admin/403" replace />;
   return children;
 }

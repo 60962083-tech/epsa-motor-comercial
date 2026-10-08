@@ -2,26 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-html { scroll-behavior: smooth; }
-body { @apply font-sans text-[#0a0a0a] bg-white dark:bg-[#0b1220] dark:text-[#e7edf5]; }
+/*
+ * Sistema visual EPSA Motor
+ * Concepto: señalética de carretera y taller limpio. Blanco amplio, azul marino de marca,
+ * rojo solo para la acción principal, fotos de producto sobre un "escenario" gris azulado,
+ * Barlow Condensed para nombres de modelos y cifras, Barlow para lectura.
+ */
+@layer base {
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body { @apply bg-white font-sans text-[#0d1b2e] antialiased dark:bg-[#0a1426] dark:text-[#e6ecf4]; }
+  h1, h2, h3 { text-wrap: balance; }
+  :focus-visible { outline: 2px solid #c62828; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  }
+}
 
 .btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-[15px] font-semibold
-         transition-all duration-150 active:translate-y-px;
+  @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-5 py-3 text-[15px] font-semibold
+         transition-colors duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50;
 }
-.btn-primary {
-  @apply bg-marino-700 text-white hover:bg-marino hover:shadow-card;
-}
+.btn-primary { @apply bg-marino-700 text-white hover:bg-marino; }
+.btn-acento { @apply bg-acento text-white hover:bg-acento-600; }
 .btn-secondary {
-  @apply bg-white dark:bg-[#121a2b] text-marino-700 dark:text-white border border-marino-700/70
-         hover:bg-marino-50 dark:hover:bg-white/5;
+  @apply border border-slate-300 bg-white text-marino hover:border-marino-700 hover:bg-marino-50
+         dark:border-white/15 dark:bg-transparent dark:text-white dark:hover:bg-white/5;
 }
-.btn-whatsapp {
-  @apply bg-whatsapp text-white hover:bg-whatsapp-600;
-}
-.field-label { @apply block text-[13px] font-semibold mb-1.5; }
+.btn-claro { @apply border border-white/30 text-white hover:bg-white/10; }
+.btn-whatsapp { @apply bg-whatsapp text-white hover:bg-whatsapp-600; }
+
+.field-label { @apply mb-1.5 block text-[13px] font-semibold; }
 .field-input {
-  @apply w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#121a2b]
-         px-3.5 py-2.5 text-[14px] outline-none transition
-         focus:border-marino-700 focus:ring-4 focus:ring-marino-700/10;
+  @apply w-full rounded-[10px] border border-slate-300 bg-white px-3.5 py-2.5 text-[14.5px] outline-none transition
+         focus:border-marino-700 focus:ring-4 focus:ring-marino-700/10
+         dark:border-slate-700 dark:bg-[#101c33];
 }
+
+/* Contenedor de página */
+.wrap { @apply mx-auto w-full max-w-[1320px] px-4 sm:px-8 lg:px-10; }
+
+/* Tipografía de marca */
+.titulo { @apply font-display text-[2.1rem] font-bold uppercase leading-[0.95] tracking-tight text-marino sm:text-[2.75rem] dark:text-white; }
+.titulo-sm { @apply font-display text-[1.6rem] font-bold uppercase leading-none tracking-tight text-marino dark:text-white; }
+.bajada { @apply max-w-2xl text-[16px] leading-relaxed text-slate-600 dark:text-slate-300; }
+.cifra { font-variant-numeric: tabular-nums; }
+
+/* "backwards": al terminar, la animación deja de aplicar transform; así los modales fijos se ubican respecto a la ventana */
+.fade-in { animation: fadeIn .35s ease backwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }

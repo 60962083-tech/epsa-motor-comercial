@@ -4,14 +4,16 @@ const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [dark, setDark] = useState(() => {
-    const saved = localStorage.getItem("epsa-theme");
-    if (saved) return saved === "dark";
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    try {
+      const saved = localStorage.getItem("epsa-theme");
+      if (saved) return saved === "dark";
+    } catch { /* sin storage */ }
+    try { return window.matchMedia("(prefers-color-scheme: dark)").matches; } catch { return false; }
   });
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
-    localStorage.setItem("epsa-theme", dark ? "dark" : "light");
+    try { localStorage.setItem("epsa-theme", dark ? "dark" : "light"); } catch { /* sin storage */ }
   }, [dark]);
 
   return (

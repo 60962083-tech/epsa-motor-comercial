@@ -15,9 +15,9 @@ export default function Prohibido() {
       <h1 className="mt-4 text-xl font-bold">No tienes acceso a esta sección</h1>
       <p className="mt-2 text-slate-500">
         Tu rol actual no tiene permiso para ver esta pantalla. Si crees que es un error,
-        pídele a Flavio o a Deysi que revisen tu rol.
+        pídele a la gerencia que revise tu rol en Equipo.
       </p>
-      <Link to="/dashboard" className="btn btn-primary mt-6">Volver al resumen</Link>
+      <Link to="/admin" className="btn btn-primary mt-6">Volver al resumen</Link>
     </div>
   );
 }

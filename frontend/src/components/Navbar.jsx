@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { IconSun, IconMoon, IconMenu, IconClose } from "./Icons";
 import { useTheme } from "../ThemeContext";
+import { useCotizar } from "./CotizarModal";
 
 const LINKS = [
   { to: "/", label: "Inicio" },
@@ -11,76 +12,47 @@ const LINKS = [
 ];
 
 const linkClass = ({ isActive }) =>
-  `relative py-1 text-[14.5px] font-medium transition-colors ${
-    isActive ? "text-white" : "text-white/70 hover:text-white"
-  } after:absolute after:-bottom-1 after:left-0 after:h-[2px] after:bg-white after:transition-all ${
-    isActive ? "after:w-full" : "after:w-0"
-  }`;
+  `rounded-lg px-3 py-2 text-[15px] font-medium transition-colors ${isActive ? "bg-white/10 text-white" : "text-white/70 hover:text-white"}`;
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const { dark, toggle } = useTheme();
+  const cotizar = useCotizar();
+  const { pathname } = useLocation();
+  useEffect(() => setOpen(false), [pathname]);
 
   return (
-    <header className="sticky top-0 z-30 bg-marino/95 backdrop-blur supports-[backdrop-filter]:bg-marino/90">
-      <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-6">
-        <NavLink to="/" className="flex items-center">
-          <img src="/images/logo-epsa-transparente.png" alt="EPSA Motor" className="h-16 w-auto" />
+    <header className="sticky top-0 z-30 border-b border-white/10 bg-marino">
+      <div className="wrap flex h-[72px] items-center gap-4">
+        <NavLink to="/" className="shrink-0" aria-label="EPSA Motor, inicio">
+          <img src="/images/logo-epsa-transparente.png" alt="EPSA Motor" className="h-12 w-auto" />
         </NavLink>
 
-        <nav className="hidden items-center gap-8 md:flex">
+        <nav className="ml-auto hidden items-center gap-1 md:flex" aria-label="Principal">
           {LINKS.map((l) => (
-            <NavLink key={l.to} to={l.to} className={linkClass} end={l.to === "/"}>
-              {l.label}
-            </NavLink>
+            <NavLink key={l.to} to={l.to} className={linkClass} end={l.to === "/"}>{l.label}</NavLink>
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
-          {/* Acceso al dashboard interno (solo personal de EPSA Motor) */}
-          <NavLink
-            to="/dashboard/login"
-            className="hidden rounded-md border border-white/25 px-3 py-1.5 text-[13px] font-medium text-white/85 transition hover:bg-white/10 sm:block"
-          >
-            Ingresar
-          </NavLink>
-          <button
-            onClick={toggle}
-            aria-label="Cambiar tema"
-            className="grid h-9 w-9 place-items-center rounded-full border border-white/25 text-white transition hover:bg-white/10"
-          >
+        <div className="ml-auto flex items-center gap-2 md:ml-3">
+          <button onClick={toggle} aria-label={dark ? "Usar tema claro" : "Usar tema oscuro"}
+            className="grid h-10 w-10 place-items-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white">
             {dark ? <IconSun /> : <IconMoon />}
           </button>
-          <button
-            onClick={() => setOpen((o) => !o)}
-            aria-label="Abrir menú"
-            className="grid h-9 w-9 place-items-center text-white md:hidden"
-          >
+          <button onClick={() => cotizar()} className="btn btn-acento hidden !px-4 !py-2.5 sm:inline-flex">Cotizar</button>
+          <button onClick={() => setOpen((o) => !o)} aria-label={open ? "Cerrar menú" : "Abrir menú"} aria-expanded={open}
+            className="grid h-10 w-10 place-items-center rounded-full text-white md:hidden">
             {open ? <IconClose /> : <IconMenu />}
           </button>
         </div>
       </div>
 
-      <nav
-        className={`md:hidden overflow-hidden bg-marino transition-[max-height] duration-200 ${
-          open ? "max-h-72" : "max-h-0"
-        }`}
-      >
-        <div className="flex flex-col gap-1 px-6 pb-4">
+      <nav className={`overflow-hidden border-t border-white/10 bg-marino transition-[max-height] duration-200 md:hidden ${open ? "max-h-96" : "max-h-0 border-t-0"}`} aria-label="Menú móvil">
+        <div className="wrap flex flex-col gap-1 py-3">
           {LINKS.map((l) => (
-            <NavLink
-              key={l.to}
-              to={l.to}
-              onClick={() => setOpen(false)}
-              className="py-2 text-[15px] font-medium text-white/85"
-              end={l.to === "/"}
-            >
-              {l.label}
-            </NavLink>
+            <NavLink key={l.to} to={l.to} end={l.to === "/"} className={({ isActive }) => `rounded-lg px-3 py-3 text-[16px] font-medium ${isActive ? "bg-white/10 text-white" : "text-white/80"}`}>{l.label}</NavLink>
           ))}
-          <NavLink to="/dashboard/login" onClick={() => setOpen(false)} className="py-2 text-[15px] font-medium text-white/85">
-            Ingresar (personal EPSA Motor)
-          </NavLink>
+          <button onClick={() => { setOpen(false); cotizar(); }} className="btn btn-acento mt-2 w-full">Cotizar mi Torito</button>
         </div>
       </nav>
     </header>

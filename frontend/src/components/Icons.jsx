@@ -117,3 +117,26 @@ export const IconTiktok = (p) => (
     <path d="M16.5 3c.4 2 1.8 3.4 3.8 3.7v2.8c-1.4 0-2.7-.4-3.8-1.1v6.4c0 3-2.4 5.2-5.3 5.2S5.9 17.8 5.9 14.8c0-3 2.4-5.2 5.3-5.2.4 0 .8 0 1.2.1v2.9a2.4 2.4 0 1 0 1.7 2.3V3h2.4Z" />
   </svg>
 );
+
+/* ---- Íconos técnicos de la ficha (trazo simple, heredan el color del texto) ---- */
+const Trazo = ({ children, ...p }) => (
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>{children}</svg>
+);
+export const IconMotor = (p) => <Trazo {...p}><path d="M4 10h2l1.5-2h7L16 10h2v3h2v-2h1v6h-1v-2h-2v3h-3l-1.5 2h-5L6 18H4v-8Z" /><path d="M9 5h4M11 5v3" /></Trazo>;
+export const IconPiston = (p) => <Trazo {...p}><rect x="7" y="3" width="10" height="8" rx="1.5" /><path d="M7 6h10M12 11v4M9 21l3-6 3 6" /></Trazo>;
+export const IconLlanta = (p) => <Trazo {...p}><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /><path d="M12 3.5V9M12 15v5.5M3.5 12H9M15 12h5.5" /></Trazo>;
+export const IconRayo = (p) => <Trazo {...p}><path d="M13 2.5 4.5 13.5h6.5l-1 8 8.5-11h-6.5l1-8Z" /></Trazo>;
+export const IconMedidor = (p) => <Trazo {...p}><path d="M3.5 16a8.5 8.5 0 1 1 17 0" /><path d="M12 16l4.5-5" /><circle cx="12" cy="16" r="1.2" fill="currentColor" /></Trazo>;
+export const IconTanque = (p) => <Trazo {...p}><path d="M5 21V5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v16M3.5 21h12" /><path d="M8 7h3M14 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8.5L18.5 6" /></Trazo>;
+export const IconRegla = (p) => <Trazo {...p}><path d="M3.5 16.5 16.5 3.5l4 4L7.5 20.5l-4-4Z" /><path d="M7 13l2 2M10 10l2 2M13 7l2 2" /></Trazo>;
+export const IconBateria = (p) => <Trazo {...p}><rect x="3" y="7" width="18" height="12" rx="2" /><path d="M7 7V5h3v2M14 7V5h3v2M7 13h3M15.5 11.5v3M14 13h3" /></Trazo>;
+export const IconChasis = (p) => <Trazo {...p}><path d="M3 16V9.5L6 6h11l3 3.5V16" /><path d="M3 16h18" /><circle cx="6.5" cy="17.5" r="2" /><circle cx="17.5" cy="17.5" r="2" /></Trazo>;
+export const IconGiro = (p) => <Trazo {...p}><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3" /><path d="M18 3v4h-4M6 21v-4h4" /></Trazo>;
+
+/* ---- Íconos de interfaz (login, filtros) ---- */
+export const IconOjo = (p) => <Trazo {...p}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></Trazo>;
+export const IconOjoTachado = (p) => <Trazo {...p}><path d="M3 3l18 18M10.6 5.6A9.7 9.7 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3 3.8M6.6 6.6A16.6 16.6 0 0 0 2.5 12S6 18.5 12 18.5c1.6 0 3-.4 4.3-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2" /></Trazo>;
+export const IconBuscar = (p) => <Trazo {...p}><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.3-4.3" /></Trazo>;
+export const IconFiltros = (p) => <Trazo {...p}><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></Trazo>;
+export const IconFlecha = (p) => <Trazo {...p}><path d="M5 12h14M13 6l6 6-6 6" /></Trazo>;
+export const IconVolver = (p) => <Trazo {...p}><path d="M19 12H5M11 6l-6 6 6 6" /></Trazo>;

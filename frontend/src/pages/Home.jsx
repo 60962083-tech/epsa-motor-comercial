@@ -1,202 +1,141 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { useCatalog } from "../store/catalogStore.jsx";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useApp } from "../store/appStore.jsx";
+import { useCotizar } from "../components/CotizarModal";
 import Carousel from "../components/Carousel";
-import { IconWhatsapp } from "../components/Icons";
+import { TarjetaModelo } from "./Modelos.HU-008";
+import { IconWhatsapp, IconShield, IconMapArea, IconCreditCard, IconDocument, IconPin, IconFlecha } from "../components/Icons";
+import { WHATSAPP_NUMERO } from "../lib/config";
+import { FAMILIAS } from "../data/mockData";
 
-// Diapositivas del carrusel, archivos en /public/images/carrusel/.
-// La imagen es todo el contenido (sin texto ni degradado encima), así
-// que cuando se reemplacen por fotos reales de EPSA Motor el mensaje
-// ya viene en la foto misma. "to" es adónde lleva al hacer clic: la
-// ficha de un modelo, el catálogo completo, otra sección de la web, o
-// WhatsApp. Las que no tienen "to" no son clickeables.
+// Una diapositiva por modelo: la foto es la oficial de torito.pe
 const SLIDES = [
-  { src: "/images/carrusel/carrusel-1.svg", alt: "Encuentra tu Torito ideal", to: "/modelos" },
-  { src: "/images/carrusel/carrusel-4.svg", alt: "Torito RE Carga, para trabajo pesado", to: "/modelos/torito-re-carga" },
-  { src: "/images/carrusel/carrusel-2.svg", alt: "Techo clásico o fibra deportiva", to: "/modelos" },
-  { src: "/images/carrusel/carrusel-3.svg", alt: "Tres sedes en Lima y Callao", to: "/sedes" },
-  { src: "/images/carrusel/carrusel-5.svg", alt: "Escríbenos por WhatsApp", to: "https://wa.me/51907721481" },
-  { src: "/images/carrusel/carrusel-6.svg", alt: "Más de 12 años en el mercado", to: "/nosotros" },
+  { modeloId: "torito-250-4v-glp", etiqueta: "Nuevo modelo", texto: "Llantas aro 10, suspensión delantera doble y el ahorro del GLP para rendir más y gastar menos." },
+  { modeloId: "torito-4v-gnv", etiqueta: "Nueva generación", texto: "Gas natural con encendido instantáneo, retroceso en el manubrio y triple filtrado de aceite." },
+  { modeloId: "torito-crom-plus-gsl", etiqueta: "Familia Crom Plus", texto: "10.19 HP y 17.10 Nm: el Crom Plus más potente para el trabajo de todos los días." },
+  { modeloId: "torito-2t-ug-gsl", etiqueta: "Para empezar a trabajar", texto: "El Torito más accesible de la línea, con mantenimiento sencillo." },
 ];
 
-// Número único de WhatsApp de EPSA Motor (mismo que usa WhatsAppButton.jsx)
-const WHATSAPP_NUMERO = "51907721481";
+const PASOS = [
+  ["Elige tu modelo", "Compara motores, combustible y precios en el catálogo."],
+  ["Cotiza en línea", "Déjanos tus datos o escríbenos por WhatsApp; un asesor te llama el mismo día."],
+  ["Visita tu sede", "Prueba la unidad, elige color y techo, y evaluamos tu crédito."],
+  ["Llévatelo", "Te acompañamos con la placa y la tarjeta de propiedad hasta la entrega."],
+];
 
-/**
- * Home.jsx — página de inicio de la web pública
- * DEF-002: "Enviar consulta" arma el mensaje de WhatsApp y lo abre.
- * DEF-003: "Consultar por este modelo" llega con "?modelo=" en la URL
- * y esta página preselecciona el modelo y baja hasta el formulario.
- * OBS-003: solo se listan modelos en estado "Publicado".
- */
+const VENTAJAS = [
+  { Icono: IconShield, t: "Distribuidor oficial", d: "Autorizados por Bajaj y Crosland Perú S.A.C." },
+  { Icono: IconCreditCard, t: "Crédito directo", d: "Financiamos tu Torito con cuotas a tu medida." },
+  { Icono: IconDocument, t: "Trámite acompañado", d: "Te ayudamos con la placa y la tarjeta de propiedad." },
+  { Icono: IconMapArea, t: "Cerca de ti", d: "Sedes en Comas, Ventanilla y Puente Piedra." },
+];
+
+/** Inicio: modelos destacados, ventajas, catálogo por familia, cómo comprar y sedes. */
 export default function Home() {
-  const { modelos: MODELOS, ubicaciones: UBICACIONES } = useCatalog();
-  const publicados = MODELOS.filter((m) => m.estado === "Publicado");
-  const [params] = useSearchParams();
-  const modeloUrl = params.get("modelo");
-
-  const [form, setForm] = useState({
-    nombre: "", contacto: "",
-    modelo: modeloUrl || publicados[0]?.id || "",
-    color: "",
-    sede: UBICACIONES.find((u) => u.tipo === "Sede propia")?.nombre || "",
-  });
-  const [enviado, setEnviado] = useState(false);
-  const consultaRef = useRef(null);
-
-  const modeloSeleccionado = MODELOS.find((m) => m.id === form.modelo);
-  const coloresDisponibles = modeloSeleccionado?.colores ?? [];
-
-  // Si llegamos con ?modelo=xxx en la URL, bajamos directo al formulario.
-  useEffect(() => {
-    if (modeloUrl) {
-      setForm((f) => ({ ...f, modelo: modeloUrl }));
-      consultaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [modeloUrl]);
-
-  // Si cambia el modelo y el color elegido ya no aplica, se limpia.
-  useEffect(() => {
-    if (form.color && !coloresDisponibles.includes(form.color)) {
-      setForm((f) => ({ ...f, color: "" }));
-    }
-  }, [form.modelo]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function actualizar(campo, valor) {
-    setForm((f) => ({ ...f, [campo]: valor }));
-  }
-
-  function enviarConsulta(e) {
-    e.preventDefault();
-    if (!form.nombre.trim() || !form.contacto.trim()) return;
-
-    const nombreModelo = modeloSeleccionado?.nombre || form.modelo;
-    const colorTexto = form.color ? ` en color ${form.color}` : "";
-    const mensaje =
-      `Hola, soy ${form.nombre}. Quisiera información sobre el ${nombreModelo}${colorTexto} ` +
-      `(sede ${form.sede}). Mi contacto: ${form.contacto}.`;
-
-    window.open(`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(mensaje)}`, "_blank");
-    setEnviado(true);
-    setForm({ nombre: "", contacto: "", modelo: publicados[0]?.id || "", color: "", sede: form.sede });
-  }
+  const { publicos, unidades, sedes } = useApp();
+  const cotizar = useCotizar();
+  const [familia, setFamilia] = useState("Todas");
+  const stock = (id) => unidades.filter((u) => u.modelo === id && u.disponibilidad === "Disponible").length;
+  const slides = SLIDES.map((x) => ({ ...x, modelo: publicos.find((m) => m.id === x.modeloId) })).filter((x) => x.modelo);
+  const lista = publicos.filter((m) => familia === "Todas" || m.familia === familia);
 
   return (
     <div className="fade-in">
-      {/* ---------- Carrusel: a todo lo ancho, sin el margen del resto de la web ---------- */}
-      <section>
-        <Carousel slides={SLIDES} />
+      {slides.length > 0 && <Carousel slides={slides} onCotizar={(modeloId) => cotizar({ modeloId })} />}
+
+      {/* Ventajas: por qué comprar en EPSA Motor */}
+      <section aria-label="Por qué comprar en EPSA Motor" className="border-b border-slate-200 dark:border-white/10">
+        <ul className="wrap grid gap-x-10 gap-y-6 py-8 sm:grid-cols-2 lg:grid-cols-4 lg:py-10">
+          {VENTAJAS.map(({ Icono, t, d }) => (
+            <li key={t} className="flex items-start gap-4">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-acento/[0.08] text-acento dark:bg-acento/15 dark:text-red-300"><Icono className="h-[22px] w-[22px]" /></span>
+              <span className="min-w-0">
+                <span className="block text-[15.5px] font-semibold text-marino dark:text-white">{t}</span>
+                <span className="mt-0.5 block text-[14px] leading-snug text-slate-500 dark:text-slate-400">{d}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      {/* Franja de transición: que el carrusel oscuro no corte en seco contra el blanco */}
-      <div className="h-16 bg-gradient-to-b from-marino to-white dark:from-[#0b1220] dark:to-[#0b1220] sm:h-24" />
-
-      {/* ---------- Catálogo (solo modelos Publicado) ---------- */}
-      <section className="mx-auto max-w-6xl px-6 pb-16">
-        <div className="mb-8 flex items-end justify-between">
-          <h2 className="text-2xl font-bold text-marino dark:text-white">Modelos</h2>
-          <Link to="/modelos" className="text-[14px] font-semibold text-marino-700 dark:text-white/70 hover:underline">
-            Ver todos →
-          </Link>
+      {/* Catálogo */}
+      <section className="wrap py-16 lg:py-20">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="titulo">Elige tu Torito</h2>
+            <p className="bajada mt-3">{publicos.length} modelos oficiales con garantía y crédito directo.</p>
+          </div>
+          <Link to="/modelos" className="text-[15px] font-semibold text-marino underline-offset-4 hover:underline dark:text-white">Ver catálogo completo</Link>
         </div>
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {publicados.slice(0, 6).map((m) => (
-            <Link
-              key={m.id}
-              to={`/modelos/${m.id}`}
-              className="group overflow-hidden rounded-xl2 border border-slate-100 bg-white shadow-card transition hover:-translate-y-1 hover:shadow-cardHover dark:border-white/5 dark:bg-[#121a2b]"
-            >
-              <div className="overflow-hidden bg-marino-50 dark:bg-white/5">
-                <img src={m.imagen} alt={m.nombre} className="aspect-[16/10] w-full object-cover transition group-hover:scale-105" />
-              </div>
-              <div className="p-5">
-                <h3 className="text-[17px] font-semibold text-marino dark:text-white">{m.nombre}</h3>
-                <p className="text-[12.5px] text-slate-400">{m.tipoMotor} · {m.combustible} · {m.uso}</p>
-                <span className="mt-1 inline-block text-[13.5px] font-medium text-marino-700 dark:text-white/60">Ver ficha →</span>
-              </div>
-            </Link>
+        <div className="no-scrollbar -mx-4 mt-8 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Familias">
+          {["Todas", ...FAMILIAS].map((f) => (
+            <button key={f} role="tab" aria-selected={familia === f} onClick={() => setFamilia(f)}
+              className={`shrink-0 rounded-full border px-5 py-2.5 text-[14px] font-semibold transition ${familia === f ? "border-marino bg-marino text-white dark:border-white dark:bg-white dark:text-marino" : "border-slate-300 text-slate-600 hover:border-marino-700 hover:text-marino dark:border-white/15 dark:text-white/80"}`}>
+              {f === "Todas" ? "Todos" : f}
+            </button>
           ))}
         </div>
+        {lista.length === 0 ? (
+          <p className="mt-10 rounded-2xl border border-dashed border-slate-300 py-12 text-center text-slate-500 dark:border-white/15">Por ahora no hay modelos publicados en esta familia. Escríbenos por WhatsApp.</p>
+        ) : (
+          <div className="mt-10 grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {lista.slice(0, 8).map((m) => <TarjetaModelo key={m.id} m={m} stock={stock(m.id)} />)}
+          </div>
+        )}
       </section>
 
-      {/* ---------- Consulta (id="consulta": aquí ancla el botón de la ficha) ---------- */}
-      <section id="consulta" ref={consultaRef} className="mx-auto max-w-6xl scroll-mt-20 px-6 pb-20">
-        <div className="overflow-hidden rounded-xl2 shadow-cardHover lg:grid lg:grid-cols-[1fr_1.4fr]">
-          {/* Panel izquierdo, decorativo, con el valor de la consulta */}
-          <div className="relative hidden bg-gradient-to-br from-marino-700 to-marino p-8 text-white lg:flex lg:flex-col lg:justify-between">
+      {/* Cómo comprar */}
+      <section className="wrap pb-16 lg:pb-24">
+        <div className="rounded-[28px] bg-escenario px-6 py-12 dark:bg-escenario-oscuro sm:px-10 lg:px-14 lg:py-16">
+          <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15">
-                <IconWhatsapp />
-              </span>
-              <h2 className="mt-4 text-2xl font-bold leading-snug">
-                Cuéntanos qué buscas
-              </h2>
-              <p className="mt-2 text-[14.5px] text-white/70">
-                Completa el formulario y te respondemos directo por WhatsApp, con tu
-                consulta ya redactada, listo para enviar.
-              </p>
+              <p className="text-[12.5px] font-semibold uppercase tracking-[0.16em] text-acento dark:text-red-300">Cómo comprar</p>
+              <h2 className="titulo mt-2">Tu Torito en 4 pasos</h2>
             </div>
-            <ul className="mt-8 space-y-2 text-[13.5px] text-white/75">
-              <li>✓ Respuesta de un asesor real</li>
-              <li>✓ Sin precios ni condiciones sin confirmar</li>
-              <li>✓ Eliges la sede que te quede más cerca</li>
-            </ul>
+            <button onClick={() => cotizar()} className="btn btn-acento">Empezar mi cotización <IconFlecha className="h-[18px] w-[18px]" /></button>
           </div>
+          <ol className="mt-12 grid gap-9 lg:grid-cols-4 lg:gap-8">
+            {PASOS.map(([t, d], i) => (
+              <li key={t} className="relative flex gap-5 lg:block">
+                {i < PASOS.length - 1 && (
+                  <>
+                    <span aria-hidden="true" className="absolute -bottom-7 left-5 top-12 w-px bg-slate-300 dark:bg-white/15 lg:hidden" />
+                    <span aria-hidden="true" className="absolute -right-5 left-[3.25rem] top-5 hidden h-px bg-slate-300 dark:bg-white/15 lg:block" />
+                  </>
+                )}
+                <span className="cifra grid h-10 w-10 shrink-0 place-items-center rounded-full bg-marino font-display text-[19px] font-bold text-white dark:bg-white dark:text-marino">{i + 1}</span>
+                <div className="pt-1.5 lg:pt-0">
+                  <h3 className="text-[17px] font-semibold text-marino dark:text-white lg:mt-6">{t}</h3>
+                  <p className="mt-1.5 max-w-xs text-[15px] leading-relaxed text-slate-600 dark:text-slate-300">{d}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
 
-          {/* Formulario */}
-          <div className="bg-white p-8 dark:bg-[#121a2b]">
-            <h2 className="text-xl font-bold text-marino dark:text-white lg:hidden">Consulta por un modelo</h2>
-            <p className="mt-1 text-[13.5px] text-slate-500 lg:hidden">
-              Te respondemos por WhatsApp, con tus datos ya completados.
-            </p>
-
-            <form onSubmit={enviarConsulta} className="mt-5 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="field-label">Nombre</label>
-                <input className="field-input" required value={form.nombre} onChange={(e) => actualizar("nombre", e.target.value)} />
-              </div>
-              <div>
-                <label className="field-label">Contacto</label>
-                <input className="field-input" required value={form.contacto} onChange={(e) => actualizar("contacto", e.target.value)} />
-              </div>
-              <div>
-                <label className="field-label">Modelo de interés</label>
-                <select className="field-input" value={form.modelo} onChange={(e) => actualizar("modelo", e.target.value)}>
-                  {publicados.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="field-label">Color de interés {coloresDisponibles.length === 0 && "(no disponible)"}</label>
-                <select
-                  className="field-input"
-                  value={form.color}
-                  onChange={(e) => actualizar("color", e.target.value)}
-                  disabled={coloresDisponibles.length === 0}
-                >
-                  <option value="">Sin preferencia</option>
-                  {coloresDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="field-label">Sede preferida</label>
-                <select className="field-input" value={form.sede} onChange={(e) => actualizar("sede", e.target.value)}>
-                  {UBICACIONES.filter((u) => u.tipo === "Sede propia").map((u) => (
-                    <option key={u.id} value={u.nombre}>{u.nombre}</option>
-                  ))}
-                </select>
-              </div>
-              <button className="btn btn-whatsapp sm:col-span-2" type="submit">
-                <IconWhatsapp /> Enviar consulta por WhatsApp
-              </button>
-            </form>
-
-            {enviado && (
-              <p className="mt-3 text-[13.5px] font-medium text-emerald-600">
-                Se abrió WhatsApp con tu consulta lista para enviar. Si no se abrió solo, revisa que tu
-                navegador no haya bloqueado la ventana emergente.
-              </p>
-            )}
+      {/* Sedes y contacto */}
+      <section className="bg-marino text-white">
+        <div className="wrap grid gap-10 py-16 lg:grid-cols-[1.1fr_1fr] lg:py-20">
+          <div className="min-w-0">
+            <h2 className="font-display text-[2.4rem] font-bold uppercase leading-[0.95] tracking-tight sm:text-[3rem]">Cuéntanos qué buscas</h2>
+            <p className="mt-4 max-w-md text-[16px] leading-relaxed text-white/70">Elige tu modelo, tu sede y la forma de pago. Un asesor te contacta con tu cotización lista.</p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <button onClick={() => cotizar()} className="btn btn-acento">Cotizar mi Torito</button>
+              <a className="btn btn-whatsapp" target="_blank" rel="noopener noreferrer" href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent("Hola, quisiera cotizar un Torito.")}`}><IconWhatsapp /> WhatsApp</a>
+            </div>
           </div>
+          <ul className="min-w-0 divide-y divide-white/10 border-y border-white/10">
+            {sedes.map((x) => (
+              <li key={x.id}>
+                <Link to="/sedes" className="flex items-center gap-4 py-4 transition hover:bg-white/5">
+                  <IconPin className="h-5 w-5 shrink-0 text-white/60" />
+                  <span className="min-w-0 flex-1"><span className="block text-[17px] font-semibold">Sede {x.nombre}</span><span className="block truncate text-[13.5px] text-white/60">{x.direccion}</span></span>
+                  <span className="hidden shrink-0 text-[13px] text-white/60 sm:inline">{x.horario?.split(" de ")[0]}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
     </div>
