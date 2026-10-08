@@ -1,0 +1,19 @@
+<svg viewBox="0 0 520 140" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Recreación del logo real de EPSA Motor (ala + texto), hecha a partir
+    de la captura que mandó Didier. Es una aproximación en vector, no el
+    archivo oficial: lo ideal es reemplazar este SVG cuando la empresa
+    entregue su logo original en alta resolución o en formato vectorial.
+  -->
+  <g transform="translate(0,10)">
+    <!-- Ala izquierda -->
+    <path d="M58 10 C40 18 24 34 14 58 C30 52 44 50 56 54 C46 60 36 70 28 86 C42 80 54 78 64 82 C58 90 54 98 52 106 L64 100 C66 92 70 84 76 76 C70 74 66 70 64 64 C72 62 80 64 86 70 C84 56 78 40 66 26 C62 32 58 40 56 48 C54 36 54 24 58 10 Z" fill="#C8102E"/>
+    <!-- Ala derecha (espejada) -->
+    <path d="M78 10 C96 18 112 34 122 58 C106 52 92 50 80 54 C90 60 100 70 108 86 C94 80 82 78 72 82 C78 90 82 98 84 106 L72 100 C70 92 66 84 60 76 C66 74 70 70 72 64 C64 62 56 64 50 70 C52 56 58 40 70 26 C74 32 78 40 80 48 C82 36 82 24 78 10 Z" fill="#0A1E3F"/>
+    <!-- Cuerpo central -->
+    <ellipse cx="68" cy="92" rx="10" ry="16" fill="#0A1E3F"/>
+  </g>
+  <text x="150" y="68" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="52" letter-spacing="1" fill="#0A1E3F">EPS<tspan fill="#C8102E">A</tspan></text>
+  <text x="150" y="96" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="22" letter-spacing="6" fill="#0A1E3F">MOTOR</text>
+  <text x="150" y="116" font-family="Arial, Helvetica, sans-serif" font-weight="500" font-size="11" letter-spacing="1.5" fill="#5b6b82">DISTRIBUCIÓN AUTORIZADA BAJAJ</text>
+</svg>

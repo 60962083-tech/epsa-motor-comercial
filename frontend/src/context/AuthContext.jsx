@@ -1,50 +1,37 @@
 import { createContext, useContext, useState } from "react";
 import { ROLES } from "../data/mockData";
+import { cerrarSesionApi } from "../lib/api";
 
 /**
- * AuthContext
- * -----------------------------------------------------------------
- * Guarda qué rol "inició sesión" para poder mostrar u ocultar
- * opciones del menú y bloquear pantallas (HU-007).
- *
- * TODO (Michelle): reemplazar login() por la llamada real a
- * Supabase Auth (supabase.auth.signInWithPassword) y, en vez de
- * guardar el rol que el usuario elige en un <select>, leerlo de la
- * tabla de usuarios según quién inició sesión.
- * -----------------------------------------------------------------
+ * AuthContext (HU-007)
+ * Guarda el usuario y su rol. En modo real el rol viene de Supabase
+ * (rpc hu007_usuario_actual); en demostración, de los atajos del login.
+ * puedeVer(seccion) → menú / rutas. puede(accion) → botones (eliminar, mover…).
  */
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  // Se guarda en sessionStorage para no perder la sesión si recargan la página,
-  // pero se borra al cerrar la pestaña (apropiado para una demo sin backend real).
   const [user, setUser] = useState(() => {
-    const saved = sessionStorage.getItem("epsa-user");
-    return saved ? JSON.parse(saved) : null;
+    // Las sesiones guardadas por versiones anteriores del panel se descartan (v: 3)
+    try { const s = JSON.parse(sessionStorage.getItem("epsa-user") || "null"); return s?.v === 3 ? s : null; } catch { return null; }
   });
 
-  function login(nombre, rol) {
-    const nuevo = { nombre, rol };
-    sessionStorage.setItem("epsa-user", JSON.stringify(nuevo));
+  function login(nombre, rol, extra = {}) {
+    const nuevo = { nombre, rol, ...extra, v: 3 };
+    try { sessionStorage.setItem("epsa-user", JSON.stringify(nuevo)); } catch { /* */ }
     setUser(nuevo);
   }
-
   function logout() {
-    sessionStorage.removeItem("epsa-user");
+    try { sessionStorage.removeItem("epsa-user"); } catch { /* */ }
+    cerrarSesionApi();
     setUser(null);
   }
+  const puedeVer = (seccion) => !!user && !!ROLES[user.rol]?.puede.includes(seccion);
+  const puede = (accion) => {
+    const p = user ? ROLES[user.rol]?.permisos || [] : [];
+    return p.includes("*") || p.includes(accion);
+  };
 
-  // true si el rol actual tiene permiso para ver una sección del menú
-  function puedeVer(seccion) {
-    if (!user) return false;
-    return ROLES[user.rol]?.puede.includes(seccion);
-  }
-
-  return (
-    <AuthContext.Provider value={{ user, login, logout, puedeVer }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ user, login, logout, puedeVer, puede }}>{children}</AuthContext.Provider>;
 }
-
 export const useAuth = () => useContext(AuthContext);
