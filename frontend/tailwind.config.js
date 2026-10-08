@@ -5,7 +5,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["Barlow", "system-ui", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
+        display: ["\"Barlow Condensed\"", "Barlow", "Arial Narrow", "system-ui", "sans-serif"],
       },
       colors: {
         marino: {
@@ -13,6 +14,9 @@ export default {
           700: "#0e2c52",
           50: "#eef2f7",
         },
+        // Escenario de producto (fondo de fotos) y líneas finas
+        escenario: { DEFAULT: "#f2f5f9", oscuro: "#0f1b30" },
+        linea: { DEFAULT: "#e3e8ef", oscuro: "#1c2a44" },
         acento: {
           DEFAULT: "#c62828",
           600: "#a81f1f",
