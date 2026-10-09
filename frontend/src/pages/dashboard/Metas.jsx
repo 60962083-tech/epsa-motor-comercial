@@ -58,7 +58,7 @@ export default function Metas() {
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.m ? "Editar meta" : "Registrar meta"} ancho="max-w-md" pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-meta" className="btn btn-primary !py-2">Guardar</button></>}>
         <form id="f-meta" onSubmit={guardar} className="grid gap-4">
           <Campo etiqueta="Sede"><select className="field-input" disabled={!!modal?.m} value={f.sede} onChange={(e) => setF({ ...f, sede: e.target.value })}>{SEDES_ATENCION.map((s) => <option key={s}>{s}</option>)}</select></Campo>
-          <Campo etiqueta={`Meta de ventas (${mes})`} error={err}><input className="field-input" inputMode="numeric" value={f.meta} onChange={(e) => setF({ ...f, meta: e.target.value.replace(/\D/g, "") })} /></Campo>
+          <Campo etiqueta={`Meta de ventas (${mes})`} error={err}><input className="field-input" inputMode="numeric" maxLength={3} value={f.meta} onChange={(e) => setF({ ...f, meta: e.target.value.replace(/\D/g, "").slice(0, 3).replace(/^0+/, "") })} /></Campo>
         </form>
       </Modal>
     </div>
