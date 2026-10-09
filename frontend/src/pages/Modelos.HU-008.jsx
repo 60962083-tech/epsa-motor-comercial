@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { FILTROS_CATALOGO, FAMILIAS, formatoSoles } from "../data/mockData";
+import { FILTROS_CATALOGO, FAMILIAS, COLOR_HEX, formatoSoles } from "../data/mockData";
 import { useApp } from "../store/appStore.jsx";
 import { useCotizar } from "../components/CotizarModal";
 import ModeloImg from "../components/ModeloImg";
 import MotoIllustration from "../components/MotoIllustration";
-import HUBadge from "../components/HUBadge";
 import { numero } from "../components/FichaTecnica";
 import { IconBuscar, IconClose, IconFiltros } from "../components/Icons";
 
-const HEX = { Rojo: "#c62828", Blanco: "#f4f4f5", Azul: "#1e4896", Negro: "#111827", Plateado: "#c0c4cc", Verde: "#15803d" };
 
 /**
  * Tarjeta de modelo: foto sobre escenario, nombre en estilo Torito, precio y colores. Se usa en Inicio, catálogo y ficha.
@@ -17,14 +15,14 @@ const HEX = { Rojo: "#c62828", Blanco: "#f4f4f5", Azul: "#1e4896", Negro: "#1118
  */
 export function TarjetaModelo({ m, stock, colores = true, colorInicial }) {
   const cotizar = useCotizar();
-  const [color, setColor] = useState(colorInicial || m.colores?.[0]);
+  const [color, setColor] = useState(colorInicial || m.colorPortada || m.colores?.[0]);
   const badge = (m.badges || [])[0];
   const potencia = m.resumen?.Potencia && !/ver/i.test(m.resumen.Potencia) ? m.resumen.Potencia : null;
   return (
     <article className="group flex flex-col">
       <Link to={`/modelos/${m.id}`} className="relative block overflow-hidden rounded-2xl bg-escenario dark:bg-escenario-oscuro" aria-label={`Ver ${m.nombre}`}>
         {badge && <span className={`absolute left-3 top-3 z-10 rounded-md px-2 py-0.5 text-[10.5px] font-bold tracking-wide text-white ${badge.startsWith("NUEVO") ? "bg-acento" : "bg-marino-700"}`}>{badge}</span>}
-        {m.angulos360?.length > 1 && <span className="absolute right-3 top-3 z-10 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-marino dark:bg-[#101c33] dark:text-white">360°</span>}
+        {(m.colores || []).length > 1 && <span className="absolute right-3 top-3 z-10 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-marino dark:bg-[#101c33] dark:text-white">{m.colores.length} colores</span>}
         <ModeloImg modelo={m} color={color} className="aspect-[4/3] w-full object-contain p-6 transition duration-300 group-hover:scale-[1.03]" />
         {stock === 0 && <span className="absolute bottom-3 left-3 rounded-md bg-amber-500 px-2 py-0.5 text-[10.5px] font-bold text-white">SIN STOCK</span>}
       </Link>
@@ -35,7 +33,7 @@ export function TarjetaModelo({ m, stock, colores = true, colorInicial }) {
             <div className="flex shrink-0 gap-1.5">
               {m.colores.map((c) => (
                 <button key={c} type="button" title={c} aria-label={`Ver en color ${c}`} aria-pressed={color === c} onClick={() => setColor(c)} onMouseEnter={() => setColor(c)}
-                  className={`h-4 w-4 rounded-full border ${color === c ? "ring-2 ring-marino-700/40 ring-offset-1 dark:ring-white/60 dark:ring-offset-[#0a1426]" : "border-slate-300 dark:border-white/20"}`} style={{ background: HEX[c] || "#94a3b8" }} />
+                  className={`h-4 w-4 rounded-full border ${color === c ? "ring-2 ring-marino-700/40 ring-offset-1 dark:ring-white/60 dark:ring-offset-[#0a1426]" : "border-slate-300 dark:border-white/20"}`} style={{ background: COLOR_HEX[c] || "#94a3b8" }} />
               ))}
             </div>
           )}
@@ -72,7 +70,6 @@ const potenciaDe = (m) => numero(m.resumen?.Potencia) ?? 0;
 const GRUPOS = [
   { k: "familia", titulo: "Motor", orden: FAMILIAS, etiqueta: corto },
   { k: "combustible", titulo: "Combustible", orden: FILTROS_CATALOGO.combustible },
-  { k: "tipoTecho", titulo: "Techo", orden: FILTROS_CATALOGO.tipoTecho },
   { k: "uso", titulo: "Uso", orden: FILTROS_CATALOGO.uso },
 ];
 const ORDENES = [
@@ -81,7 +78,7 @@ const ORDENES = [
   ["potencia", "Más potencia"],
   ["nombre", "Nombre (A-Z)"],
 ];
-const VACIO = { familia: [], combustible: [], tipoTecho: [], uso: [] };
+const VACIO = { familia: [], combustible: [], uso: [] };
 
 function Casilla({ etiqueta, n, activo, onChange }) {
   const deshabilitado = !activo && n === 0;
@@ -124,7 +121,7 @@ function PanelFiltros({ grupos, sel, alternar, conteo, precio, setPrecio, rango 
   );
 }
 
-/** Catálogo — HU-008 "Explorar modelos en un catálogo": un solo filtro (motor, combustible, techo, precio), búsqueda y orden. */
+/** Catálogo: un solo filtro (motor, combustible y precio), búsqueda y orden. El techo es un adicional y se elige en la ficha. */
 export default function Modelos() {
   const { publicos, unidades } = useApp();
   const [sel, setSel] = useState(VACIO);
@@ -183,7 +180,6 @@ export default function Modelos() {
 
   return (
     <div className="fade-in">
-      <HUBadge code="HU-008" titulo="Explorar modelos en un catálogo" />
       <section className="wrap pb-8 pt-10 lg:pb-10 lg:pt-14">
         <h1 className="font-display text-[3rem] font-bold uppercase leading-[0.9] tracking-tight text-marino sm:text-[4rem] dark:text-white">Modelos Torito</h1>
         <p className="bajada mt-4">Compara motores, combustible y precios de la línea oficial Torito Bajaj. Todos se pueden financiar con crédito directo.</p>
@@ -244,7 +240,7 @@ export default function Modelos() {
               {lista.map((m) => <TarjetaModelo key={m.id} m={m} stock={stockDe(m.id)} />)}
             </div>
           )}
-          <p className="mt-14 text-[12.5px] text-slate-400">Precio referencial de la versión estándar sin techo de fibra; no incluye matrícula ni SOAT y puede variar por zona o accesorios. Fotos referenciales de torito.pe.</p>
+          <p className="mt-14 text-[12.5px] text-slate-400">Precios de la moto sin techo: el techo de fibra es un adicional que eliges en la ficha o al cotizar. No incluyen matrícula ni SOAT. Fotos referenciales.</p>
         </div>
       </div>
 

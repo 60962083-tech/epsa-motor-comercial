@@ -22,13 +22,14 @@ import Ventas from "./pages/dashboard/Ventas";
 import Metas from "./pages/dashboard/Metas";
 import ModelosAdmin from "./pages/dashboard/ModelosAdmin.HU-012";
 import Inventario from "./pages/dashboard/Inventario.HU-004";
-import Integracion from "./pages/dashboard/Integracion";
+import Facturas from "./pages/dashboard/Facturas";
 import FichaUnidad from "./pages/dashboard/FichaUnidad.HU-004";
 import RegistrarCompra from "./pages/dashboard/RegistrarCompra.HU-034";
 import Ubicaciones from "./pages/dashboard/Ubicaciones.HU-026";
 import Compras from "./pages/dashboard/Compras.HU-034";
 import CompraDetalle from "./pages/dashboard/CompraDetalle.HU-002";
 import Equipo from "./pages/dashboard/Equipo";
+import OpinionesAdmin from "./pages/dashboard/Opiniones";
 
 /**
  * Rutas.
@@ -86,7 +87,8 @@ export default function App() {
               <Route path="compras/nueva" element={<P s="compras"><RegistrarCompra /></P>} />
               <Route path="compras/:id" element={<P s="compras"><CompraDetalle /></P>} />
               <Route path="equipo" element={<P s="equipo"><Equipo /></P>} />
-              <Route path="integracion" element={<P s="integracion"><Integracion /></P>} />
+              <Route path="facturas" element={<P s="facturas"><Facturas /></P>} />
+              <Route path="opiniones" element={<P s="opiniones"><OpinionesAdmin /></P>} />
               <Route path="403" element={<Prohibido />} />
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </Route>

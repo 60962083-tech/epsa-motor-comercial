@@ -2,21 +2,22 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import * as D from "../data/mockData";
 import { MODO_REAL } from "../lib/config";
 import { modelosPublicos } from "../lib/api";
+import { emparejarModelos } from "../lib/modelos";
 
 /**
  * appStore — datos de toda la web (pública + panel).
  * Lo que el panel cambia (publicar/eliminar un modelo, horario de una sede,
  * descripción de un modelo, leads…) se guarda aquí y la web pública lo lee
  * de este mismo lugar, por eso los cambios se ven al instante en ambas.
- * En modo real, el catálogo público se contrasta con GET /api/modelos (HU-012).
+ * En modo real, el catálogo público se contrasta con GET /api/modelos.
  */
 const Ctx = createContext(null);
-const CLAVE = "epsa-datos-v5"; // v5: nuevas cuentas de acceso (admin, vend, geren)
-try { localStorage.removeItem("epsa-datos-v4"); } catch { /* sin storage */ }
+const CLAVE = "epsa-datos-v7"; // v7: color de cada foto, opiniones de clientes
+try { ["epsa-datos-v4", "epsa-datos-v5", "epsa-datos-v6"].forEach((k) => localStorage.removeItem(k)); } catch { /* sin storage */ }
 
 const BASE = () => ({
   modelos: D.MODELOS, ubicaciones: D.UBICACIONES, leads: D.LEADS, seguimientos: D.SEGUIMIENTOS,
-  ventas: D.VENTAS, metas: D.METAS, equipo: D.EQUIPO, unidades: D.UNIDADES, compras: D.COMPRAS, actividad: [],
+  ventas: D.VENTAS, metas: D.METAS, equipo: D.EQUIPO, unidades: D.UNIDADES, compras: D.COMPRAS, opiniones: D.OPINIONES, actividad: [],
   config: { modoAusencia: false },
 });
 
@@ -77,21 +78,21 @@ export function AppProvider({ children }) {
 
   // Catálogo público: modelos Publicado (y, en modo real, confirmados por el backend)
   let publicos = s.modelos.filter((m) => m.estado === "Publicado");
-  if (apiModelos && apiModelos.length) {
-    const norm = (t) => String(t || "").toLowerCase().replace(/\s+/g, " ").trim();
-    const locales = publicos;
+  let sinFicha = [];
+  if (apiModelos) { // null = el backend no respondió (se usa el catálogo local); [] = no hay modelos publicados
+    const par = emparejarModelos(apiModelos, s.modelos);
+    sinFicha = par.sinFicha;
     publicos = publicos
       .map((m) => {
-        const a = apiModelos.find((x) => String(x.codmod) === String(m.codmod) || norm(x.nommod) === norm(m.nombre));
-        if (!a) return null;
-        return { ...m, descripcion: a.desmod || m.descripcion, imagenApi: a.imagenes?.[0]?.urlimo };
+        const a = par.porLocal.get(m.id);
+        if (!a) return m.creadoEnPanel ? m : null; // los modelos creados en el panel se ven aunque el backend aún no los tenga
+        return { ...m, codmodApi: String(a.codmod), descripcion: m.editadoEnPanel ? m.descripcion : a.desmod || m.descripcion, imagenApi: m.fotoPropia ? undefined : a.imagenes?.[0]?.urlimo };
       })
       .filter(Boolean);
-    if (publicos.length === 0) publicos = locales; // nombres del backend aún no coinciden: no dejamos la web vacía
   }
 
   const api = {
-    ...s, publicos, apiModelos,
+    ...s, publicos, apiModelos, sinFicha,
     agregar, actualizar, eliminar, reemplazar, restablecer, registrar, configurar,
     // atajos usados por la web pública
     sedes: s.ubicaciones.filter((u) => u.tipo === "Sede propia" && u.activo),

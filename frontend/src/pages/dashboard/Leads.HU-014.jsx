@@ -5,18 +5,18 @@ import { useAuth } from "../../context/AuthContext";
 import { CANALES, ESTADOS_LEAD, FAMILIAS, FILTROS_CATALOGO, SEDES_ATENCION } from "../../data/mockData";
 import { Aviso, btnMini, btnMiniPeligro, Campo, Card, Modal, PageHeader, Stat, Tabla, useConfirm, useToast, Vacio } from "../../components/ui";
 import { RankingBarras } from "../../components/charts";
-import HUBadge from "../../components/HUBadge";
+import { esCelular, esNombre, MSJ, soloDigitos, soloLetras } from "../../lib/validar";
 
 const TONO = { Nuevo: "bg-sky-100 text-sky-700", "En seguimiento": "bg-amber-100 text-amber-700", Cotizado: "bg-violet-100 text-violet-700", "Cerrado ganado": "bg-emerald-100 text-emerald-700", Perdido: "bg-slate-200 text-slate-600" };
-const VACIO = { contacto: "", telefono: "", canal: "", modelo: "", color: "", sede: "Comas", responsable: "", estado: "Nuevo", nota: "", primerContacto: true };
+const VACIO = { contacto: "", telefono: "", canal: "", modelo: "", color: "", sede: "Comas", responsable: "", estado: "Nuevo", nota: "", primerContacto: true, otraOportunidad: false };
 const SIN = "Sin asignar";
 const hoyISO = () => new Date().toISOString().slice(0, 10);
 
 /**
- * Leads — HU-014 "Registrar manualmente un interesado".
- * Datos mínimos (nombre, celular y canal), aviso de duplicado mientras se escribe el celular,
- * y modo ausencia: el lead queda «Sin asignar» y «Sin próximo contacto» hasta repartirlo (HU-035).
- * Los interesados que cotizan en la web llegan aquí solos, con su vendedor y su primer contacto.
+ * Leads: registrar manualmente un interesado.
+ * Datos obligatorios: nombre, celular, canal y modelo. Si el celular ya existe (aunque sea por otro modelo)
+ * se avisa y se elige: abrir el lead existente o registrarlo como otra oportunidad del mismo cliente.
+ * Modo ausencia: el lead queda «Sin asignar» y «Sin próximo contacto» hasta repartirlo.
  */
 export default function Leads() {
   const { leads, modelos, equipo, seguimientos, config, agregar, actualizar, eliminar, configurar } = useApp();
@@ -29,7 +29,7 @@ export default function Leads() {
   const [err, setErr] = useState({});
   const [asignando, setAsignando] = useState(null); const [vendAsig, setVendAsig] = useState("");
   const vendedores = equipo.filter((p) => p.rol === "vendedor" && p.activo);
-  const nombreModelo = (id) => modelos.find((m) => m.id === id)?.nombre || "Aún no define";
+  const nombreModelo = (id) => modelos.find((m) => m.id === id)?.nombre || "Sin modelo";
   const ausencia = !!config?.modoAusencia;
   const hoy = hoyISO();
 
@@ -50,7 +50,9 @@ export default function Leads() {
   }, [leads, modelos, fm]); // eslint-disable-line
 
   // Duplicado en vivo: apenas el celular tiene 9 dígitos se busca en los leads existentes
-  const duplicado = /^9\d{8}$/.test(form.telefono) ? leads.find((l) => l.telefono === form.telefono && l.id !== modal?.lead?.id) : null;
+  // (se compara solo el celular: el mismo cliente puede consultar por otro modelo)
+  const duplicado = esCelular(form.telefono) ? leads.find((l) => l.telefono === form.telefono && l.id !== modal?.lead?.id) : null;
+  const modeloForm = modelos.find((m) => m.id === form.modelo);
 
   function abrir(l) {
     setErr({});
@@ -59,23 +61,25 @@ export default function Leads() {
   }
   function validar() {
     const x = {};
-    if (form.contacto.trim().length < 3) x.contacto = "Escribe el nombre del interesado.";
-    if (!/^9\d{8}$/.test(form.telefono)) x.telefono = "Celular de 9 dígitos que empiece con 9.";
-    else if (duplicado) x.telefono = "Este celular ya está registrado. Abre ese lead en lugar de crear otro.";
+    if (!esNombre(form.contacto)) x.contacto = MSJ.nombre;
+    if (!esCelular(form.telefono)) x.telefono = MSJ.celular;
+    else if (duplicado && !form.otraOportunidad) x.telefono = "Este celular ya está registrado. Abre ese lead o márcalo como otra oportunidad.";
     if (!form.canal) x.canal = "Indica por dónde llegó la consulta.";
+    if (!form.modelo) x.modelo = "Elige el modelo que consultó.";
     setErr(x); return Object.keys(x).length === 0;
   }
   function guardar(e) {
     e.preventDefault();
     if (!validar()) return;
-    const { primerContacto, ...datos } = form;
+    const { primerContacto, otraOportunidad, ...datos } = form;
     datos.contacto = datos.contacto.trim();
+    if (otraOportunidad && duplicado) datos.nota = [datos.nota, `Otra oportunidad del mismo cliente (lead #${duplicado.id}).`].filter(Boolean).join(" ");
     if (modal.lead) { actualizar("leads", modal.lead.id, datos, `Lead editado: ${datos.contacto}`); toast("Lead actualizado"); }
     else {
       const id = leads.reduce((m, l) => Math.max(m, Number(l.id) || 0), 0) + 1;
       agregar("leads", { id, ...datos, estado: "Nuevo", fecha: hoy }, `Lead registrado: ${datos.contacto}`);
       const agenda = primerContacto && datos.responsable !== SIN;
-      if (agenda) agregar("seguimientos", { leadId: id, fecha: hoy, tipo: datos.canal === "WhatsApp" ? "WhatsApp" : "Llamada", responsable: datos.responsable, hecho: false, detalle: `Primer contacto: consulta por ${datos.modelo ? `el ${nombreModelo(datos.modelo)}` : datos.canal}` }, `Seguimiento creado para ${datos.contacto}`);
+      if (agenda) agregar("seguimientos", { leadId: id, fecha: hoy, tipo: datos.canal === "WhatsApp" ? "WhatsApp" : "Llamada", responsable: datos.responsable, hecho: false, detalle: `Primer contacto: consulta por el ${nombreModelo(datos.modelo)}` }, `Seguimiento creado para ${datos.contacto}`);
       toast(datos.responsable === SIN ? "Lead registrado como «Sin asignar» y sin próximo contacto" : agenda ? "Lead registrado y primer contacto agendado en Seguimiento" : "Lead registrado");
     }
     setModal(null);
@@ -115,7 +119,6 @@ export default function Leads() {
 
   return (
     <div>
-      <HUBadge code="HU-014" titulo="Registrar manualmente un interesado" />
       <PageHeader titulo="Leads" subtitulo="Interesados que llegan por la web, WhatsApp, redes o las sedes. Un celular no se registra dos veces.">
         {puede("leads.ausencia") && (
           <button type="button" onClick={alternarAusencia} aria-pressed={ausencia} className={`btn !py-2.5 border ${ausencia ? "border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200" : "border-slate-300 text-slate-600 dark:border-white/15 dark:text-white/80"}`}>
@@ -180,7 +183,7 @@ export default function Leads() {
                   </td>
                   <td className="px-4 py-3"><div className="flex flex-wrap gap-1.5">
                     {(l.responsable === SIN || !l.responsable) && !cerrado(l) && <button className={btnMini} onClick={() => abrirAsignar(l)}>Asignar</button>}
-                    <a className={btnMini} target="_blank" rel="noopener noreferrer" href={`https://wa.me/51${l.telefono}?text=${encodeURIComponent(`Hola ${l.contacto}, te escribimos de EPSA Motor por tu consulta${l.modelo ? ` del ${nombreModelo(l.modelo)}` : ""}.`)}`}>WhatsApp</a>
+                    <a className={btnMini} target="_blank" rel="noopener noreferrer" href={`https://wa.me/51${l.telefono}?text=${encodeURIComponent(`Hola ${l.contacto}, te escribimos de EPSA Motor por tu consulta del ${nombreModelo(l.modelo)}.`)}`}>WhatsApp</a>
                     <button className={btnMini} onClick={() => nav("/admin/seguimiento", { state: { leadId: l.id } })}>Seguimiento</button>
                     <button className={btnMini} onClick={() => nav("/admin/ventas", { state: { lead: l } })}>Vender</button>
                     <button className={btnMini} onClick={() => abrir(l)}>Editar</button>
@@ -195,23 +198,26 @@ export default function Leads() {
 
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.lead ? `Editar lead de ${modal.lead.contacto}` : "Registrar interesado"} ancho="max-w-2xl"
         confirmarGuardar={modal?.lead ? { titulo: "¿Guardar los cambios?", texto: `Se actualizará el lead de ${form.contacto || "este interesado"}.`, boton: "Guardar cambios", validar } : false}
-        pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-lead" className="btn btn-primary !py-2" type="submit" disabled={!!duplicado}>{modal?.lead ? "Guardar" : "Registrar"}</button></>}>
+        pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-lead" className="btn btn-primary !py-2" type="submit" disabled={!!duplicado && !form.otraOportunidad}>{modal?.lead ? "Guardar" : "Registrar"}</button></>}>
         <form id="f-lead" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
-          <Campo etiqueta="Nombre del interesado" error={err.contacto}><input id="lead-nombre" className="field-input" value={form.contacto} onChange={set("contacto")} autoComplete="off" /></Campo>
-          <Campo etiqueta="Celular" error={err.telefono}><input id="lead-celular" className="field-input" inputMode="numeric" maxLength={9} value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value.replace(/\D/g, "") })} placeholder="9XXXXXXXX" /></Campo>
+          <Campo etiqueta="Nombre del interesado" error={err.contacto}><input id="lead-nombre" className="field-input" value={form.contacto} onChange={(e) => setForm({ ...form, contacto: soloLetras(e.target.value) })} autoComplete="off" /></Campo>
+          <Campo etiqueta="Celular" error={err.telefono}><input id="lead-celular" className="field-input" inputMode="numeric" maxLength={9} value={form.telefono} onChange={(e) => setForm({ ...form, telefono: soloDigitos(e.target.value, 9), otraOportunidad: false })} placeholder="9XXXXXXXX" /></Campo>
           {duplicado && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-[13.5px] text-amber-900 sm:col-span-2 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
-              <p className="font-semibold">Este celular ya está registrado</p>
+              <p className="font-semibold">Este celular ya está registrado{duplicado.modelo !== form.modelo && form.modelo ? " (por otro modelo)" : ""}</p>
               <p className="mt-1">{duplicado.contacto} · {nombreModelo(duplicado.modelo)} · {duplicado.estado} · {duplicado.responsable || SIN} · desde el {duplicado.fecha}</p>
-              <button type="button" className="mt-3 rounded-lg bg-white px-3 py-1.5 text-[13px] font-semibold text-amber-900 shadow-sm hover:bg-amber-100 dark:bg-white/10 dark:text-amber-100" onClick={() => abrir(duplicado)}>Abrir ese lead</button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" data-dup="vincular" className="rounded-lg bg-white px-3 py-1.5 text-[13px] font-semibold text-amber-900 shadow-sm hover:bg-amber-100 dark:bg-white/10 dark:text-amber-100" onClick={() => abrir(duplicado)}>Es el mismo cliente: abrir su lead</button>
+                {!modal?.lead && <button type="button" data-dup="otra" aria-pressed={form.otraOportunidad} className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold shadow-sm ${form.otraOportunidad ? "bg-amber-600 text-white" : "bg-white text-amber-900 hover:bg-amber-100 dark:bg-white/10 dark:text-amber-100"}`} onClick={() => setForm({ ...form, otraOportunidad: !form.otraOportunidad })}>{form.otraOportunidad ? "✓ Se registrará como otra oportunidad" : "Registrar como otra oportunidad"}</button>}
+              </div>
             </div>
           )}
           <Campo etiqueta="Canal de la consulta" error={err.canal}><select id="lead-canal" className="field-input" value={form.canal} onChange={set("canal")}><option value="">Elige el canal</option>{CANALES.map((c) => <option key={c}>{c}</option>)}</select></Campo>
-          <Campo etiqueta="Modelo consultado"><select id="lead-modelo" className="field-input" value={form.modelo} onChange={set("modelo")}><option value="">Aún no define</option>{modelos.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}</select></Campo>
+          <Campo etiqueta="Modelo consultado" error={err.modelo}><select id="lead-modelo" className="field-input" value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value, color: "" })}><option value="">Elige el modelo</option>{modelos.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}</select></Campo>
           <Campo etiqueta="Sede de interés"><select id="lead-sede" className="field-input" value={form.sede} onChange={set("sede")}>{SEDES_ATENCION.map((c) => <option key={c}>{c}</option>)}</select></Campo>
           <Campo etiqueta="Responsable"><select id="lead-responsable" className="field-input" value={form.responsable} onChange={set("responsable")}><option>{SIN}</option>{vendedores.map((v) => <option key={v.id}>{v.nombre}</option>)}</select></Campo>
           {modal?.lead && <Campo etiqueta="Estado"><select className="field-input" value={form.estado} onChange={set("estado")}>{ESTADOS_LEAD.map((c) => <option key={c}>{c}</option>)}</select></Campo>}
-          <Campo etiqueta="Color de interés"><input className="field-input" value={form.color} onChange={set("color")} placeholder="Opcional" /></Campo>
+          <Campo etiqueta="Color de interés"><select id="lead-color" className="field-input" value={form.color} onChange={set("color")} disabled={!modeloForm}><option value="">{modeloForm ? "Cualquiera" : "Elige primero el modelo"}</option>{(modeloForm?.colores || []).map((c) => <option key={c}>{c}</option>)}</select></Campo>
           <Campo etiqueta="Notas" className="sm:col-span-2"><textarea className="field-input" rows={2} value={form.nota} onChange={set("nota")} placeholder="Qué preguntó, cuándo prefiere que lo llamen…" /></Campo>
           {!modal?.lead && (
             form.responsable === SIN
