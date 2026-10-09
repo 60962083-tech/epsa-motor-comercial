@@ -6,13 +6,12 @@ import { MODO_REAL } from "../../lib/config";
 import * as api from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
 import { Aviso, PageHeader, Stat, Tabla, Vacio, btnMini } from "../../components/ui";
-import HUBadge from "../../components/HUBadge";
 
 export const ESTADO_COMPRA = { "Pendiente de factura": "bg-slate-200 text-slate-700", "Pendiente de identificación": "bg-amber-100 text-amber-700", Identificada: "bg-emerald-100 text-emerald-700" };
 
 /**
- * Compras a proveedor — listado de HU-034. El formulario de registro está en RegistrarCompra.HU-034.jsx
- * (ruta /admin/compras/nueva) y el detalle con factura e identificación en CompraDetalle.HU-002.jsx.
+ * Compras a proveedor. El registro está en /admin/compras/nueva y el detalle (factura con PDF
+ * e identificación de motos) en /admin/compras/:id.
  */
 export default function Compras() {
   const { compras: locales } = useApp();
@@ -34,13 +33,11 @@ export default function Compras() {
 
   return (
     <div>
-      <HUBadge code="HU-034" titulo="Registrar compra pendiente de factura" />
-      <PageHeader titulo="Compras a proveedor" subtitulo="Compras a Crosland: se registran pendientes de factura (HU-034) y luego se completa la factura y la identificación de motos (HU-002).">
+      <PageHeader titulo="Compras a proveedor" subtitulo="Compras a Crosland: primero se registran pendientes de factura y luego se adjunta la factura y se identifican las motos.">
         {MODO_REAL && <button className="btn btn-secondary !py-2.5" onClick={cargar}>Actualizar</button>}
-        {gestiona && <Link className="btn btn-primary !py-2.5" to="/admin/compras/nueva">+ Registrar compra pendiente de factura</Link>}
+        {gestiona && <Link id="btn-nueva-compra" className="btn btn-acento !py-2.5 shadow-lg shadow-acento/25" to="/admin/compras/nueva">+ Registrar compra pendiente de factura</Link>}
       </PageHeader>
       {errorApi && <div className="mb-4"><Aviso tipo="error">{errorApi}</Aviso></div>}
-      {!MODO_REAL && <div className="mb-4"><Aviso tipo="aviso">Modo demostración: se simula el contrato de <b>POST/GET /api/compras</b> (incluida la clave de idempotencia).</Aviso></div>}
       {MODO_REAL && <div className="mb-4"><Aviso>Conectado a <b>/api/compras</b>: el listado del backend muestra las compras pendientes de factura o de identificación. Las identificadas se consultan por su número.</Aviso></div>}
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat etiqueta="Pendientes de factura" valor={lista.filter((c) => c.estcom === "Pendiente de factura").length} tono="rojo" />

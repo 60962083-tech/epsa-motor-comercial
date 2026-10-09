@@ -4,9 +4,10 @@ import { useApp } from "../store/appStore.jsx";
 import { useCotizar } from "../components/CotizarModal";
 import Carousel from "../components/Carousel";
 import { TarjetaModelo } from "./Modelos.HU-008";
-import { IconWhatsapp, IconShield, IconMapArea, IconCreditCard, IconDocument, IconPin, IconFlecha } from "../components/Icons";
-import { WHATSAPP_NUMERO } from "../lib/config";
-import { FAMILIAS } from "../data/mockData";
+import { IconShield, IconMapArea, IconCreditCard, IconDocument, IconFlecha } from "../components/Icons";
+import { FAMILIAS, COLOR_HEX, formatoSoles } from "../data/mockData";
+import ModeloImg from "../components/ModeloImg";
+import Opiniones from "../components/Opiniones";
 
 // Una diapositiva por modelo: la foto es la oficial de torito.pe
 const SLIDES = [
@@ -32,15 +33,15 @@ const VENTAJAS = [
 
 /** Inicio: modelos destacados, ventajas, catálogo por familia, cómo comprar y sedes. */
 export default function Home() {
-  const { publicos, unidades, sedes } = useApp();
+  const { publicos, unidades } = useApp();
+  const multicolor = publicos.find((m) => (m.colores || []).length > 1);
+  const [colorVitrina, setColorVitrina] = useState("");
   const cotizar = useCotizar();
   const [familia, setFamilia] = useState("Todas");
   const stock = (id) => unidades.filter((u) => u.modelo === id && u.disponibilidad === "Disponible").length;
   const slides = SLIDES.map((x) => ({ ...x, modelo: publicos.find((m) => m.id === x.modeloId) })).filter((x) => x.modelo);
   const lista = publicos.filter((m) => familia === "Todas" || m.familia === familia).slice(0, 8);
-  // Para que no se vean todas rojas: los modelos con foto oficial en azul se alternan azul / rojo.
-  const conAzul = lista.filter((m) => m.fotosColor?.Azul).map((m) => m.id);
-  const colorDe = (m) => (conAzul.indexOf(m.id) % 2 === 0 ? "Azul" : m.colores?.[0]);
+
 
   return (
     <div className="fade-in">
@@ -66,7 +67,7 @@ export default function Home() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="titulo">Elige tu Torito</h2>
-            <p className="bajada mt-3">{publicos.length} modelos oficiales con garantía y crédito directo.</p>
+            <p className="bajada mt-3">{publicos.length ? `${publicos.length} modelos oficiales` : "Modelos oficiales"} con garantía y crédito directo.</p>
           </div>
           <Link to="/modelos" className="text-[15px] font-semibold text-marino underline-offset-4 hover:underline dark:text-white">Ver catálogo completo</Link>
         </div>
@@ -82,10 +83,39 @@ export default function Home() {
           <p className="mt-10 rounded-2xl border border-dashed border-slate-300 py-12 text-center text-slate-500 dark:border-white/15">Por ahora no hay modelos publicados en esta familia. Escríbenos por WhatsApp.</p>
         ) : (
           <div className="mt-10 grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {lista.map((m) => <TarjetaModelo key={`${m.id}-${colorDe(m)}`} m={m} stock={stock(m.id)} colores={false} colorInicial={colorDe(m)} />)}
+            {lista.map((m) => <TarjetaModelo key={m.id} m={m} stock={stock(m.id)} colores={false} />)}
           </div>
         )}
       </section>
+
+      {/* Vitrina de colores: el modelo que viene en varios colores */}
+      {multicolor && (() => { const c = colorVitrina || multicolor.colores[0]; return (
+        <section className="relative overflow-hidden bg-marino text-white">
+          <div className="pointer-events-none absolute -right-32 top-1/2 h-[560px] w-[560px] -translate-y-1/2 rounded-full opacity-25 blur-3xl transition-colors duration-700" style={{ background: COLOR_HEX[c] }} aria-hidden="true" />
+          <div className="wrap relative grid items-center gap-8 py-16 lg:grid-cols-[1fr_1.15fr] lg:py-20">
+            <div>
+              <p className="text-[12.5px] font-semibold uppercase tracking-[0.16em] text-white/60">A tu estilo</p>
+              <h2 className="mt-2 font-display text-[2.4rem] font-bold uppercase leading-[0.95] tracking-tight sm:text-[3.2rem]">{multicolor.nombre} en {multicolor.colores.length} colores</h2>
+              <p className="mt-4 max-w-md text-[16px] leading-relaxed text-white/70">Elige el color que va con tu negocio. Mira cómo queda antes de cotizar.</p>
+              <div className="mt-7 flex flex-wrap gap-3" role="radiogroup" aria-label="Color de la vitrina">
+                {multicolor.colores.map((x) => (
+                  <button key={x} role="radio" aria-checked={c === x} onClick={() => setColorVitrina(x)} className={`group flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-4 text-[14px] font-semibold ring-1 transition ${c === x ? "bg-white text-marino ring-white" : "bg-white/5 text-white/80 ring-white/20 hover:bg-white/10"}`}>
+                    <span className="h-7 w-7 rounded-full ring-2 ring-white/80" style={{ background: COLOR_HEX[x] }} />{x}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <button onClick={() => cotizar({ modeloId: multicolor.id, color: c })} className="btn btn-acento">Cotizar en {c.toLowerCase()}</button>
+                <Link to={`/modelos/${multicolor.id}`} className="text-[15px] font-semibold text-white/85 underline-offset-4 hover:underline">Ver ficha · desde {formatoSoles(multicolor.precioDesde)}</Link>
+              </div>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-x-[14%] bottom-[6%] h-[12%] rounded-[50%] bg-black/45 blur-2xl" aria-hidden="true" />
+              <ModeloImg key={c} modelo={multicolor} color={c} className="relative mx-auto max-h-[380px] w-full animate-[entrar_.6s_ease_both] object-contain drop-shadow-[0_30px_40px_rgba(0,0,0,.4)]" />
+            </div>
+          </div>
+        </section>
+      ); })()}
 
       {/* Cómo comprar */}
       <section className="wrap pb-16 lg:pb-24">
@@ -117,30 +147,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Sedes y contacto */}
-      <section className="bg-marino text-white">
-        <div className="wrap grid gap-10 py-16 lg:grid-cols-[1.1fr_1fr] lg:py-20">
-          <div className="min-w-0">
-            <h2 className="font-display text-[2.4rem] font-bold uppercase leading-[0.95] tracking-tight sm:text-[3rem]">Cuéntanos qué buscas</h2>
-            <p className="mt-4 max-w-md text-[16px] leading-relaxed text-white/70">Elige tu modelo, tu sede y la forma de pago. Un asesor te contacta con tu cotización lista.</p>
-            <div className="mt-7 grid gap-3 sm:flex sm:flex-wrap">
-              <button onClick={() => cotizar()} className="btn btn-acento">Cotizar mi Torito</button>
-              <a className="btn btn-whatsapp" target="_blank" rel="noopener noreferrer" href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent("Hola, quisiera cotizar un Torito.")}`}><IconWhatsapp /> WhatsApp</a>
-            </div>
-          </div>
-          <ul className="min-w-0 divide-y divide-white/10 border-y border-white/10">
-            {sedes.map((x) => (
-              <li key={x.id}>
-                <Link to="/sedes" className="flex items-center gap-4 py-4 transition hover:bg-white/5">
-                  <IconPin className="h-5 w-5 shrink-0 text-white/60" />
-                  <span className="min-w-0 flex-1"><span className="block text-[17px] font-semibold">Sede {x.nombre}</span><span className="block truncate text-[13.5px] text-white/60">{x.direccion}</span></span>
-                  <span className="hidden shrink-0 text-[13px] text-white/60 sm:inline">{x.horario?.split(" de ")[0]}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+      {/* Historias de éxito: opiniones de clientes (se administran en el panel) */}
+      <Opiniones />
     </div>
   );
 }
