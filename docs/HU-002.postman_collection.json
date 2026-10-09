@@ -231,6 +231,42 @@
         "method": "GET",
         "url": "{{api_url}}/api/compras?limite=50&offset=0"
       }
+    },
+    {
+      "name": "8. Adjuntar PDF de factura",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{api_url}}/api/compras/{{codcom}}/factura/archivo",
+        "description": "Gerente o Administradora. Selecciona un PDF (application/pdf), máximo 10 MB, en archivo. La factura debe estar registrada. No fijar Content-Type manualmente. 201 al subir; 409 si ya existe.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "archivo",
+              "type": "file",
+              "src": [],
+              "contentType": "application/pdf"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "9. Consultar estado del PDF",
+      "request": {
+        "method": "GET",
+        "url": "{{api_url}}/api/compras/{{codcom}}/factura/archivo",
+        "description": "Bearer de Gerente o Administradora. 200 con data.codcom y data.archivo_adjuntado (true/false). 404 sin compra o factura."
+      }
+    },
+    {
+      "name": "10. Obtener URL temporal del PDF",
+      "request": {
+        "method": "GET",
+        "url": "{{api_url}}/api/compras/{{codcom}}/factura/archivo/url",
+        "description": "Bearer de Gerente o Administradora. 200 con data.url y data.expira_en=60. Abre la URL antes de 60 segundos. 404 si no hay PDF."
+      }
     }
   ]
 }
