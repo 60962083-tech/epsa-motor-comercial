@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { esCorreo, soloDigitos } from "../../lib/validar";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
@@ -8,6 +7,7 @@ import * as api from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
 import { TIPOS_UBICACION, TIPO_A_API, TIPO_DE_API } from "../../data/mockData";
 import { Aviso, Campo, Modal, PageHeader, Tabla, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
+import HUBadge from "../../components/HUBadge";
 
 const norm = (t) => String(t).trim().replace(/\s+/g, " ").toLowerCase();
 const VACIO = { nombre: "", tipo: "Sede propia", direccion: "", horario: "Lunes a Sábado de 9:00 AM a 5:00 PM", horarioNota: "Domingos: consultar por WhatsApp o en sede", telefono: "51907721481", correo: "inversionesepsamotor@gmail.com" };
@@ -46,16 +46,15 @@ export default function Ubicaciones() {
   const lista = useMemo(() => ubicaciones.filter((u) => (!q || u.nombre.toLowerCase().includes(q.toLowerCase())) && (!tipo || u.tipo === tipo) && (!est || (est === "activa") === u.activo)), [ubicaciones, q, tipo, est]);
   const unidadesEn = (nombre) => unidades.filter((u) => u.ubicacion === nombre && u.disponibilidad !== "Vendida").length;
 
-  function abrir(u) { setErr({}); setF(u ? { ...VACIO, ...u, telefono: soloDigitos(String(u.telefono || "").replace(/^51(?=9\d{8}$)/, ""), 9) } : VACIO); setModal({ u }); }
+  function abrir(u) { setErr({}); setF(u ? { ...VACIO, ...u } : VACIO); setModal({ u }); }
 
   async function guardar(e) {
     e.preventDefault(); const x = {};
     const nombre = f.nombre.trim().replace(/\s+/g, " ");
     if (!nombre || nombre.length > 120) x.nombre = "El nombre es obligatorio (máx. 120 caracteres).";
     if (ubicaciones.some((u) => norm(u.nombre) === norm(nombre) && u.id !== modal.u?.id)) x.nombre = "Ya existe una ubicación con ese nombre.";
-    if (f.direccion.trim().length > 250) x.direccion = "La dirección admite hasta 250 caracteres.";
-    if (f.tipo === "Sede propia" && f.telefono && !/^9\d{8}$/.test(f.telefono)) x.telefono = "Celular / WhatsApp de 9 dígitos que empiece con 9.";
-    if (f.tipo === "Sede propia" && f.correo && !esCorreo(f.correo)) x.correo = "Escribe un correo válido.";
+    if (f.direccion.length > 250) x.direccion = "La dirección admite hasta 250 caracteres.";
+    if (f.tipo === "Sede propia" && f.telefono && !/^\d{9,12}$/.test(f.telefono.replace(/\s/g, ""))) x.telefono = "Teléfono: solo números (9 a 12 dígitos).";
     setErr(x); if (Object.keys(x).length) return;
     const datos = { ...f, nombre, direccion: f.direccion.trim(), telefono: f.telefono.replace(/\s/g, "") };
     setGuardando(true);
@@ -76,10 +75,9 @@ export default function Ubicaciones() {
   async function alternar(u) {
     const nuevo = !u.activo;
     if (!nuevo) {
-      // Con backend, la regla la valida la base de datos (PT409) y se muestra su mensaje
-      const n = MODO_REAL ? 0 : unidadesEn(u.nombre);
+      const n = unidadesEn(u.nombre);
       if (n) {
-        if (await confirmar({ titulo: `No se puede desactivar ${u.nombre}`, texto: `Tiene ${n} unidad(es) asignadas. Trasládalas a otra ubicación activa y luego vuelve a intentarlo.`, boton: "Ver esas unidades" })) navigate("/admin/inventario", { state: { ubic: u.nombre } });
+        if (await confirmar({ titulo: `No se puede desactivar ${u.nombre}`, texto: `Tiene ${n} unidad(es) asignadas (regla de HU-026). Trasládalas a otra ubicación activa y luego vuelve a intentarlo.`, boton: "Ver esas unidades" })) navigate("/admin/inventario", { state: { ubic: u.nombre } });
         return;
       }
       if (!(await confirmar({ titulo: "Desactivar ubicación", texto: `${u.nombre} dejará de ofrecerse en nuevos movimientos${u.tipo === "Sede propia" ? " y desaparecerá de la web pública" : ""}. El historial se conserva.`, boton: "Desactivar" }))) return;
@@ -104,12 +102,13 @@ export default function Ubicaciones() {
 
   return (
     <div>
+      <HUBadge code="HU-026" titulo="Administrar ubicaciones" />
       <PageHeader titulo="Ubicaciones" subtitulo="Sedes propias, almacenes externos y proveedores de techo. Las sedes activas se publican en la web.">
         {MODO_REAL && <button className="btn btn-secondary !py-2.5" onClick={cargar}>Actualizar</button>}
         {gestiona && <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Nueva ubicación</button>}
       </PageHeader>
       {errorApi && <div className="mb-4"><Aviso tipo="error">{errorApi}</Aviso></div>}
-      
+      {!MODO_REAL && <div className="mb-4"><Aviso tipo="aviso">Modo demostración: las ubicaciones se guardan en este navegador. Con el backend de Michelle configurado, se usa <b>/api/ubicaciones</b> (HU-026).</Aviso></div>}
       <div className="mb-5 grid gap-3 rounded-xl2 border border-slate-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#121a2b] sm:grid-cols-3">
         <div><label className="field-label">Buscar</label><input className="field-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre" /></div>
         <div><label className="field-label">Tipo</label><select className="field-input" value={tipo} onChange={(e) => setTipo(e.target.value)}><option value="">Todos</option>{TIPOS_UBICACION.map((t) => <option key={t}>{t}</option>)}</select></div>
@@ -133,21 +132,21 @@ export default function Ubicaciones() {
           ))}
         </Tabla>
       )}
-      {!gestiona && <p className="mt-3 text-[12.5px] text-slate-400">Solo gerencia y administración crean, editan o desactivan ubicaciones. Tu rol puede consultarlas.</p>}
+      {!gestiona && <p className="mt-3 text-[12.5px] text-slate-400">Solo la gerencia crea, edita, desactiva o elimina sedes y ubicaciones. Tu rol puede consultarlas.</p>}
       {MODO_REAL && <p className="mt-3 text-[12.5px] text-slate-400">En el backend la baja es lógica: las ubicaciones no se eliminan, se desactivan.</p>}
 
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.u ? `Editar ${modal.u.nombre}` : "Nueva ubicación"} ancho="max-w-2xl"
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-ub" className="btn btn-primary !py-2" disabled={guardando}>{guardando ? "Guardando…" : "Guardar"}</button></>}>
         <form id="f-ub" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
-          <Campo etiqueta="Nombre" error={err.nombre}><input id="ub-nombre" className="field-input" maxLength={120} value={f.nombre} onChange={set("nombre")} /></Campo>
+          <Campo etiqueta="Nombre" error={err.nombre}><input className="field-input" value={f.nombre} onChange={set("nombre")} /></Campo>
           <Campo etiqueta="Tipo"><select className="field-input" value={f.tipo} onChange={set("tipo")}>{TIPOS_UBICACION.map((t) => <option key={t}>{t}</option>)}</select></Campo>
           <Campo etiqueta="Dirección (opcional)" error={err.direccion} className="sm:col-span-2"><input className="field-input" value={f.direccion} onChange={set("direccion")} /></Campo>
           {f.tipo === "Sede propia" && <>
             <Campo etiqueta="Horario de atención"><input className="field-input" value={f.horario} onChange={set("horario")} /></Campo>
             <Campo etiqueta="Nota de horario"><input className="field-input" value={f.horarioNota} onChange={set("horarioNota")} /></Campo>
-            <Campo etiqueta="Celular / WhatsApp" error={err.telefono}><input id="ub-telefono" className="field-input" inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" value={f.telefono} onChange={(e) => setF({ ...f, telefono: soloDigitos(e.target.value, 9) })} /></Campo>
-            <Campo etiqueta="Correo" error={err.correo}><input type="email" className="field-input" value={f.correo} onChange={set("correo")} /></Campo>
-            <div className="sm:col-span-2"><Aviso>Horario, teléfono y correo se publican en la página <b>Sedes y sucursales</b>. Se actualizan al instante.</Aviso></div>
+            <Campo etiqueta="Teléfono / WhatsApp" error={err.telefono}><input className="field-input" value={f.telefono} onChange={set("telefono")} /></Campo>
+            <Campo etiqueta="Correo"><input type="email" className="field-input" value={f.correo} onChange={set("correo")} /></Campo>
+            <div className="sm:col-span-2"><Aviso>Horario, teléfono y correo se publican en la página <b>Sedes y sucursales</b>. En Supabase existen en la tabla <b>sede</b> (horsed, telsed), pero la API de HU-026 aún no los expone: mientras tanto se guardan en la web.</Aviso></div>
           </>}
         </form>
       </Modal>

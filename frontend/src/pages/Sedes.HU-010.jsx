@@ -5,6 +5,7 @@ import { WHATSAPP_NUMERO } from "../lib/config";
 import { useApp } from "../store/appStore.jsx";
 import { useCotizar } from "../components/CotizarModal";
 import WhatsAppButton from "../components/WhatsAppButton.HU-013";
+import HUBadge from "../components/HUBadge";
 import { IconPhone, IconMail, IconShield, IconCreditCard, IconDocument, IconMapArea } from "../components/Icons";
 
 const SERVICIOS = ["Venta de unidades", "Crédito directo", "Prueba de manejo", "Trámite de placa", "Entrega de unidades"];
@@ -45,6 +46,7 @@ export default function Sedes() {
 
   return (
     <div className="fade-in">
+      <HUBadge code="HU-010" titulo="Sedes y sucursales" />
 
       {/* Hero */}
       <section className="relative overflow-hidden bg-marino text-white">
@@ -104,7 +106,7 @@ export default function Sedes() {
                     <p className="mt-3 text-[13.5px] font-medium text-marino dark:text-white">{s.horario}</p>
                     {s.horarioNota && <p className="text-[12.5px] text-slate-400">{s.horarioNota}</p>}
                     <div className="mt-3 space-y-1.5 text-[13.5px] text-slate-500">
-                      {s.telefono && <a href={`tel:+51${String(s.telefono).replace(/^51(?=9\d{8}$)/, "")}`} className="flex items-center gap-2 hover:text-marino dark:hover:text-white"><IconPhone className="h-4 w-4" /> +51 {String(s.telefono).replace(/^51(?=9\d{8}$)/, "").replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3")}</a>}
+                      {s.telefono && <a href={`tel:+${s.telefono}`} className="flex items-center gap-2 hover:text-marino dark:hover:text-white"><IconPhone className="h-4 w-4" /> +{s.telefono}</a>}
                       {s.correo && <a href={`mailto:${s.correo}`} className="flex items-center gap-2 hover:text-marino dark:hover:text-white"><IconMail className="h-4 w-4" /> {s.correo}</a>}
                     </div>
                   </div>

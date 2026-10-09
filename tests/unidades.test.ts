@@ -26,7 +26,15 @@ async function entorno(caso: Caso, respuesta: RespuestaMock = { data: resultado,
   const fabrica = (token: string) => ({
     auth: { getUser: async () => ({ data: { user: token === 'expired' ? null : { id: token } }, error: null }) },
     rpc: async (nombre: string, args: unknown) => {
-      if (nombre === 'hu026_rol_actual') return { data: token === 'inactive' ? null : token, error: null };
+      if (nombre === 'hu007_usuario_actual') {
+        const perfiles: Record<string, { codusu: string; rol: 'Gerente' | 'Administradora' | 'Vendedor' }> = {
+          Gerente: { codusu: '1', rol: 'Gerente' },
+          Administradora: { codusu: '2', rol: 'Administradora' },
+          Vendedor: { codusu: '3', rol: 'Vendedor' }
+        };
+        const perfil = token === 'inactive' ? null : perfiles[token];
+        return { data: perfil ? { ...perfil, uuidusu: token } : null, error: null };
+      }
       llamadas.push({ nombre, args, token });
       return respuesta;
     }

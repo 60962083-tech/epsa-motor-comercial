@@ -60,16 +60,3 @@
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
-
-/* Animaciones del banner (respetan «reducir movimiento» por la regla general de arriba) */
-@keyframes subir { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-@keyframes entrar { from { opacity: 0; transform: translateX(40px) scale(.97); } to { opacity: 1; transform: none; } }
-@keyframes progreso { from { width: 0; } to { width: 100%; } }
-@keyframes flotar { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-
-/* Opiniones: dos filas que avanzan solas en sentidos opuestos */
-@keyframes marquesina { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.marquesina { animation: marquesina var(--dur, 60s) linear infinite; }
-.marquesina.reversa { animation-direction: reverse; }
-.marquesina-pausa .marquesina, .marquesina-zona:hover .marquesina { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) { .marquesina { animation: none; } }

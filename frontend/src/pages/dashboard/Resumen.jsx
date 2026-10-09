@@ -67,7 +67,7 @@ export default function Resumen() {
 
   return (
     <div>
-      <PageHeader titulo={`Hola, ${String(user.nombre).split(" ")[0]}`} subtitulo="Resumen operativo de EPSA Motor. Pasa el mouse (o toca) los gráficos para ver el detalle.">
+      <PageHeader titulo={`Hola, ${user.nombre}`} subtitulo="Resumen operativo de EPSA Motor. Pasa el mouse (o toca) los gráficos para ver el detalle.">
         {import.meta.env.VITE_ROUTER !== "memory" && <button className="btn btn-secondary !py-2" onClick={() => window.print()}>Imprimir</button>}
       </PageHeader>
 

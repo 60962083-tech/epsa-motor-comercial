@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
@@ -7,20 +7,17 @@ import * as api from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
 import { Aviso, Campo, Card, PageHeader, Tabla, useConfirm, useToast } from "../../components/ui";
 import { Progreso } from "../../components/charts";
+import HUBadge from "../../components/HUBadge";
 import { ESTADO_COMPRA } from "./Compras.HU-034";
-import { adjuntoRecordado, buscarPdfFactura, recordarAdjunto, subirPdfFactura, urlPdfFactura, validarPdf } from "../../lib/archivos";
-import { soloDigitos } from "../../lib/validar";
-import { claveModelo } from "../../lib/modelos";
 
 const FILA = () => ({ nummotuni: "", chauni: "" });
 // Misma normalización que el backend (unidad.validacion.ts): agrupa espacios, quita bordes y pasa a mayúsculas.
 const norm = (t) => String(t || "").trim().replace(/\s+/g, " ");
 const serie = (t) => norm(t).toUpperCase();
-// Fecha local (Lima), no UTC: después de las 7 p. m. el UTC ya es el día siguiente
-const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const hoyISO = () => new Date().toISOString().slice(0, 10);
 
 /**
- * Detalle de la compra: factura (con PDF adjunto) e identificación de motos.
+ * HU-002 — Completar identificación de motos compradas (frontend del backend de Michelle).
  * 1) PUT  /api/compras/:id/factura   → metadatos de la factura recibida (emisor, número, fecha, cantidad).
  * 2) POST /api/compras/:id/unidades  → lote de 1 a 100 motos (motor y chasis únicos).
  * 3) GET  /api/compras/:id/unidades  → factura, fichas identificadas y cantidad pendiente.
@@ -28,7 +25,7 @@ const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String
  */
 export default function CompraDetalle() {
   const { id } = useParams();
-  const { compras, modelos, publicos, unidades: inv, actualizar, agregar } = useApp();
+  const { compras, modelos, unidades: inv, actualizar, agregar } = useApp();
   const { puede, user } = useAuth();
   const toast = useToast(); const confirmar = useConfirm();
   const gestiona = puede("compras.factura");
@@ -38,9 +35,6 @@ export default function CompraDetalle() {
   const [fac, setFac] = useState({ emisor: "Crosland Perú S.A.C.", numero: "", fecha_emision: "", cantidad_motos: "" }); const [ferr, setFerr] = useState({});
   const [filas, setFilas] = useState([FILA()]); const [uerr, setUerr] = useState({}); const [conflicto, setConflicto] = useState(null);
   const [lote, setLote] = useState(""); const [enviando, setEnviando] = useState(false);
-  const [pdf, setPdf] = useState(null); const [pdfErr, setPdfErr] = useState(""); const [subiendo, setSubiendo] = useState(false);
-  const inputPdf = useRef(null); const inputPdf2 = useRef(null);
-  const [adjReal, setAdjReal] = useState(null);
 
   async function cargar() {
     setCargando(true); setErrorCarga("");
@@ -49,12 +43,9 @@ export default function CompraDetalle() {
         const c = (await api.obtenerCompra(id)).data;
         setCompra(c);
         if (gestiona) {
-          try {
-            const d = (await api.listarUnidadesCompra(id)).data;
-            setDet({ factura: d?.factura || null, unidades: d?.unidades || [], requiere_revision: !!(d?.factura && d.factura.cantidad_motos !== d.cantidad_comprada) });
-            setCompra({ ...c, cantidad_pendiente: d?.cantidad_pendiente ?? c.cantidad_pendiente, estcom: d?.estcom || c.estcom });
-          } catch (e) { toast(`La compra cargó, pero no su detalle de factura y unidades: ${mensajeError(e)}`, "error"); }
-          setAdjReal(await buscarPdfFactura(c.codcom));
+          const d = (await api.listarUnidadesCompra(id)).data;
+          setDet({ factura: d?.factura || null, unidades: d?.unidades || [], requiere_revision: !!(d?.factura && d.factura.cantidad_motos !== d.cantidad_comprada) });
+          setCompra({ ...c, cantidad_pendiente: d?.cantidad_pendiente ?? c.cantidad_pendiente, estcom: d?.estcom || c.estcom });
         }
       } else {
         const c = compras.find((x) => x.codcom === id);
@@ -73,75 +64,30 @@ export default function CompraDetalle() {
   const tieneFactura = compra.estcom !== "Pendiente de factura";
   const completa = compra.estcom === "Identificada";
   const bloqueada = det.requiere_revision;
-  // Modelo del catálogo de la web: por nombre (los códigos de Supabase pueden ser otros) y, si no, por código
-  const modeloLocal = modelos.find((m) => claveModelo(m.nombre) === claveModelo(compra.nommod))
-    || (MODO_REAL ? publicos.find((m) => m.codmodApi === String(compra.codmod)) : modelos.find((m) => m.codmod === compra.codmod)) || null;
-  // Conectado: las unidades identificadas en Supabase se pasan al inventario del panel para recibirlas y liberarlas
-  const faltanEnInventario = MODO_REAL ? det.unidades.filter((u) => !inv.some((v) => serie(v.motor) === serie(u.nummotuni))) : [];
-  function pasarAlInventario(lista) {
-    const base = inv.reduce((m, u) => Math.max(m, Number(String(u.id).replace(/\D/g, "")) || 0), 0);
-    lista.forEach((r, i) => agregar("unidades", { id: `MC-${String(base + i + 1).padStart(3, "0")}`, coduni: r.coduni, codcom: String(compra.codcom), modelo: modeloLocal?.id || "", nombreModelo: compra.nommod, color: r.coluni || compra.colcom, ubicacion: "", preparacion: "Sin preparar", techo: "Sin techo", disponibilidad: "No disponible", motor: r.nummotuni, chasis: r.chauni, observaciones: [], historial: [{ fecha: hoyISO(), detalle: `Identificada en compra #${compra.codcom} · ${user.nombre}` }] }));
-  }
-
-  const adjunto = det.factura?.adjunto || adjReal || adjuntoRecordado(compra.codcom);
-
-  function elegirPdf(e) {
-    const a = e.target.files?.[0]; e.target.value = "";
-    if (!a) return;
-    const m = validarPdf(a); setPdfErr(m);
-    setPdf(m ? null : a);
-    return m ? null : a;
-  }
-  async function subirPdf(archivo) {
-    const adj = await subirPdfFactura(compra.codcom, archivo);
-    recordarAdjunto(compra.codcom, adj);
-    if (!MODO_REAL) {
-      const actual = compras.find((x) => x.codcom === compra.codcom);
-      actualizar("compras", compra.id, { factura: { ...(actual?.factura || {}), archivo_adjuntado: true, adjunto: adj } }, `PDF de factura adjuntado (compra #${compra.codcom})`);
-    }
-    return adj;
-  }
-  async function adjuntarDespues(e) {
-    const a = elegirPdf(e); if (!a) return;
-    setSubiendo(true);
-    try { await subirPdf(a); setPdf(null); toast("PDF de la factura adjuntado"); cargar(); }
-    catch (er) { setPdfErr(mensajeError(er)); toast(mensajeError(er), "error"); }
-    finally { setSubiendo(false); }
-  }
-  async function abrirPdf(descargar) {
-    const ventana = descargar ? null : window.open("", "_blank");
-    try {
-      const url = await urlPdfFactura(adjunto);
-      if (descargar) { const a = document.createElement("a"); a.href = url; a.download = adjunto.nombre || `factura-compra-${compra.codcom}.pdf`; document.body.appendChild(a); a.click(); a.remove(); }
-      else if (ventana) ventana.location.href = url; else window.open(url, "_blank");
-    } catch (er) { ventana?.close(); toast(mensajeError(er), "error"); }
-  }
+  const modeloLocal = modelos.find((m) => m.codmod === compra.codmod);
 
   async function guardarFactura(e) {
     e.preventDefault(); const x = {};
     const cuerpo = { emisor: norm(fac.emisor), numero: norm(fac.numero), fecha_emision: fac.fecha_emision, cantidad_motos: Number(fac.cantidad_motos) };
     if (!cuerpo.emisor) x.emisor = "Copia el emisor tal como aparece en la factura."; else if (cuerpo.emisor.length > 160) x.emisor = "Máximo 160 caracteres.";
-    if (!cuerpo.numero) x.numero = "Copia el número de la factura tal como figura en el documento."; else if (cuerpo.numero.length > 80) x.numero = "Máximo 80 caracteres.";
+    if (!cuerpo.numero) x.numero = "Copia el número de la factura."; else if (cuerpo.numero.length > 80) x.numero = "Máximo 80 caracteres.";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(cuerpo.fecha_emision)) x.fecha_emision = "Indica la fecha de emisión."; else if (cuerpo.fecha_emision > hoyISO()) x.fecha_emision = "La fecha de emisión no puede ser futura.";
     if (!Number.isInteger(cuerpo.cantidad_motos) || cuerpo.cantidad_motos < 1) x.cantidad_motos = "Cantidad entera mayor a 0.";
     setFerr(x); if (Object.keys(x).length) return;
     const difiere = cuerpo.cantidad_motos !== compra.cancom;
     const ok = await confirmar(difiere
-      ? { titulo: "La cantidad no coincide", texto: `La factura declara ${cuerpo.cantidad_motos} motos y la compra es de ${compra.cancom}. Se registrará el documento, pero la identificación quedará bloqueada hasta que la gerencia revise el dato . ¿Registrar igual?`, boton: "Registrar con revisión", peligro: true }
+      ? { titulo: "La cantidad no coincide", texto: `La factura declara ${cuerpo.cantidad_motos} motos y la compra es de ${compra.cancom}. Se registrará el documento, pero la identificación quedará bloqueada hasta que la gerencia revise el dato (regla de HU-002). ¿Registrar igual?`, boton: "Registrar con revisión", peligro: true }
       : { titulo: "Registrar factura", texto: `Factura ${cuerpo.numero} de ${cuerpo.emisor}, emitida el ${cuerpo.fecha_emision}, por ${cuerpo.cantidad_motos} motos. Una vez registrada no se puede sobrescribir.`, boton: "Registrar factura" });
     if (!ok) return;
     try {
-      let adj = null;
       if (MODO_REAL) {
         const r = await api.registrarFactura(id, cuerpo);
-        if (pdf) adj = await subirPdf(pdf).catch((er) => { toast(`Factura registrada, pero el PDF no se subió: ${mensajeError(er)}`, "error"); return null; });
         toast(r.data?.requiere_revision ? (r.message || "Factura registrada con discrepancia: requiere revisión.") : "Factura registrada. La compra pasa a «Pendiente de identificación».", r.data?.requiere_revision ? "error" : "ok");
       } else {
-        if (pdf) { adj = await subirPdfFactura(compra.codcom, pdf); recordarAdjunto(compra.codcom, adj); }
-        actualizar("compras", compra.id, { estcom: "Pendiente de identificación", factura: { codfac: String(Date.now()).slice(-5), ...cuerpo, archivo_adjuntado: !!adj, adjunto: adj, requiere_revision: difiere } }, `Factura ${cuerpo.numero} registrada (compra #${id})${adj ? " con PDF" : ""}`);
+        actualizar("compras", compra.id, { estcom: "Pendiente de identificación", factura: { codfac: String(Date.now()).slice(-5), ...cuerpo, archivo_adjuntado: false, requiere_revision: difiere } }, `Factura ${cuerpo.numero} registrada (compra #${id})`);
         toast(difiere ? "Factura registrada con discrepancia: la identificación queda bloqueada." : "Factura registrada. La compra pasa a «Pendiente de identificación».", difiere ? "error" : "ok");
       }
-      setPdf(null); cargar();
+      cargar();
     } catch (er) { toast(mensajeError(er), "error"); }
   }
 
@@ -175,18 +121,15 @@ export default function CompraDetalle() {
     setEnviando(true);
     try {
       const cuerpo = rows.map((r) => ({ ...r, codmod: String(compra.codmod), coluni: compra.colcom }));
-      if (MODO_REAL) {
-        const r = await api.vincularUnidades(id, cuerpo);
-        const nuevas = (r.data?.unidades || []).filter((u) => cuerpo.some((c) => c.nummotuni === serie(u.nummotuni)));
-        pasarAlInventario(nuevas.length ? nuevas : cuerpo.map((c) => ({ ...c, coduni: "" })));
-      } else {
+      if (MODO_REAL) await api.vincularUnidades(id, cuerpo);
+      else {
         const base = inv.reduce((m, u) => Math.max(m, Number(String(u.id).replace(/\D/g, "")) || 0), 0);
-        cuerpo.forEach((r, i) => agregar("unidades", { id: `MC-${String(base + i + 1).padStart(3, "0")}`, codcom: id, modelo: modeloLocal?.id || "", nombreModelo: compra.nommod, color: compra.colcom, ubicacion: "", preparacion: "Sin preparar", techo: "Sin techo", disponibilidad: "No disponible", motor: r.nummotuni, chasis: r.chauni, historial: [{ fecha: hoyISO(), detalle: `Identificada en compra #${id} · ${user.nombre}` }] }));
+        cuerpo.forEach((r, i) => agregar("unidades", { id: `MC-${String(base + i + 1).padStart(3, "0")}`, codcom: id, modelo: modeloLocal?.id || "", color: compra.colcom, ubicacion: "", preparacion: "Sin preparar", techo: "Sin techo", disponibilidad: "No disponible", motor: r.nummotuni, chasis: r.chauni, historial: [{ fecha: hoyISO(), detalle: `Identificada en compra #${id} (HU-002) · ${user.nombre}` }] }));
         const nuevas = [...(compra.unidades || []), ...cuerpo.map((r) => ({ ...r, fecreguni: hoyISO() }))];
         const pend = compra.cancom - nuevas.length;
         actualizar("compras", compra.id, { unidades: nuevas, cantidad_pendiente: pend, estcom: pend === 0 ? "Identificada" : "Pendiente de identificación" }, `${cuerpo.length} unidades identificadas (compra #${id})`);
       }
-      toast(`${cuerpo.length} unidad(es) identificada(s). Siguiente paso: recíbelas y libéralas en Inventario para que la web muestre stock.`); setFilas([FILA()]); cargar();
+      toast(`${cuerpo.length} unidades identificadas. Quedan «No disponible» hasta su recepción en Inventario.`); setFilas([FILA()]); cargar();
     } catch (er) {
       setConflicto({ texto: er.detalle?.conflicto ? er.message : mensajeError(er), detalle: er.detalle?.conflicto || null });
       toast(mensajeError(er), "error");
@@ -196,6 +139,7 @@ export default function CompraDetalle() {
   const f = det.factura;
   return (
     <div>
+      <HUBadge code="HU-002" titulo="Completar identificación de motos compradas" />
       <PageHeader titulo={`Compra #${compra.codcom} · ${compra.nommod}`} subtitulo={`${compra.colcom} · ${compra.cancom} motos · registrada el ${compra.feccom} a las ${String(compra.horcom).slice(0, 5)}`}>
         <Link to="/admin/compras" className="btn btn-secondary !py-2.5">← Compras</Link>
         {hechas > 0 && <Link to="/admin/inventario" className="btn btn-secondary !py-2.5">Ver en inventario</Link>}
@@ -203,7 +147,7 @@ export default function CompraDetalle() {
 
       {/* Línea de tiempo del proceso */}
       <ol className="mb-6 grid gap-3 sm:grid-cols-3">
-        {[["Compra registrada", `${compra.feccom}`, true], ["Factura recibida", tieneFactura ? (adjunto ? "Con PDF adjunto" : "Falta adjuntar el PDF") : "Pendiente", tieneFactura], ["Unidades identificadas", `${hechas} de ${compra.cancom}`, completa]].map(([t, hu, ok], i) => (
+        {[["Compra registrada", "HU-034", true], ["Factura recibida", "HU-002", tieneFactura], ["Unidades identificadas", "HU-002", completa]].map(([t, hu, ok], i) => (
           <li key={t} className={`flex items-center gap-3 rounded-xl2 border p-4 ${ok ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-[#121a2b]"}`}>
             <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[14px] font-bold ${ok ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500 dark:bg-white/10"}`}>{ok ? "✓" : i + 1}</span>
             <div><p className="font-semibold text-marino dark:text-white">{t}</p><p className="text-[12px] text-slate-400">{hu}</p></div>
@@ -235,47 +179,21 @@ export default function CompraDetalle() {
                   <div><dt className="text-slate-400">Emisor</dt><dd className="font-semibold text-marino dark:text-white">{f.emisor}</dd></div>
                   <div><dt className="text-slate-400">Fecha de emisión</dt><dd className="font-semibold text-marino dark:text-white">{f.fecha_emision}</dd></div>
                   <div><dt className="text-slate-400">Motos declaradas</dt><dd className="font-semibold text-marino dark:text-white">{f.cantidad_motos} {f.cantidad_motos === compra.cancom ? <span className="text-emerald-600">· coincide con la compra</span> : <span className="text-acento">· no coincide ({compra.cancom})</span>}</dd></div>
-                  <div><dt className="text-slate-400">Archivo PDF</dt><dd data-pdf={adjunto ? "si" : "no"}>
-                    {adjunto ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-300"><IconoPdf />{adjunto.nombre}</span>
-                        <button type="button" className="btn btn-secondary !px-3 !py-1.5 !text-[12.5px]" onClick={() => abrirPdf(false)}>Ver</button>
-                        <button type="button" className="btn btn-secondary !px-3 !py-1.5 !text-[12.5px]" onClick={() => abrirPdf(true)}>Descargar</button>
-                      </div>
-                    ) : gestiona ? (
-                      <>
-                        <input ref={inputPdf2} type="file" accept="application/pdf,.pdf" className="hidden" onChange={adjuntarDespues} />
-                        <button type="button" id="btn-adjuntar-despues" disabled={subiendo} className="btn btn-acento !px-3 !py-1.5 !text-[12.5px]" onClick={() => inputPdf2.current?.click()}>{subiendo ? "Subiendo…" : "Adjuntar PDF"}</button>
-                        {pdfErr && <p className="mt-1 text-[12px] font-medium text-acento">{pdfErr}</p>}
-                      </>
-                    ) : <span className="text-slate-500">Sin PDF adjunto</span>}
-                  </dd></div>
+                  <div><dt className="text-slate-400">Archivo PDF</dt><dd className="text-slate-500">{f.archivo_adjuntado ? "Adjuntado" : "Pendiente: el backend aún no define el almacenamiento privado del archivo"}</dd></div>
                 </dl>
               </div>
             ) : <p className="mt-2 text-[14px] text-emerald-700">✓ Factura registrada.</p>
           ) : gestiona ? (
             <form onSubmit={guardarFactura} className="mt-3 grid gap-4 sm:grid-cols-2" noValidate>
               <Campo etiqueta="Emisor (tal como figura en la factura)" error={ferr.emisor}><input className="field-input" maxLength={170} value={fac.emisor} onChange={(e) => setFac({ ...fac, emisor: e.target.value })} /></Campo>
-              <Campo etiqueta="N° de factura" error={ferr.numero}><input id="fac-numero" className="field-input" maxLength={90} value={fac.numero} onChange={(e) => setFac({ ...fac, numero: e.target.value })} placeholder="F001-000123" /></Campo>
+              <Campo etiqueta="N° de factura" error={ferr.numero}><input className="field-input" maxLength={90} value={fac.numero} onChange={(e) => setFac({ ...fac, numero: e.target.value })} placeholder="F001-000123" /></Campo>
               <Campo etiqueta="Fecha de emisión" error={ferr.fecha_emision}><input type="date" max={hoyISO()} className="field-input" value={fac.fecha_emision} onChange={(e) => setFac({ ...fac, fecha_emision: e.target.value })} /></Campo>
-              <Campo etiqueta="Cantidad de motos en la factura" error={ferr.cantidad_motos} ayuda={`La compra es de ${compra.cancom} motos. No cuentes aceites ni bonificaciones.`}><input id="fac-cantidad" className="field-input" inputMode="numeric" maxLength={4} value={fac.cantidad_motos} onChange={(e) => setFac({ ...fac, cantidad_motos: soloDigitos(e.target.value, 4).replace(/^0+/, "") })} /></Campo>
-              <div className="sm:col-span-2">
-                <span className="field-label">PDF de la factura</span>
-                <input ref={inputPdf} id="fac-pdf" type="file" accept="application/pdf,.pdf" className="hidden" onChange={elegirPdf} />
-                {pdf ? (
-                  <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13.5px] dark:border-emerald-500/30 dark:bg-emerald-500/10">
-                    <IconoPdf /><span className="min-w-0 flex-1 truncate font-semibold text-emerald-800 dark:text-emerald-200" data-pdf-elegido>{pdf.name}</span>
-                    <span className="text-[12px] text-slate-500">{(pdf.size / 1024).toFixed(0)} KB</span>
-                    <button type="button" className="text-[13px] font-semibold text-acento hover:underline" onClick={() => setPdf(null)}>Quitar</button>
-                  </div>
-                ) : (
-                  <button type="button" id="btn-adjuntar-pdf" onClick={() => inputPdf.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-4 py-4 text-[14px] font-semibold text-marino-700 transition hover:border-marino-700 hover:bg-marino-50 dark:border-white/20 dark:text-white/80 dark:hover:bg-white/5">
-                    <IconoPdf /> Adjuntar PDF <span className="font-normal text-slate-400">(solo PDF, máx. 10 MB)</span>
-                  </button>
-                )}
-                {pdfErr && <p className="mt-1 text-[12px] font-medium text-acento">{pdfErr}</p>}
+              <Campo etiqueta="Cantidad de motos en la factura" error={ferr.cantidad_motos} ayuda={`La compra es de ${compra.cancom} motos. No cuentes aceites ni bonificaciones.`}><input className="field-input" inputMode="numeric" value={fac.cantidad_motos} onChange={(e) => setFac({ ...fac, cantidad_motos: e.target.value.replace(/\D/g, "") })} /></Campo>
+              <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
+                <button className="btn btn-primary !py-2.5">Registrar factura</button>
+                <button type="button" disabled title="Pendiente en el backend (HU-002)" className="btn btn-secondary !py-2.5 opacity-50">Adjuntar PDF</button>
+                <span className="text-[12px] text-slate-400">El archivo se podrá adjuntar cuando el backend habilite el almacenamiento privado.</span>
               </div>
-              <div className="sm:col-span-2"><button className="btn btn-primary !py-2.5">Registrar factura{pdf ? " con PDF" : ""}</button></div>
             </form>
           ) : <p className="mt-2 text-[14px] text-slate-500">Aún sin factura registrada. Solo gerente y administradora la registran.</p>}
         </Card>
@@ -283,9 +201,9 @@ export default function CompraDetalle() {
 
       <Card className="mt-6">
         <h2 className="font-bold text-marino dark:text-white">2 · Identificar unidades (motor y chasis)</h2>
-        {completa ? <p className="mt-2 text-[14px] text-emerald-700">✓ Todas las unidades de esta compra están identificadas. Continúa en Inventario: recíbelas y libéralas para que la web muestre stock.</p>
+        {completa ? <p className="mt-2 text-[14px] text-emerald-700">✓ Todas las unidades de esta compra están identificadas. Continúa con la recepción en Inventario.</p>
           : !tieneFactura ? <p className="mt-2 text-[14px] text-slate-500">Registra primero la factura para identificar unidades.</p>
-          : bloqueada ? <div className="mt-3"><Aviso tipo="error">La cantidad de la factura no coincide con la compra. La identificación queda bloqueada hasta que la gerencia revise el dato.</Aviso></div>
+          : bloqueada ? <div className="mt-3"><Aviso tipo="error">La cantidad de la factura no coincide con la compra. La identificación queda bloqueada hasta que la gerencia revise el dato (HU-002, error PT411).</Aviso></div>
           : !gestiona ? <p className="mt-2 text-[14px] text-slate-500">Solo gerente y administradora identifican unidades.</p> : (
           <form onSubmit={identificar} className="mt-3" noValidate>
             <p className="mb-3 text-[13.5px] text-slate-500">Faltan <b>{compra.cantidad_pendiente}</b> unidades. Modelo (<b>{compra.nommod}</b>) y color (<b>{compra.colcom}</b>) se toman de la compra. Lotes de 1 a 100; las series se guardan en mayúsculas.</p>
@@ -315,9 +233,6 @@ export default function CompraDetalle() {
             <button className="btn btn-primary mt-4" disabled={enviando}>{enviando ? "Identificando…" : `Identificar ${filas.length} unidad(es)`}</button>
           </form>
         )}
-        {faltanEnInventario.length > 0 && gestiona && (
-          <div className="mt-4"><Aviso tipo="aviso">{faltanEnInventario.length} unidad(es) de esta compra aún no están en el inventario del panel. <button type="button" className="font-semibold underline" onClick={() => { pasarAlInventario(faltanEnInventario); toast("Unidades agregadas al inventario"); }}>Agregarlas al inventario</button></Aviso></div>
-        )}
         {det.unidades.length > 0 && (
           <div className="mt-6"><h3 className="mb-2 text-[14px] font-semibold text-marino dark:text-white">Unidades ya identificadas ({det.unidades.length})</h3>
             <Tabla columnas={["#", "N° de motor", "N° de chasis", "Color", "Fecha"]}>{det.unidades.map((u, i) => <tr key={u.coduni || u.nummotuni}><td className="px-4 py-2 text-slate-400">{i + 1}</td><td className="px-4 py-2 font-mono">{u.nummotuni}</td><td className="px-4 py-2 font-mono">{u.chauni}</td><td className="px-4 py-2">{u.coluni || compra.colcom}</td><td className="px-4 py-2 text-slate-500">{String(u.fecreguni || "").slice(0, 10)}</td></tr>)}</Tabla></div>
@@ -325,8 +240,4 @@ export default function CompraDetalle() {
       </Card>
     </div>
   );
-}
-
-function IconoPdf() {
-  return <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /><path d="M9 14h6M9 17h4" /></svg>;
 }

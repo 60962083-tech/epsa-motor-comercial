@@ -44,7 +44,7 @@ export function ErrorPorCodigo() {
   return (
     <PantallaError codigo={e[0]} titulo={e[1]} texto={e[2]}>
       <button onClick={() => nav(-1)} className="btn btn-secondary">Volver</button>
-      <Link to="/" className="btn btn-primary">Ir al inicio</Link>
+      {codigo === "401" ? <Link to="/admin" className="btn btn-primary">Iniciar sesión</Link> : <Link to="/" className="btn btn-primary">Ir al inicio</Link>}
     </PantallaError>
   );
 }

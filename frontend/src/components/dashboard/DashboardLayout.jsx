@@ -18,8 +18,7 @@ const IC = {
   ubicaciones: "M12 21s-7-6-7-11.5a7 7 0 0 1 14 0C19 15 12 21 12 21Zm0-8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z",
   compras: "M3 4h2l2 12h11l2-8H6M9 20a1 1 0 1 0 0-.01M17 20a1 1 0 1 0 0-.01",
   equipo: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm9 0a3 3 0 1 0 0-6M2 19a6 6 0 0 1 12 0m1-5a5 5 0 0 1 7 5",
-  opiniones: "M4 5h16v11H9l-5 4V5Zm4 4h8M8 12h5",
-  facturas: "M7 3h10a1 1 0 0 1 1 1v17l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1Zm2 5h6M9 12h6M9 16h3",
+  integracion: "M8 7h8M8 12h8M8 17h5M5 3h14a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z",
 };
 const Ico = ({ n }) => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={IC[n]} /></svg>
@@ -31,17 +30,15 @@ const GRUPOS = [
     { to: "/admin/leads", label: "Leads", seccion: "leads" },
     { to: "/admin/seguimiento", label: "Seguimiento", seccion: "seguimiento" },
     { to: "/admin/ventas", label: "Ventas a clientes", seccion: "ventas" },
-    { to: "/admin/facturas", label: "Facturas y clientes", seccion: "facturas" },
     { to: "/admin/metas", label: "Metas", seccion: "metas" },
   ] },
   { titulo: "Operaciones", items: [
     { to: "/admin/modelos", label: "Modelos", seccion: "modelos" },
-    { to: "/admin/opiniones", label: "Opiniones de clientes", seccion: "opiniones" },
     { to: "/admin/inventario", label: "Inventario", seccion: "inventario" },
     { to: "/admin/ubicaciones", label: "Ubicaciones", seccion: "ubicaciones" },
     { to: "/admin/compras", label: "Compras a proveedor", seccion: "compras" },
   ] },
-  { titulo: "Administración", items: [{ to: "/admin/equipo", label: "Equipo", seccion: "equipo" }] },
+  { titulo: "Administración", items: [{ to: "/admin/equipo", label: "Equipo", seccion: "equipo" }, { to: "/admin/integracion", label: "Integración backend", seccion: "integracion" }] },
 ];
 
 /** Estructura del panel: barra superior, menú lateral por grupos (según rol) y contenido. */
@@ -60,14 +57,14 @@ export default function DashboardLayout() {
       <header className="sticky top-0 z-40 flex h-16 items-center justify-between bg-marino px-4 text-white sm:px-6">
         <div className="flex items-center gap-3">
           <button className="grid h-9 w-9 place-items-center rounded-md hover:bg-white/10 lg:hidden" onClick={() => setOpen((o) => !o)} aria-label="Abrir menú">{open ? <IconClose /> : <IconMenu />}</button>
-          <Link to="/admin"><img src="/images/logo-epsa.svg" alt="EPSA Motor" className="h-10 w-auto" /></Link>
+          <Link to="/admin"><img src="/images/logo-epsa-transparente.png" alt="EPSA Motor" className="h-11 w-auto" /></Link>
           <span className="hidden border-l border-white/20 pl-3 text-[14px] text-white/60 sm:inline">Gestión comercial</span>
         </div>
         <div className="flex items-center gap-2 text-[14px] sm:gap-3">
           <button onClick={toggle} aria-label="Cambiar tema" className="grid h-9 w-9 place-items-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white">{dark ? <IconSun /> : <IconMoon />}</button>
           <div className="hidden items-center gap-2.5 border-l border-white/15 pl-3 sm:flex" aria-label="Sesión actual">
             <span className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-[14px] font-bold">{user.nombre?.[0]}</span>
-            <span className="leading-tight"><span className="block text-[14px] font-semibold">{String(user.nombre).split(" ").slice(0, 2).join(" ")}</span><span className="block text-[12px] text-white/60">{user.cargo || ROLES[user.rol]?.nombre}</span></span>
+            <span className="leading-tight"><span className="block text-[14px] font-semibold">{user.nombre}</span><span className="block text-[12px] text-white/60">{ROLES[user.rol]?.nombre}</span></span>
           </div>
           <Link to="/" className="hidden rounded-lg px-3 py-1.5 text-[13.5px] text-white/80 transition hover:bg-white/10 hover:text-white md:block">Ver web</Link>
           <button onClick={() => { logout(); navigate("/admin"); }} className="rounded-lg border border-white/20 px-3 py-1.5 text-[13.5px] transition hover:bg-white/10">Salir</button>

@@ -27,7 +27,6 @@ export default function Seguimiento() {
   const [err, setErr] = useState("");
   const [cierre, setCierre] = useState(null); // seguimiento que se está cerrando
   const [c, setC] = useState({ resultado: "", proxima: "", tipo: "Llamada", estadoLead: "" });
-  const [errC, setErrC] = useState("");
   const hoy = hoyISO();
   const lead = (id) => leads.find((l) => l.id === id);
   const nombreModelo = (id) => modelos.find((m) => m.id === id)?.nombre || "";
@@ -60,10 +59,9 @@ export default function Seguimiento() {
     toast("Seguimiento programado"); setModal(false);
   }
 
-  function abrirCierre(s) { setErrC(""); setC({ resultado: "", proxima: masDias(2), tipo: s.tipo, estadoLead: "" }); setCierre(s); }
+  function abrirCierre(s) { setC({ resultado: "", proxima: masDias(2), tipo: s.tipo, estadoLead: "" }); setCierre(s); }
   function cerrarTarea(e) {
     e.preventDefault();
-    if (c.resultado.trim().length < 5) return setErrC("Cuenta brevemente qué pasó (mínimo 5 caracteres).");
     if (c.proxima && c.proxima < hoy) return toast("La próxima fecha no puede ser anterior a hoy.", "error");
     const l = lead(cierre.leadId);
     actualizar("seguimientos", cierre.id, { hecho: true, resultado: c.resultado.trim(), cerrado: hoy }, `Seguimiento cumplido: ${l?.contacto}`);
@@ -144,7 +142,7 @@ export default function Seguimiento() {
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setCierre(null)}>Cancelar</button><button form="f-cierre" className="btn btn-primary !py-2">Guardar resultado</button></>}>
         <form id="f-cierre" onSubmit={cerrarTarea} className="grid gap-4" noValidate>
           <p className="text-[13.5px] text-slate-500">{cierre?.detalle}</p>
-          <Campo etiqueta="¿Qué pasó en el contacto?" error={errC}><textarea rows={3} className="field-input" value={c.resultado} onChange={(e) => setC({ ...c, resultado: e.target.value })} placeholder="Ej: le envié la cotización, decide el fin de semana" /></Campo>
+          <Campo etiqueta="¿Qué pasó? (resultado)"><textarea rows={3} className="field-input" value={c.resultado} onChange={(e) => setC({ ...c, resultado: e.target.value })} placeholder="Ej: le envié la cotización, decide el fin de semana" /></Campo>
           <Campo etiqueta="Estado del lead"><select className="field-input" value={c.estadoLead} onChange={(e) => setC({ ...c, estadoLead: e.target.value })}><option value="">Sin cambios</option>{["En seguimiento", "Cotizado", "Cerrado ganado", "Perdido"].map((x) => <option key={x}>{x}</option>)}</select></Campo>
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo etiqueta="Próximo contacto" ayuda="Déjalo vacío si no hace falta"><input type="date" min={hoy} className="field-input" value={c.proxima} onChange={(e) => setC({ ...c, proxima: e.target.value })} /></Campo>

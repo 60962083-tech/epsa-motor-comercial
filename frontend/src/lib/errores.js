@@ -21,8 +21,7 @@ const POR_ESTADO = {
 // Errores de HU-002 (PT410…PT413 y PT409 con conflicto)
 export function mensajeError(err) {
   if (!err) return "Ocurrió un error inesperado.";
-  // Se muestra tal cual el mensaje del backend de Michelle; el genérico solo si no envió ninguno.
-  const base = err.message && err.status !== 0 ? err.message : POR_ESTADO[err.status];
+  const base = err.message && err.status && err.status !== 500 && err.status !== 0 ? err.message : POR_ESTADO[err.status];
   let msg = base || err.message || "Ocurrió un error inesperado.";
   const c = err.detalle?.conflicto;
   if (c?.unidad && typeof c.unidad === "object") msg += ` (${c.campo === "chauni" ? "chasis" : "motor"} ya usado en la ficha #${c.unidad.coduni} de la compra #${c.unidad.codcom})`;

@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
-import { CANALES, SEDES_ATENCION, OPCIONES_TECHO, SIN_TECHO, formatoSoles } from "../../data/mockData";
-import { soloDigitos, soloLetras, soloMonto, esNombre, esCelular, MSJ } from "../../lib/validar";
-import { descargarComprobante, numeroComprobante } from "../../lib/voucher";
+import { CANALES, SEDES_ATENCION, formatoSoles } from "../../data/mockData";
 import { Aviso, Campo, Card, Modal, PageHeader, Stat, Tabla, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
 
 const ETAPA_TONO = { "Solicitud web": "bg-amber-100 text-amber-800", Cotización: "bg-slate-200 text-slate-700", "Pedido registrado": "bg-sky-100 text-sky-700", Entregado: "bg-emerald-100 text-emerald-700" };
@@ -12,17 +10,16 @@ const EMPRESA = { razon: "INVERSIONES EPSA MOTOR S.A.C.", ruc: "20555595469" };
 const IGV = 0.18;
 const dosDec = (n) => (Math.round(n * 100) / 100).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const CON_OPERACION = ["Transferencia", "Depósito", "Yape / Plin", "Tarjeta"];
-const DOCS = { DNI: [8, 8], CE: [9, 9], RUC: [11, 11] };
-const TECHOS = [SIN_TECHO, ...OPCIONES_TECHO];
+const DOCS = { DNI: [8, 8], CE: [9, 9], RUC: [11, 11], Pasaporte: [6, 20] };
 const MEDIOS = ["Efectivo", "Transferencia", "Yape / Plin", "Depósito", "Tarjeta"];
 const ORIGEN = ["Redes sociales", "Referido", "Pasó por la sede", "Publicidad", "Web de EPSA", "Otro"];
 
 function validarDoc(tipo, num) {
   if (!num) return "";
   const [min, max] = DOCS[tipo];
-  if (!/^\d+$/.test(num)) return "Solo números.";
-  if (tipo === "RUC" && !/^(10|15|17|20)/.test(num)) return "El RUC empieza con 10 o 20.";
-  return num.length < min || num.length > max ? `El ${tipo} debe tener ${min} dígitos.` : "";
+  if (!/^[A-Za-z0-9]+$/.test(num)) return "Solo letras y números.";
+  if (tipo !== "Pasaporte" && !/^\d+$/.test(num)) return "Solo números.";
+  return num.length < min || num.length > max ? `${tipo}: ${min === max ? min : `${min} a ${max}`} caracteres.` : "";
 }
 
 /**
@@ -41,22 +38,14 @@ export default function Ventas() {
   const nombreModelo = (id) => modelos.find((m) => m.id === id)?.nombre || "—";
 
   // ----- Nueva venta -----
-  const base = () => { const mod = modelos.find((m) => m.id === state?.lead?.modelo) || modelos.find((m) => m.estado === "Publicado") || modelos[0]; return { cliente: state?.lead?.contacto || "", celular: state?.lead?.telefono || "", modelo: mod?.id || "", color: mod?.colores?.includes(state?.lead?.color) ? state.lead.color : mod?.colores?.[0] || "", techo: "", tipoDoc: "DNI", doc: "", canal: "WhatsApp", origen: "Pasó por la sede", vendedor: user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre || "", sede: state?.lead?.sede || "Comas", pago: "Financiamiento", accion: "cotizar", medio: "Transferencia", adelanto: "", operacion: "" }; };
-  const unidadPara = (modelo, sede, color) => {
-    const libres = unidades.filter((u) => u.modelo === modelo && u.disponibilidad === "Disponible" && (!color || u.color === color));
-    return libres.find((u) => u.ubicacion === sede) || libres[0];
-  };
-  const [nueva, setNueva] = useState(state?.lead || state?.nueva ? { paso: 1, f: base() } : null);
+  const base = () => ({ cliente: state?.lead?.contacto || "", celular: state?.lead?.telefono || "", modelo: state?.lead?.modelo || modelos[0]?.id || "", tipoDoc: "DNI", doc: "", canal: "WhatsApp", origen: "Pasó por la sede", vendedor: user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre || "", sede: state?.lead?.sede || "Comas", pago: "Financiamiento", accion: "cotizar", medio: "Transferencia", adelanto: "", operacion: "" });
+  const unidadPara = (modelo, sede) => unidades.find((u) => u.modelo === modelo && u.disponibilidad === "Disponible" && u.ubicacion === sede) || unidades.find((u) => u.modelo === modelo && u.disponibilidad === "Disponible");
+  const [nueva, setNueva] = useState(state?.lead ? { paso: 1, f: base() } : null);
   const [err, setErr] = useState({});
   // ----- Atender solicitud web y comprobante manual -----
   const [atender, setAtender] = useState(null); const [vendAt, setVendAt] = useState("");
   const [comp, setComp] = useState(null); const [cf, setCf] = useState({}); const [cerr, setCerr] = useState({});
   const [verComp, setVerComp] = useState(null);
-  // Desde «Facturas y clientes» se puede pedir emitir el comprobante de una venta concreta
-  useEffect(() => {
-    const v = state?.emitir && ventas.find((x) => x.id === state.emitir);
-    if (v && !v.comprobante) abrirComprobante(v);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // ----- Pedido -----
   const [pedido, setPedido] = useState(null);
   const [pf, setPf] = useState({});
@@ -67,22 +56,13 @@ export default function Ventas() {
     return (!etapa || v.etapa === etapa) && (!sedeF || v.sede === sedeF) && (user.rol !== "vendedor" || v.vendedor === user.nombre || v.vendedor === "Sin asignar");
   }), [ventas, q, etapa, sedeF, user]);
 
-  const setN = (k, v) => setNueva((n) => {
-    const f = { ...n.f, [k]: v };
-    if (k === "modelo") f.color = modelos.find((m) => m.id === v)?.colores?.[0] || "";
-    if (k === "tipoDoc") f.doc = "";
-    return { ...n, f };
-  });
-  const totalDe = (f) => (modelos.find((m) => m.id === f.modelo)?.precioDesde || 0) + (TECHOS.find((t) => t.id === f.techo)?.precio || 0);
+  const setN = (k, v) => setNueva((n) => ({ ...n, f: { ...n.f, [k]: v } }));
   function siguiente() {
     const f = nueva.f; const e = {};
     if (nueva.paso === 1) {
-      if (!esNombre(f.cliente)) e.cliente = MSJ.nombre;
-      if (!esCelular(f.celular)) e.celular = MSJ.celular;
-      const d = validarDoc(f.tipoDoc, f.doc); if (d || !f.doc) e.doc = d || `Ingresa el ${f.tipoDoc} del cliente.`;
-      if (!f.modelo) e.modelo = "Elige la moto.";
-      if (!f.color) e.color = "Elige el color.";
-      if (!f.techo) e.techo = "Elige el techo o «Sin techo».";
+      if (f.cliente.trim().length < 3) e.cliente = "Ingresa el nombre del cliente.";
+      if (!/^9\d{8}$/.test(f.celular)) e.celular = "Celular de 9 dígitos que empiece con 9.";
+      const d = validarDoc(f.tipoDoc, f.doc); if (d) e.doc = d;
       if (!f.vendedor) e.vendedor = "Elige el vendedor responsable.";
     }
     setErr(e);
@@ -93,23 +73,22 @@ export default function Ventas() {
     const f = nueva.f; const m = modelos.find((x) => x.id === f.modelo); const e = {};
     let unidad = null;
     if (f.accion === "separar") {
-      unidad = unidadPara(f.modelo, f.sede, f.color);
-      if (!unidad) e.general = `No hay unidades disponibles del ${m?.nombre} en color ${f.color} para separar. Registra solo la cotización.`;
+      unidad = unidadPara(f.modelo, f.sede);
+      if (!unidad) e.general = `No hay unidades disponibles del ${m?.nombre} para separar. Registra solo la cotización.`;
       const monto = Number(f.adelanto);
-      if (!(monto > 0)) e.adelanto = "Para separar se necesita un adelanto mayor a 0."; else if (monto > totalDe(f)) e.adelanto = `No puede superar ${formatoSoles(totalDe(f))}.`;
+      if (!(monto > 0)) e.adelanto = "Para separar se necesita un adelanto mayor a 0."; else if (monto > m.precioDesde) e.adelanto = `No puede superar ${formatoSoles(m.precioDesde)}.`;
       if (CON_OPERACION.includes(f.medio) && !f.operacion.trim()) e.operacion = "Ingresa el N° de operación.";
     }
     setErr(e); if (Object.keys(e).length) return;
     const ok = await confirmar({
       titulo: f.accion === "separar" ? "¿Separar la unidad?" : f.accion === "pedido" ? "¿Registrar cliente y pasar al pedido?" : "¿Registrar la cotización?",
-      texto: `${f.cliente.trim()} · ${m?.nombre} ${f.color} · ${f.techo === SIN_TECHO.id ? "sin techo" : `techo ${TECHOS.find((t) => t.id === f.techo)?.nombre}`} · total ${formatoSoles(totalDe(f))} · ${f.pago}${f.accion === "separar" ? ` · adelanto ${formatoSoles(Number(f.adelanto))} por ${f.medio}. Se reservará la unidad ${unidad.id} (${unidad.ubicacion}).` : "."}`,
+      texto: `${f.cliente.trim()} · ${m?.nombre} · ${f.pago}${f.accion === "separar" ? ` · adelanto ${formatoSoles(Number(f.adelanto))} por ${f.medio}. Se reservará la unidad ${unidad.id} (${unidad.ubicacion}).` : "."}`,
       boton: "Confirmar",
     });
     if (!ok) return;
     const hoy = new Date().toISOString().slice(0, 10);
     if (unidad) actualizar("unidades", unidad.id, (u) => ({ disponibilidad: "Separada", historial: [...u.historial, { fecha: hoy, detalle: `Separada para ${f.cliente.trim()} (adelanto ${formatoSoles(Number(f.adelanto))})` }] }));
-    const tSel = TECHOS.find((t) => t.id === f.techo);
-    const datos = { fecha: hoy, cliente: f.cliente.trim().replace(/\s+/g, " "), celular: f.celular, documento: `${f.tipoDoc} ${f.doc}`, modelo: f.modelo, color: f.color, techo: tSel?.precio ? tSel.nombre : "", techoPrecio: tSel?.precio || 0, pago: f.pago, etapa: unidad ? "Pedido registrado" : "Cotización", vendedor: f.vendedor, sede: f.sede, adelanto: unidad ? Number(f.adelanto) : 0, total: totalDe(f), unidad: unidad?.id || null, canal: f.canal, origen: f.origen, ...(unidad ? { medioPago: f.medio, operacion: f.operacion.trim() } : {}) };
+    const datos = { fecha: hoy, cliente: f.cliente.trim(), celular: f.celular, documento: f.doc ? `${f.tipoDoc} ${f.doc}` : "", modelo: f.modelo, pago: f.pago, etapa: unidad ? "Pedido registrado" : "Cotización", vendedor: f.vendedor, sede: f.sede, adelanto: unidad ? Number(f.adelanto) : 0, total: m.precioDesde, unidad: unidad?.id || null, canal: f.canal, origen: f.origen, ...(unidad ? { medioPago: f.medio, operacion: f.operacion.trim() } : {}) };
     const id = ventas.reduce((mx, v) => Math.max(mx, Number(v.id) || 0), 0) + 1;
     agregar("ventas", { id, ...datos }, `Venta registrada: ${f.cliente} · ${m.nombre}`);
     const lead = leads.find((l) => l.telefono === f.celular);
@@ -131,7 +110,7 @@ export default function Ventas() {
     }
     if (pf.separar && !pedido.unidad && !unidadPara(pedido.modelo, pedido.sede)) x.separar = "No hay unidades disponibles de este modelo para separar.";
     const d = validarDoc(pf.tipoDoc, pf.doc); if (d || !pf.doc) x.doc = d || "El documento es obligatorio para registrar el pedido.";
-    if (!esCelular(pf.celular)) x.celular = MSJ.celular;
+    if (!/^9\d{8}$/.test(pf.celular)) x.celular = "Celular de 9 dígitos que empiece con 9.";
     setPerr(x); return Object.keys(x).length === 0;
   }
   function guardarPedido(e) {
@@ -181,7 +160,7 @@ export default function Ventas() {
   function validarComprobante() {
     const x = {};
     if (cf.tipo === "Factura") {
-      if (!/^(10|15|17|20)\d{9}$/.test(cf.doc)) x.doc = MSJ.ruc;
+      if (!/^(10|20)\d{9}$/.test(cf.doc)) x.doc = "RUC de 11 dígitos que empiece con 10 o 20.";
       if (cf.razon.trim().length < 3) x.razon = "Escribe la razón social.";
       if (cf.direccion.trim().length < 5) x.direccion = "Escribe la dirección fiscal.";
     } else {
@@ -200,7 +179,7 @@ export default function Ventas() {
     const total = Number(cf.total); const gravada = total / (1 + IGV);
     const c = { tipo: cf.tipo, serie, numero: correlativo, fecha: cf.fecha, cliente: cf.tipo === "Factura" ? cf.razon.trim() : comp.cliente, tipoDoc: cf.tipo === "Factura" ? "RUC" : cf.tipoDoc, doc: cf.doc, direccion: cf.direccion.trim(), descripcion: cf.descripcion.trim(), medio: cf.medio, total, gravada, igv: total - gravada, emitidoPor: user.nombre, estado: "Emitido" };
     actualizar("ventas", comp.id, { comprobante: c }, `Comprobante ${serie}-${String(correlativo).padStart(8, "0")} emitido para ${comp.cliente}`);
-    toast(`${cf.tipo} ${serie}-${String(correlativo).padStart(8, "0")} emitida y guardada en Facturas`); setComp(null); setVerComp({ ...comp, comprobante: c });
+    toast(`${cf.tipo} ${serie}-${String(correlativo).padStart(8, "0")} emitida`); setComp(null); setVerComp({ ...comp, comprobante: c });
   }
   async function anularComprobante(v) {
     if (!(await confirmar({ titulo: "Anular comprobante", texto: `El comprobante ${v.comprobante.serie}-${String(v.comprobante.numero).padStart(8, "0")} quedará anulado y podrás emitir uno nuevo. Esta acción queda registrada.`, boton: "Anular", peligro: true }))) return;
@@ -241,7 +220,7 @@ export default function Ventas() {
             <tr key={v.id}>
               <td className="whitespace-nowrap px-4 py-3 text-slate-500">{v.fecha}</td>
               <td className="px-4 py-3"><p className="font-semibold text-marino dark:text-white">{v.cliente}</p><p className="text-[12.5px] text-slate-400">{v.celular}{v.documento && ` · ${v.documento}`}</p></td>
-              <td className="px-4 py-3">{nombreModelo(v.modelo)}<span className="block text-[12px] text-slate-400">{[v.color, v.techo ? `techo ${v.techo}` : "sin techo", v.unidad && `unidad ${v.unidad}`].filter(Boolean).join(" · ")}</span></td>
+              <td className="px-4 py-3">{nombreModelo(v.modelo)}{v.unidad && <span className="block text-[12px] text-slate-400">Unidad {v.unidad}</span>}</td>
               <td className="px-4 py-3">{v.pago}</td>
               <td className="whitespace-nowrap px-4 py-3">{formatoSoles(v.total)}<span className="block text-[12px] text-slate-400">Adelanto {formatoSoles(v.adelanto)}</span></td>
               <td className="px-4 py-3">{v.vendedor === "Sin asignar" ? <span className="font-semibold text-amber-600">Sin asignar</span> : v.vendedor}<span className="block text-[12px] text-slate-400">{v.sede}</span></td>
@@ -250,7 +229,7 @@ export default function Ventas() {
                 {v.etapa === "Solicitud web" && <button className={btnMini} onClick={() => abrirAtender(v)}>Atender</button>}
                 {v.etapa === "Cotización" && <button className={btnMini} onClick={() => abrirPedido(v)}>Registrar pedido</button>}
                 {v.etapa === "Pedido registrado" && <button className={btnMini} onClick={() => entregar(v)}>Marcar entrega</button>}
-                {v.comprobante && <button className={btnMini} onClick={() => setVerComp(v)}>{numeroComprobante(v.comprobante)}</button>}
+                {v.comprobante && <button className={btnMini} onClick={() => setVerComp(v)}>{v.comprobante.serie}-{String(v.comprobante.numero).padStart(8, "0")}</button>}
                 {!v.comprobante && puede("comprobantes.emitir") && ["Pedido registrado", "Entregado"].includes(v.etapa) && <button className={btnMini} onClick={() => abrirComprobante(v)}>Emitir comprobante</button>}
                 <a className={btnMini} target="_blank" rel="noopener noreferrer" href={`https://wa.me/51${v.celular}`}>WhatsApp</a>
                 {puede("eliminar") && <button className={btnMiniPeligro} onClick={() => borrar(v)}>Eliminar</button>}
@@ -270,15 +249,12 @@ export default function Ventas() {
           <ol className="mb-5 flex gap-2 text-[12.5px]">{pasos.map((p, i) => <li key={p} className={`flex-1 rounded-lg px-3 py-2 text-center font-semibold ${nueva.paso === i + 1 ? "bg-marino text-white" : nueva.paso > i + 1 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500 dark:bg-white/10"}`}>{i + 1}. {p}</li>)}</ol>
           {nueva.paso === 1 && (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Campo etiqueta="Nombre completo del cliente" error={err.cliente}><input id="v-cliente" className="field-input" maxLength={80} value={f.cliente} onChange={(e) => setN("cliente", soloLetras(e.target.value))} /></Campo>
-              <Campo etiqueta="Documento de identidad" error={err.doc}>
-                <div className="flex gap-2"><select className="field-input !w-24" value={f.tipoDoc} onChange={(e) => setN("tipoDoc", e.target.value)}>{Object.keys(DOCS).map((d) => <option key={d}>{d}</option>)}</select><input id="v-doc" className="field-input" inputMode="numeric" maxLength={DOCS[f.tipoDoc][1]} placeholder={`${DOCS[f.tipoDoc][1]} dígitos`} value={f.doc} onChange={(e) => setN("doc", soloDigitos(e.target.value, DOCS[f.tipoDoc][1]))} /></div>
+              <Campo etiqueta="Nombre del cliente" error={err.cliente}><input className="field-input" value={f.cliente} onChange={(e) => setN("cliente", e.target.value)} /></Campo>
+              <Campo etiqueta="Celular" error={err.celular}><input className="field-input" inputMode="numeric" maxLength={9} value={f.celular} onChange={(e) => setN("celular", e.target.value.replace(/\D/g, ""))} /></Campo>
+              <Campo etiqueta="Modelo"><select className="field-input" value={f.modelo} onChange={(e) => setN("modelo", e.target.value)}>{modelos.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}</select></Campo>
+              <Campo etiqueta="Documento (opcional)" error={err.doc}>
+                <div className="flex gap-2"><select className="field-input !w-28" value={f.tipoDoc} onChange={(e) => setN("tipoDoc", e.target.value)}>{Object.keys(DOCS).map((d) => <option key={d}>{d}</option>)}</select><input className="field-input" value={f.doc} onChange={(e) => setN("doc", e.target.value)} /></div>
               </Campo>
-              <Campo etiqueta="Celular" error={err.celular}><input id="v-celular" className="field-input" type="tel" inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" value={f.celular} onChange={(e) => setN("celular", soloDigitos(e.target.value, 9))} /></Campo>
-              <Campo etiqueta="Moto que compra" error={err.modelo}><select id="v-modelo" className="field-input" value={f.modelo} onChange={(e) => setN("modelo", e.target.value)}>{modelos.filter((m) => m.estado === "Publicado").map((m) => <option key={m.id} value={m.id}>{m.nombre} · {formatoSoles(m.precioDesde)}</option>)}</select></Campo>
-              <Campo etiqueta="Color" error={err.color}><select id="v-color" className="field-input" value={f.color} onChange={(e) => setN("color", e.target.value)}>{(modelos.find((m) => m.id === f.modelo)?.colores || []).map((c) => <option key={c}>{c}</option>)}</select></Campo>
-              <Campo etiqueta="Techo (adicional)" error={err.techo}><select id="v-techo" className="field-input" value={f.techo} onChange={(e) => setN("techo", e.target.value)}><option value="">Elige…</option>{TECHOS.map((t) => <option key={t.id} value={t.id}>{t.precio ? `${t.nombre} · + ${formatoSoles(t.precio)}` : "Sin techo (solo la moto)"}</option>)}</select></Campo>
-              <p className="rounded-lg bg-marino-50 px-3 py-2 text-[13.5px] dark:bg-white/5 sm:col-span-2">Total de la venta: <b className="cifra">{formatoSoles(totalDe(f))}</b> <span className="text-slate-500">(moto {formatoSoles(modelos.find((m) => m.id === f.modelo)?.precioDesde || 0)}{TECHOS.find((t) => t.id === f.techo)?.precio ? ` + techo ${formatoSoles(TECHOS.find((t) => t.id === f.techo).precio)}` : ""})</span></p>
               <Campo etiqueta="Canal de contacto"><select className="field-input" value={f.canal} onChange={(e) => setN("canal", e.target.value)}>{CANALES.map((c) => <option key={c}>{c}</option>)}</select></Campo>
               <Campo etiqueta="¿Cómo llegó a EPSA?"><select className="field-input" value={f.origen} onChange={(e) => setN("origen", e.target.value)}>{ORIGEN.map((c) => <option key={c}>{c}</option>)}</select></Campo>
               <Campo etiqueta="Vendedor responsable" error={err.vendedor}><select className="field-input" value={f.vendedor} onChange={(e) => setN("vendedor", e.target.value)}>{vendedores.map((v) => <option key={v.id}>{v.nombre}</option>)}</select></Campo>
@@ -304,13 +280,13 @@ export default function Ventas() {
               {f.accion === "separar" && (
                 <div className="grid gap-4 rounded-xl2 border border-amber-200 bg-amber-50 p-4 sm:grid-cols-3 dark:border-amber-500/30 dark:bg-amber-500/10">
                   <Campo etiqueta="Medio de pago"><select className="field-input" value={f.medio} onChange={(e) => setN("medio", e.target.value)}>{MEDIOS.map((x) => <option key={x}>{x}</option>)}</select></Campo>
-                  <Campo etiqueta="Adelanto (S/)" error={err.adelanto}><input className="field-input" inputMode="decimal" value={f.adelanto} onChange={(e) => setN("adelanto", soloMonto(e.target.value))} /></Campo>
+                  <Campo etiqueta="Adelanto (S/)" error={err.adelanto}><input className="field-input" inputMode="decimal" value={f.adelanto} onChange={(e) => setN("adelanto", e.target.value.replace(/[^\d.]/g, ""))} /></Campo>
                   <Campo etiqueta="N° de operación" error={err.operacion}><input className="field-input" value={f.operacion} onChange={(e) => setN("operacion", e.target.value)} placeholder={CON_OPERACION.includes(f.medio) ? "Obligatorio" : "Opcional"} /></Campo>
                   <p className="text-[12.5px] text-amber-800 sm:col-span-3 dark:text-amber-200">Separar exige un adelanto (tabla <b>separacion</b>: medio de pago, monto mayor a 0 y referencia).</p>
                 </div>
               )}
               {err.general && <Aviso tipo="error">{err.general}</Aviso>}
-              <Aviso>Se registra {f.cliente || "el cliente"} para el {nombreModelo(f.modelo)} {f.color} · {TECHOS.find((t) => t.id === f.techo)?.precio ? `techo ${TECHOS.find((t) => t.id === f.techo).nombre}` : "sin techo"} · total {formatoSoles(totalDe(f))} · {f.pago}.</Aviso>
+              <Aviso>Se registra {f.cliente || "el cliente"} para el {nombreModelo(f.modelo)} · {f.pago}.</Aviso>
             </div>
           )}
         </>}
@@ -326,13 +302,13 @@ export default function Ventas() {
             {!pedido.unidad && <label className="flex items-center gap-2 text-[14px] font-semibold sm:col-span-2"><input type="checkbox" className="h-4 w-4 accent-[#0e2c52]" checked={pf.separar} onChange={(e) => setPf({ ...pf, separar: e.target.checked, conAdelanto: e.target.checked || pf.conAdelanto })} />Separar una unidad disponible para este cliente {perr.separar && <span className="font-medium text-acento">· {perr.separar}</span>}</label>}
             {(pf.conAdelanto || pf.separar) && <>
               <Campo etiqueta="Medio de pago"><select className="field-input" value={pf.medio} onChange={(e) => setPf({ ...pf, medio: e.target.value })}>{MEDIOS.map((m) => <option key={m}>{m}</option>)}</select></Campo>
-              <Campo etiqueta="Adelanto (S/)" error={perr.adelanto} ayuda={`Máximo ${formatoSoles(pedido.total)}`}><input className="field-input" inputMode="decimal" value={pf.adelanto} onChange={(e) => setPf({ ...pf, adelanto: soloMonto(e.target.value) })} /></Campo>
+              <Campo etiqueta="Adelanto (S/)" error={perr.adelanto} ayuda={`Máximo ${formatoSoles(pedido.total)}`}><input className="field-input" inputMode="decimal" value={pf.adelanto} onChange={(e) => setPf({ ...pf, adelanto: e.target.value.replace(/[^\d.]/g, "") })} /></Campo>
               <Campo etiqueta="Fecha del pago" error={perr.fecha}><input type="date" className="field-input" value={pf.fecha} onChange={(e) => setPf({ ...pf, fecha: e.target.value })} /></Campo>
-              <Campo etiqueta="N° de operación" error={perr.operacion}><input className="field-input" maxLength={20} value={pf.operacion} onChange={(e) => setPf({ ...pf, operacion: e.target.value.replace(/[^\w-]/g, "").toUpperCase() })} /></Campo>
+              <Campo etiqueta="N° de operación" error={perr.operacion}><input className="field-input" value={pf.operacion} onChange={(e) => setPf({ ...pf, operacion: e.target.value })} /></Campo>
               <Campo etiqueta="Comprobante" error={perr.archivo} ayuda={pf.archivo || "JPG, PNG, WebP o PDF · máx. 10 MB"} className="sm:col-span-2"><input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onChange={archivo} className="field-input" /></Campo>
             </>}
-            <Campo etiqueta="Documento" error={perr.doc}><div className="flex gap-2"><select className="field-input !w-24" value={pf.tipoDoc} onChange={(e) => setPf({ ...pf, tipoDoc: e.target.value, doc: "" })}>{Object.keys(DOCS).map((d) => <option key={d}>{d}</option>)}</select><input className="field-input" inputMode="numeric" maxLength={DOCS[pf.tipoDoc]?.[1] || 8} value={pf.doc} onChange={(e) => setPf({ ...pf, doc: soloDigitos(e.target.value, DOCS[pf.tipoDoc]?.[1] || 8) })} /></div></Campo>
-            <Campo etiqueta="Celular" error={perr.celular}><input className="field-input" type="tel" inputMode="numeric" maxLength={9} value={pf.celular} onChange={(e) => setPf({ ...pf, celular: soloDigitos(e.target.value, 9) })} /></Campo>
+            <Campo etiqueta="Documento" error={perr.doc}><div className="flex gap-2"><select className="field-input !w-28" value={pf.tipoDoc} onChange={(e) => setPf({ ...pf, tipoDoc: e.target.value })}>{Object.keys(DOCS).map((d) => <option key={d}>{d}</option>)}</select><input className="field-input" value={pf.doc} onChange={(e) => setPf({ ...pf, doc: e.target.value })} /></div></Campo>
+            <Campo etiqueta="Celular" error={perr.celular}><input className="field-input" inputMode="numeric" maxLength={9} value={pf.celular} onChange={(e) => setPf({ ...pf, celular: e.target.value.replace(/\D/g, "") })} /></Campo>
             <Campo etiqueta="Observaciones" className="sm:col-span-2"><textarea rows={2} className="field-input" value={pf.obs} onChange={(e) => setPf({ ...pf, obs: e.target.value })} /></Campo>
           </form>
         )}
@@ -368,15 +344,15 @@ export default function Ventas() {
             </div>
             {cf.tipo === "Factura" ? <>
               <Campo etiqueta="RUC" error={cerr.doc}><input className="field-input" inputMode="numeric" maxLength={11} value={cf.doc} onChange={(e) => setCf({ ...cf, doc: e.target.value.replace(/\D/g, "") })} /></Campo>
-              <Campo etiqueta="Razón social" error={cerr.razon}><input className="field-input" maxLength={120} value={cf.razon} onChange={(e) => setCf({ ...cf, razon: e.target.value })} /></Campo>
+              <Campo etiqueta="Razón social" error={cerr.razon}><input className="field-input" value={cf.razon} onChange={(e) => setCf({ ...cf, razon: e.target.value })} /></Campo>
               <Campo etiqueta="Dirección fiscal" error={cerr.direccion} className="sm:col-span-2"><input className="field-input" value={cf.direccion} onChange={(e) => setCf({ ...cf, direccion: e.target.value })} /></Campo>
             </> : (
-              <Campo etiqueta={`Documento de ${comp.cliente}`} error={cerr.doc} className="sm:col-span-2"><div className="flex gap-2"><select className="field-input !w-24" value={cf.tipoDoc} onChange={(e) => setCf({ ...cf, tipoDoc: e.target.value, doc: "" })}>{["DNI", "CE"].map((d) => <option key={d}>{d}</option>)}</select><input className="field-input" inputMode="numeric" maxLength={DOCS[cf.tipoDoc]?.[1] || 8} value={cf.doc} onChange={(e) => setCf({ ...cf, doc: soloDigitos(e.target.value, DOCS[cf.tipoDoc]?.[1] || 8) })} /></div></Campo>
+              <Campo etiqueta={`Documento de ${comp.cliente}`} error={cerr.doc} className="sm:col-span-2"><div className="flex gap-2"><select className="field-input !w-28" value={cf.tipoDoc} onChange={(e) => setCf({ ...cf, tipoDoc: e.target.value })}>{["DNI", "CE", "Pasaporte"].map((d) => <option key={d}>{d}</option>)}</select><input className="field-input" value={cf.doc} onChange={(e) => setCf({ ...cf, doc: e.target.value })} /></div></Campo>
             )}
             <Campo etiqueta="Fecha de emisión" error={cerr.fecha}><input type="date" max={new Date().toISOString().slice(0, 10)} className="field-input" value={cf.fecha} onChange={(e) => setCf({ ...cf, fecha: e.target.value })} /></Campo>
             <Campo etiqueta="Medio de pago"><select className="field-input" value={cf.medio} onChange={(e) => setCf({ ...cf, medio: e.target.value })}>{MEDIOS.map((m) => <option key={m}>{m}</option>)}</select></Campo>
             <Campo etiqueta="Descripción" error={cerr.descripcion} className="sm:col-span-2"><input className="field-input" value={cf.descripcion} onChange={(e) => setCf({ ...cf, descripcion: e.target.value })} /></Campo>
-            <Campo etiqueta="Importe total (S/, IGV incluido)" error={cerr.total}><input className="field-input tabular-nums" inputMode="decimal" value={cf.total} onChange={(e) => setCf({ ...cf, total: soloMonto(e.target.value) })} /></Campo>
+            <Campo etiqueta="Importe total (S/, IGV incluido)" error={cerr.total}><input className="field-input tabular-nums" inputMode="decimal" value={cf.total} onChange={(e) => setCf({ ...cf, total: e.target.value.replace(/[^\d.]/g, "") })} /></Campo>
             <dl className="grid grid-cols-3 gap-2 self-end rounded-lg bg-marino-50 p-3 text-[12.5px] tabular-nums dark:bg-white/5">
               <div><dt className="text-slate-500">Op. gravada</dt><dd className="font-semibold">S/ {dosDec((Number(cf.total) || 0) / (1 + IGV))}</dd></div>
               <div><dt className="text-slate-500">IGV 18%</dt><dd className="font-semibold">S/ {dosDec((Number(cf.total) || 0) - (Number(cf.total) || 0) / (1 + IGV))}</dd></div>
@@ -389,12 +365,12 @@ export default function Ventas() {
 
       {/* ---------- Ver comprobante ---------- */}
       <Modal abierto={!!verComp} onClose={() => setVerComp(null)} titulo="Comprobante" ancho="max-w-lg"
-        pie={<>{verComp && puede("comprobantes.emitir") && <button className="btn !py-2 border border-acento/40 text-acento hover:bg-acento/10" onClick={() => anularComprobante(verComp)}>Anular</button>}<button className="btn btn-secondary !py-2" onClick={() => setVerComp(null)}>Cerrar</button>{verComp?.comprobante && <button className="btn btn-primary !py-2" onClick={() => descargarComprobante({ comprobante: verComp.comprobante, venta: verComp, modelo: nombreModelo(verComp.modelo) })}>Descargar PDF</button>}</>}>
+        pie={<>{verComp && puede("comprobantes.emitir") && <button className="btn !py-2 border border-acento/40 text-acento hover:bg-acento/10" onClick={() => anularComprobante(verComp)}>Anular</button>}<button className="btn btn-secondary !py-2" onClick={() => setVerComp(null)}>Cerrar</button></>}>
         {verComp?.comprobante && (() => { const c = verComp.comprobante; return (
           <div className="overflow-hidden rounded-xl border border-slate-200 text-[13.5px] dark:border-white/10">
             <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-5 dark:border-white/10">
-              <div><img src="/images/logo-epsa.svg" alt="EPSA Motor" className="mb-2 h-9 w-auto rounded bg-marino p-1.5" /><p className="font-bold text-marino dark:text-white">{EMPRESA.razon}</p><p className="text-slate-500">RUC {EMPRESA.ruc}</p></div>
-              <div className="rounded-lg border-2 border-marino px-3 py-2 text-center dark:border-white/40"><p className="text-[11px] font-bold uppercase text-marino dark:text-white">{c.tipo}</p><p className="font-mono font-bold tabular-nums">{numeroComprobante(c)}</p></div>
+              <div><p className="font-bold text-marino dark:text-white">{EMPRESA.razon}</p><p className="text-slate-500">RUC {EMPRESA.ruc}</p></div>
+              <div className="rounded-lg border-2 border-marino px-3 py-2 text-center dark:border-white/40"><p className="text-[11px] font-bold uppercase text-marino dark:text-white">{c.tipo}</p><p className="font-mono font-bold tabular-nums">{c.serie}-{String(c.numero).padStart(8, "0")}</p></div>
             </div>
             <dl className="grid grid-cols-2 gap-3 p-5">
               <div><dt className="text-slate-500">Cliente</dt><dd className="font-semibold">{c.cliente}</dd></div>
@@ -402,7 +378,7 @@ export default function Ventas() {
               {c.direccion && <div className="col-span-2"><dt className="text-slate-500">Dirección fiscal</dt><dd>{c.direccion}</dd></div>}
               <div><dt className="text-slate-500">Fecha de emisión</dt><dd className="font-semibold">{c.fecha}</dd></div>
               <div><dt className="text-slate-500">Medio de pago</dt><dd className="font-semibold">{c.medio}</dd></div>
-              <div className="col-span-2"><dt className="text-slate-500">Descripción</dt><dd>{c.descripcion}{verComp.techo ? ` · techo adicional ${verComp.techo} (${formatoSoles(verComp.techoPrecio)})` : ""}</dd></div>
+              <div className="col-span-2"><dt className="text-slate-500">Descripción</dt><dd>{c.descripcion}</dd></div>
             </dl>
             <dl className="space-y-1 border-t border-slate-200 bg-slate-50 p-5 tabular-nums dark:border-white/10 dark:bg-white/5">
               <div className="flex justify-between"><dt>Op. gravada</dt><dd>S/ {dosDec(c.gravada)}</dd></div>

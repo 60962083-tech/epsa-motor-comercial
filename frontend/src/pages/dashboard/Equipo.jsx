@@ -1,17 +1,11 @@
-import { useEffect, useState } from "react";
-import { listarUsuariosSupabase } from "../../lib/api";
-import { mensajeError } from "../../lib/errores";
-import { soloDigitos, soloLetras } from "../../lib/validar";
+import { useState } from "react";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
-import { ROLES, SEDES_ATENCION } from "../../data/mockData";
-import { MIN_CLAVE, resumenClave } from "../../lib/clave";
+import { EQUIPO_PROYECTO, ROLES, SEDES_ATENCION } from "../../data/mockData";
 import { MODO_REAL } from "../../lib/config";
 import { Aviso, Campo, Card, Modal, PageHeader, Tabla, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
 
-const VACIO = { nombre: "", usuario: "", correo: "", celular: "", rol: "vendedor", cargo: "Vendedor", sede: "Comas", recibeLeads: true, clave: "", activo: true };
-const CARGOS = { gerente: ["Gerente"], administradora: ["Administradora", "Administrador"], vendedor: ["Vendedor", "Vendedora"] };
-const cargoDe = (p) => p.cargo || ROLES[p.rol]?.nombre;
+const VACIO = { nombre: "", correo: "", celular: "", rol: "vendedor", sede: "Comas", recibeLeads: true, clave: "", activo: true };
 const TONO_ROL = { gerente: "bg-marino text-white", administradora: "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200", vendedor: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200" };
 
 /**
@@ -19,14 +13,11 @@ const TONO_ROL = { gerente: "bg-marino text-white", administradora: "bg-sky-100 
  * Solo el gerente agrega, edita, da o quita acceso y elimina personas.
  */
 export default function Equipo() {
-  const { equipo, agregar, actualizar, eliminar, leads, ventas, seguimientos } = useApp();
+  const { equipo, agregar, actualizar, eliminar, leads } = useApp();
   const { puede, user } = useAuth();
   const toast = useToast(); const confirmar = useConfirm();
   const gestiona = puede("accesos");
   const [modal, setModal] = useState(null); const [f, setF] = useState(VACIO); const [err, setErr] = useState({});
-  // Conectado: también se muestran las cuentas guardadas en Supabase (tabla «usuario» del backend)
-  const [cuentas, setCuentas] = useState(null); const [errCuentas, setErrCuentas] = useState("");
-  useEffect(() => { if (MODO_REAL) listarUsuariosSupabase().then(setCuentas).catch((e) => setErrCuentas(mensajeError(e))); }, []);
   const turnos = equipo.filter((p) => p.rol === "vendedor" && p.activo && !p.ausente && p.recibeLeads !== false);
   const abiertos = (p) => leads.filter((l) => l.responsable === p.nombre && !["Cerrado ganado", "Perdido"].includes(l.estado)).length;
 
@@ -39,29 +30,21 @@ export default function Equipo() {
     else if (equipo.some((p) => p.correo.toLowerCase() === f.correo.trim().toLowerCase() && p.id !== modal?.p?.id)) x.correo = "Ese correo ya tiene una cuenta.";
     if (equipo.some((p) => p.nombre.toLowerCase() === nombre.toLowerCase() && p.id !== modal?.p?.id)) x.nombre = "Ya hay una persona con ese nombre; agrega su apellido.";
     if (f.celular && !/^9\d{8}$/.test(f.celular)) x.celular = "Celular de 9 dígitos que empiece con 9.";
-    if (f.usuario && !/^[a-z0-9._-]{3,30}$/.test(f.usuario)) x.usuario = "Usuario de 3 a 30 letras minúsculas o números, sin espacios.";
-    else if (f.usuario && equipo.some((p) => p.usuario?.toLowerCase() === f.usuario && p.id !== modal?.p?.id)) x.usuario = "Ese usuario ya existe.";
-    if (!modal?.p && f.clave.length < MIN_CLAVE) x.clave = `La contraseña temporal debe tener al menos ${MIN_CLAVE} caracteres.`;
-    if (modal?.p && f.clave && f.clave.length < MIN_CLAVE) x.clave = `Mínimo ${MIN_CLAVE} caracteres (o déjala vacía para no cambiarla).`;
-    if (modal?.p && !f.clave && modal.p.correo.toLowerCase() !== f.correo.trim().toLowerCase()) x.clave = "Cambiaste el correo: asigna una nueva contraseña temporal.";
+    if (!modal?.p && f.clave.length < 6) x.clave = "La contraseña temporal debe tener al menos 6 caracteres.";
+    if (modal?.p && f.clave && f.clave.length < 6) x.clave = "Mínimo 6 caracteres (o déjala vacía para no cambiarla).";
     if (modal?.p?.rol === "gerente" && (f.rol !== "gerente" || !f.activo) && equipo.filter((p) => p.rol === "gerente" && p.activo).length === 1) x.rol = "Debe quedar al menos un gerente activo.";
     setErr(x); return Object.keys(x).length === 0;
   }
   function guardar(e) {
     e.preventDefault();
     if (!validar()) return;
-    const datos = { nombre: f.nombre.trim(), usuario: f.usuario || f.correo.trim().toLowerCase().split("@")[0], correo: f.correo.trim().toLowerCase(), celular: f.celular, rol: f.rol, cargo: CARGOS[f.rol].includes(f.cargo) ? f.cargo : CARGOS[f.rol][0], sede: f.rol === "vendedor" ? f.sede : f.sede || "Todas", recibeLeads: f.rol === "vendedor" ? f.recibeLeads : false, activo: f.activo };
+    const datos = { nombre: f.nombre.trim(), correo: f.correo.trim().toLowerCase(), celular: f.celular, rol: f.rol, sede: f.rol === "vendedor" ? f.sede : f.sede || "Todas", recibeLeads: f.rol === "vendedor" ? f.recibeLeads : false, activo: f.activo };
     if (modal.p) {
-      if (modal.p.nombre !== datos.nombre) {
-        // El nombre identifica al responsable en leads, seguimiento y ventas: se actualiza en todos
-        leads.filter((l) => l.responsable === modal.p.nombre).forEach((l) => actualizar("leads", l.id, { responsable: datos.nombre }));
-        seguimientos.filter((x) => x.responsable === modal.p.nombre).forEach((x) => actualizar("seguimientos", x.id, { responsable: datos.nombre }));
-        ventas.filter((v) => v.vendedor === modal.p.nombre).forEach((v) => actualizar("ventas", v.id, { vendedor: datos.nombre }));
-      }
-      actualizar("equipo", modal.p.id, { ...datos, ...(f.clave ? { claveHash: resumenClave(datos.correo, f.clave), claveTemporal: true } : {}) }, `Usuario actualizado: ${datos.nombre}`);
-      toast(f.clave ? "Usuario actualizado. Deberá crear su contraseña al ingresar." : "Usuario actualizado");
+      if (modal.p.nombre !== datos.nombre) leads.filter((l) => l.responsable === modal.p.nombre).forEach((l) => actualizar("leads", l.id, { responsable: datos.nombre }));
+      actualizar("equipo", modal.p.id, { ...datos, ...(f.clave ? { clave: f.clave } : {}) }, `Usuario actualizado: ${datos.nombre}`);
+      toast("Usuario actualizado");
     } else {
-      agregar("equipo", { ...datos, claveHash: resumenClave(datos.correo, f.clave), claveTemporal: true, ausente: false }, `Usuario creado: ${datos.nombre} (${datos.cargo})`);
+      agregar("equipo", { ...datos, usuario: datos.correo, clave: f.clave, ausente: false }, `Usuario creado: ${datos.nombre} (${ROLES[datos.rol].nombre})`);
       toast(`${datos.nombre} ya puede ingresar con su correo y la contraseña temporal`);
     }
     setModal(null);
@@ -92,18 +75,17 @@ export default function Equipo() {
 
       <div>
         <div className="min-w-0">
-          <Tabla columnas={["Usuario", "Rol", "Sede y turnos", "Acceso", ...(gestiona ? ["Acciones"] : [])]}>
+          <Tabla columnas={["Usuario", "Rol", "Sede", "Leads abiertos", "Turnos", "Acceso", ...(gestiona ? ["Acciones"] : [])]}>
             {equipo.map((p) => (
               <tr key={p.id}>
-                <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-marino-50 font-bold text-marino dark:bg-white/10 dark:text-white">{p.nombre[0]}</span><div className="min-w-0"><p className="whitespace-nowrap font-semibold text-marino dark:text-white">{p.nombre}</p><p className="whitespace-nowrap text-[12px] text-slate-500 dark:text-white/50"><span data-usuario>{p.usuario || "—"}</span> · <span data-correo>{p.correo}</span>{p.celular && ` · ${p.celular}`}</p></div></div></td>
-                <td className="px-4 py-3"><span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-semibold ${TONO_ROL[p.rol]}`}>{cargoDe(p)}</span></td>
-                <td className="px-4 py-3"><p className="whitespace-nowrap">{p.sede}</p>{p.rol === "vendedor" && <p className="whitespace-nowrap text-[12px] text-slate-500 dark:text-white/50">{p.recibeLeads === false ? "No recibe leads" : p.ausente ? <span className="text-amber-600">Ausente</span> : "Recibe leads"} · {abiertos(p)} abiertos</p>}</td>
-                <td className="px-4 py-3"><div className="flex flex-col items-start gap-1.5">
-                  <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-semibold ${!p.activo ? "bg-slate-200 text-slate-600" : "bg-emerald-100 text-emerald-700"}`}>{p.activo ? "Activo" : "Sin acceso"}</span>
-                  <span className="flex items-center gap-1.5 whitespace-nowrap text-[11.5px] text-slate-500 dark:text-white/50">Contraseña {p.claveTemporal ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11.5px] font-semibold text-amber-800">Temporal</span> : <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11.5px] font-semibold text-emerald-700">Personal</span>}</span>
-                </div></td>
+                <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-marino-50 font-bold text-marino dark:bg-white/10 dark:text-white">{p.nombre[0]}</span><div className="min-w-0"><p className="font-semibold text-marino dark:text-white">{p.nombre}</p><p className="truncate text-[12px] text-slate-400">{p.correo}{p.celular && ` · ${p.celular}`}</p></div></div></td>
+                <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${TONO_ROL[p.rol]}`}>{ROLES[p.rol]?.nombre}</span></td>
+                <td className="px-4 py-3">{p.sede}</td>
+                <td className="px-4 py-3 tabular-nums">{abiertos(p)}</td>
+                <td className="px-4 py-3">{p.rol !== "vendedor" ? <span className="text-slate-400">—</span> : p.recibeLeads === false ? "No recibe" : p.ausente ? <span className="text-amber-600">Ausente</span> : "Recibe leads"}</td>
+                <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${!p.activo ? "bg-slate-200 text-slate-600" : "bg-emerald-100 text-emerald-700"}`}>{p.activo ? "Activo" : "Sin acceso"}</span></td>
                 {gestiona && (
-                  <td className="min-w-[250px] px-4 py-3"><div className="flex flex-wrap gap-1.5 [&>button]:whitespace-nowrap">
+                  <td className="px-4 py-3"><div className="flex flex-wrap gap-1.5 xl:flex-nowrap">
                     <button className={btnMini} onClick={() => abrir(p)}>Editar</button>
                     {p.rol === "vendedor" && p.activo && <button className={btnMini} onClick={() => { actualizar("equipo", p.id, { ausente: !p.ausente }, `${p.nombre} ${p.ausente ? "volvió a turnos" : "marcado ausente"}`); toast(p.ausente ? "Vuelve a recibir leads" : "No recibirá leads nuevos mientras esté ausente"); }}>{p.ausente ? "Quitar ausencia" : "Marcar ausente"}</button>}
                     <button className={btnMini} onClick={() => alternarAcceso(p)}>{p.activo ? "Quitar acceso" : "Dar acceso"}</button>
@@ -114,23 +96,7 @@ export default function Equipo() {
             ))}
           </Tabla>
         </div>
-        {MODO_REAL && (
-          <Card className="mt-6">
-            <h2 className="font-bold text-marino dark:text-white">Cuentas en Supabase</h2>
-            <p className="mb-3 text-[12.5px] text-slate-500">Tabla «usuario» del backend: es la que define el rol al iniciar sesión. Las contraseñas las guarda Supabase Auth (cifradas).</p>
-            {errCuentas ? <Aviso tipo="aviso">{errCuentas}</Aviso> : !cuentas ? <p className="text-[13.5px] text-slate-400">Cargando…</p> : cuentas.length === 0 ? <p className="text-[13.5px] text-slate-400">Supabase no devolvió cuentas: la tabla «usuario» está vacía o no permite leerla desde el panel (RLS). El login funciona igual.</p> : (
-              <ul className="divide-y divide-slate-100 text-[13.5px] dark:divide-white/10">
-                {cuentas.map((c) => (
-                  <li key={c.codusu} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                    <span><b className="text-marino dark:text-white">{[c.nomusu, c.apepatusu, c.apematusu].filter(Boolean).join(" ")}</b> <span className="text-slate-500">· {c.corusu}</span></span>
-                    <span className="flex gap-2"><span className="rounded-full bg-marino-50 px-2.5 py-0.5 text-[12px] font-semibold text-marino dark:bg-white/10 dark:text-white">{c.rol?.nomrol || "—"}</span><span className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${c.estusu ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{c.estusu ? "Activa" : "Inactiva"}</span></span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        )}
-        <div className="mt-6 grid gap-6">
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <Card>
             <h2 className="font-bold text-marino dark:text-white">Orden de turnos</h2>
             <p className="mb-3 text-[12.5px] text-slate-500">Cada lead nuevo de la web va al vendedor de la sede con menos leads abiertos, saltando ausentes.</p>
@@ -138,29 +104,45 @@ export default function Equipo() {
               <ol className="space-y-2">{[...turnos].sort((a, b) => abiertos(a) - abiertos(b)).map((p, i) => <li key={p.id} className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 text-[14px] dark:bg-white/5"><span className="grid h-6 w-6 place-items-center rounded-full bg-marino text-[12px] font-bold text-white">{i + 1}</span>{p.nombre}<span className="ml-auto text-[12px] text-slate-400">{p.sede} · {abiertos(p)} abiertos</span></li>)}</ol>
             )}
           </Card>
+          <Card>
+            <h2 className="mb-3 font-bold text-marino dark:text-white">Qué puede hacer cada rol</h2>
+            <ul className="space-y-3 text-[13.5px]">{Object.entries(ROLES).map(([k, r]) => <li key={k}><span className={`rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${TONO_ROL[k]}`}>{r.nombre}</span><span className="mt-1 block text-slate-500">{r.descripcion}</span></li>)}</ul>
+          </Card>
         </div>
       </div>
 
+      <section className="mt-10">
+        <h2 className="text-lg font-bold text-marino dark:text-white">Equipo del proyecto</h2>
+        <p className="mt-1 text-[13.5px] text-slate-500">Proyecto Tecnológico · Grupo 7 · ISIL 2026-2. Frontend: Didier · Backend: Michelle.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {EQUIPO_PROYECTO.map((m) => (
+            <div key={m.nombre} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#101c33]">
+              <p className="text-[12px] font-semibold text-acento">{m.rol}</p>
+              <p className="mt-1 font-semibold leading-snug text-marino dark:text-white">{m.nombre}</p>
+              <p className="mt-1 text-[12.5px] text-slate-500">{m.detalle}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.p ? `Editar a ${modal.p.nombre}` : "Agregar usuario"} ancho="max-w-xl"
-        confirmarGuardar={modal?.p ? { titulo: "¿Guardar los cambios?", texto: `Se actualizarán los datos y el acceso de ${f.nombre || "este usuario"}.`, boton: "Guardar cambios", validar } : { titulo: "¿Crear este usuario?", texto: `${f.nombre || "La persona"} podrá ingresar como ${CARGOS[f.rol].includes(f.cargo) ? f.cargo : ROLES[f.rol]?.nombre} con su correo y la contraseña temporal.`, boton: "Crear usuario", validar }}
+        confirmarGuardar={modal?.p ? { titulo: "¿Guardar los cambios?", texto: `Se actualizarán los datos y el acceso de ${f.nombre || "este usuario"}.`, boton: "Guardar cambios", validar } : { titulo: "¿Crear este usuario?", texto: `${f.nombre || "La persona"} podrá ingresar como ${ROLES[f.rol]?.nombre} con su correo y la contraseña temporal.`, boton: "Crear usuario", validar }}
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-eq" className="btn btn-primary !py-2">{modal?.p ? "Guardar" : "Crear usuario"}</button></>}>
         <form id="f-eq" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
-          <Campo etiqueta="Nombre completo" error={err.nombre} className="sm:col-span-2"><input id="eq-nombre" className="field-input" value={f.nombre} maxLength={80} onChange={(e) => setF({ ...f, nombre: soloLetras(e.target.value) })} /></Campo>
+          <Campo etiqueta="Nombre completo" error={err.nombre} className="sm:col-span-2"><input id="eq-nombre" className="field-input" value={f.nombre} onChange={set("nombre")} /></Campo>
           <Campo etiqueta="Correo (para ingresar)" error={err.correo}><input id="eq-correo" type="email" className="field-input" value={f.correo} onChange={set("correo")} placeholder="nombre@epsamotor.com.pe" /></Campo>
-          <Campo etiqueta="Celular (opcional)" error={err.celular}><input id="eq-celular" inputMode="numeric" maxLength={9} className="field-input" value={f.celular || ""} placeholder="9XXXXXXXX" onChange={(e) => setF({ ...f, celular: soloDigitos(e.target.value, 9) })} /></Campo>
-          <Campo etiqueta="Usuario (opcional)" error={err.usuario} ayuda="También sirve para ingresar. Si lo dejas vacío se usa el inicio del correo."><input id="eq-usuario" className="field-input" maxLength={30} value={f.usuario || ""} onChange={(e) => setF({ ...f, usuario: e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, "") })} placeholder="nombre" /></Campo>
-          <Campo etiqueta="Rol" error={err.rol}><select id="eq-rol" className="field-input" value={f.rol} onChange={(e) => setF({ ...f, rol: e.target.value, cargo: CARGOS[e.target.value][0] })}>{Object.entries(ROLES).map(([k, r]) => <option key={k} value={k}>{r.nombre}</option>)}</select></Campo>
-          {CARGOS[f.rol].length > 1 && <Campo etiqueta="Cómo se muestra el cargo"><select id="eq-cargo" className="field-input" value={CARGOS[f.rol].includes(f.cargo) ? f.cargo : CARGOS[f.rol][0]} onChange={set("cargo")}>{CARGOS[f.rol].map((c) => <option key={c}>{c}</option>)}</select></Campo>}
+          <Campo etiqueta="Celular (opcional)" error={err.celular}><input id="eq-celular" inputMode="numeric" maxLength={9} className="field-input" value={f.celular || ""} onChange={(e) => setF({ ...f, celular: e.target.value.replace(/\D/g, "") })} /></Campo>
+          <Campo etiqueta="Rol" error={err.rol}><select id="eq-rol" className="field-input" value={f.rol} onChange={set("rol")}>{Object.entries(ROLES).map(([k, r]) => <option key={k} value={k}>{r.nombre}</option>)}</select></Campo>
           <Campo etiqueta="Sede"><select id="eq-sede" className="field-input" value={f.sede} onChange={set("sede")}><option>Todas</option>{SEDES_ATENCION.map((s) => <option key={s}>{s}</option>)}</select></Campo>
-          <Campo etiqueta={modal?.p ? "Nueva contraseña temporal (opcional)" : "Contraseña temporal"} error={err.clave} ayuda={`Mínimo ${MIN_CLAVE} caracteres. Al ingresar, la persona crea su propia contraseña.`}>
+          <Campo etiqueta={modal?.p ? "Nueva contraseña (opcional)" : "Contraseña temporal"} error={err.clave} ayuda="Mínimo 6 caracteres. La persona la cambia al ingresar.">
             <input id="eq-clave" type="text" autoComplete="off" className="field-input" value={f.clave} onChange={set("clave")} />
           </Campo>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13.5px] sm:col-span-2">
+          <div className="flex flex-col justify-end gap-2 pb-1 text-[13.5px]">
             {f.rol === "vendedor" && <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-[#0e2c52]" checked={f.recibeLeads} onChange={set("recibeLeads")} />Recibe leads de la web (turnos)</label>}
             <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-[#0e2c52]" checked={f.activo} onChange={set("activo")} />Acceso activo</label>
           </div>
-          {MODO_REAL && <div className="sm:col-span-2"><Aviso tipo="aviso">Con Supabase conectado, la cuenta y su contraseña se crean en Supabase (Authentication) y su rol en la tabla «usuario». Sigue los pasos de docs/supabase-usuarios-equipo.sql.</Aviso></div>}
+          <div className="sm:col-span-2"><Aviso>{ROLES[f.rol]?.descripcion}</Aviso></div>
+          {MODO_REAL && <div className="sm:col-span-2"><Aviso tipo="aviso">Con el backend conectado, la cuenta se crea en Supabase Auth mediante un servicio del backend (pendiente: POST /api/usuarios). Aquí se definen el rol y la sede.</Aviso></div>}
         </form>
       </Modal>
     </div>

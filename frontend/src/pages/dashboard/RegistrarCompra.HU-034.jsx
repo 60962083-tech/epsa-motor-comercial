@@ -7,34 +7,24 @@ import * as api from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
 import { Aviso, Campo, Card, PageHeader, useConfirm, useToast } from "../../components/ui";
 import ModeloImg from "../../components/ModeloImg";
+import HUBadge from "../../components/HUBadge";
 import { ESTADO_COMPRA } from "./Compras.HU-034";
-import { COLOR_HEX } from "../../data/mockData";
-import { soloDigitos } from "../../lib/validar";
-import { emparejarModelos } from "../../lib/modelos";
-
-const PALETA = Object.keys(COLOR_HEX);
 
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => { const r = (Math.random() * 16) | 0; return (c === "x" ? r : (r & 3) | 8).toString(16); }));
+const limpiarColor = (t) => t.trim().replace(/\s+/g, " ");
+const COLORES = ["Rojo", "Blanco", "Azul"];
 
 /**
- * Registrar compra pendiente de factura (POST /api/compras).
- * El color solo puede ser uno de los colores que tiene el modelo.
+ * Registrar compra pendiente de factura — HU-034 (frontend del POST /api/compras de Michelle).
  * Se envían solo modelo, color y cantidad. Autor, fecha, hora y estado los asigna el backend.
  * Cada intención de compra lleva un UUID (Idempotency-Key) que se reutiliza si hay que reintentar.
  */
 export default function RegistrarCompra() {
-  const { compras: locales, modelos: modelosLocales, apiModelos, agregar } = useApp();
-  // Con backend, los modelos (y su codmod) salen SOLO de GET /api/modelos: los códigos locales no son los de Supabase.
-  // Los colores salen del catálogo de la web; si el modelo no tiene ficha en la web, se ofrecen todos los colores.
-  const par = MODO_REAL ? emparejarModelos(apiModelos || [], modelosLocales) : null;
-  const localDe = (a) => { for (const [id, x] of par.porLocal) if (x === a) return modelosLocales.find((m) => m.id === id); return null; };
-  const modelos = par
-    ? (apiModelos || []).map((a) => { const l = localDe(a); return { ...(l || {}), id: l?.id || `api-${a.codmod}`, codmod: String(a.codmod), nombre: a.nommod, colores: l?.colores?.length ? l.colores : PALETA, sinFicha: !l, imagenApi: a.imagenes?.[0]?.urlimo }; })
-    : modelosLocales;
+  const { compras: locales, modelos, agregar } = useApp();
   const { puede, user } = useAuth();
   const toast = useToast(); const confirmar = useConfirm(); const navigate = useNavigate();
   const [pendientes, setPendientes] = useState(MODO_REAL ? [] : locales.filter((c) => c.estcom !== "Identificada"));
-  const [f, setF] = useState({ codmod: modelos[0]?.codmod || "", colcom: modelos[0]?.colores?.length === 1 ? modelos[0].colores[0] : "", cancom: 1 });
+  const [f, setF] = useState({ codmod: modelos[0]?.codmod || "", colcom: "", cancom: 1 });
   const [err, setErr] = useState({});
   const [reviso, setReviso] = useState(false);
   const [enviando, setEnviando] = useState(false); const [reintento, setReintento] = useState(false);
@@ -45,17 +35,8 @@ export default function RegistrarCompra() {
     api.listarCompras(100, 0).then((r) => setPendientes(r.data || [])).catch((e) => toast(mensajeError(e), "error"));
   }, []); // eslint-disable-line
 
-  // Los modelos de Supabase llegan después del primer dibujo: si el elegido ya no está en la lista, se toma el primero
-  const codigos = modelos.map((m) => m.codmod).join("|");
-  useEffect(() => {
-    if (reintento || !modelos.length || modelos.some((m) => m.codmod === f.codmod)) return;
-    const m = modelos[0];
-    setF((x) => ({ ...x, codmod: m.codmod, colcom: m.colores?.length === 1 ? m.colores[0] : "" }));
-  }, [codigos]); // eslint-disable-line
-
   const modelo = modelos.find((m) => m.codmod === f.codmod);
-  const coloresModelo = modelo?.colores?.length ? modelo.colores : PALETA;
-  const color = coloresModelo.includes(f.colcom) ? f.colcom : "";
+  const color = limpiarColor(f.colcom);
   const similares = useMemo(() => pendientes.filter((c) => c.codmod === String(f.codmod) && c.colcom.toLowerCase() === color.toLowerCase()), [pendientes, f.codmod, color]);
 
   if (!puede("compras.registrar")) {
@@ -64,10 +45,10 @@ export default function RegistrarCompra() {
 
   function validar() {
     const x = {};
-    if (!modelo) x.codmod = MODO_REAL && !modelos.length ? "Todavía no hay modelos publicados en Supabase." : "Elige el modelo comprado.";
-    if (!color) x.colcom = "Elige uno de los colores del modelo.";
+    if (!f.codmod) x.codmod = "Elige el modelo comprado.";
+    if (!color) x.colcom = "El color es obligatorio."; else if (color.length > 50) x.colcom = "Máximo 50 caracteres.";
     const n = Number(f.cancom);
-    if (!Number.isInteger(n) || n < 1 || n > 9999) x.cancom = "La cantidad debe ser un número entero entre 1 y 9999.";
+    if (!Number.isInteger(n) || n < 1 || n > 2147483647) x.cancom = "La cantidad debe ser un número entero mayor a 0.";
     if (!reviso) x.reviso = "Confirma que revisaste las compras pendientes.";
     setErr(x); return Object.keys(x).length === 0;
   }
@@ -93,17 +74,18 @@ export default function RegistrarCompra() {
     setEnviando(true);
     try {
       const r = MODO_REAL ? await api.crearCompra(cuerpo, clave.current) : registrarLocal(cuerpo);
-      toast(r.status === 200 ? "Esa compra ya estaba registrada (mismo reintento): se muestra la misma." : "Compra registrada. Siguiente paso: registrar la factura y adjuntar el PDF.");
+      toast(r.status === 200 ? "Esa compra ya estaba registrada (mismo reintento): se muestra la misma." : "Compra registrada. Siguiente paso: registrar la factura (HU-002).");
       navigate(`/admin/compras/${r.data?.codcom}`);
     } catch (er) {
       if (er.status === 0 || er.status >= 500) { setReintento(true); toast("No hubo respuesta clara del servidor. Presiona «Reintentar»: se usa la misma clave y no se duplica.", "error"); }
-      else { clave.current = uuid(); setReintento(false); setErr({ general: mensajeError(er) }); toast(mensajeError(er), "error"); } // respuesta definitiva: la próxima vez es otra intención
+      else { setErr({ general: mensajeError(er) }); toast(mensajeError(er), "error"); }
     } finally { setEnviando(false); }
   }
 
   return (
     <div>
-      <PageHeader titulo="Registrar compra pendiente de factura" subtitulo="Después de cotizar y pagar a Crosland, registra qué modelo, color y cuántas motos se compraron. La factura y las series se completan después.">
+      <HUBadge code="HU-034" titulo="Registrar compra pendiente de factura" />
+      <PageHeader titulo="Registrar compra pendiente de factura" subtitulo="Después de cotizar y pagar a Crosland, registra qué modelo, color y cuántas motos se compraron. La factura y las series se completan después (HU-002).">
         <Link to="/admin/compras" className="btn btn-secondary !py-2.5">← Compras</Link>
       </PageHeader>
 
@@ -114,30 +96,27 @@ export default function RegistrarCompra() {
             <Campo etiqueta="Modelo comprado" error={err.codmod}>
               <div className="flex items-center gap-4">
                 <div className="grid h-20 w-28 shrink-0 place-items-center overflow-hidden rounded-xl bg-escenario dark:bg-escenario-oscuro">{modelo && <ModeloImg modelo={modelo} className="h-full w-full object-contain p-1" />}</div>
-                <select id="compra-modelo" disabled={reintento || !modelos.length} className="field-input" value={modelo ? f.codmod : ""} onChange={(e) => { const m = modelos.find((x) => x.codmod === e.target.value); setF({ ...f, codmod: e.target.value, colcom: m?.colores?.length === 1 ? m.colores[0] : "" }); }}>
-                  {!modelos.length && <option value="">{apiModelos === null ? "Cargando modelos de Supabase…" : "Sin modelos publicados"}</option>}
-                  {modelos.map((m) => <option key={m.codmod} value={m.codmod}>{m.nombre}</option>)}
-                </select>
+                <select id="compra-modelo" className="field-input" value={f.codmod} onChange={(e) => setF({ ...f, codmod: e.target.value })}>{modelos.map((m) => <option key={m.codmod} value={m.codmod}>{m.nombre}</option>)}</select>
               </div>
-              {MODO_REAL && apiModelos === null && <p className="mt-2 text-[12.5px] text-slate-500">Si la lista no carga, revisa que la API esté encendida.</p>}
             </Campo>
-            <Campo etiqueta="Color" error={err.colcom} ayuda={!modelo ? "" : modelo.sinFicha ? `${modelo.nombre} aún no tiene ficha en la web: elige el color que figura en la compra.` : coloresModelo.length === 1 ? `El ${modelo.nombre} solo viene en ${coloresModelo[0]}.` : `Colores disponibles del ${modelo.nombre}.`}>
-              <div id="compra-color" role="radiogroup" aria-label="Color" className="flex flex-wrap gap-2">
-                {coloresModelo.map((c) => (
-                  <button type="button" disabled={reintento} role="radio" aria-checked={color === c} data-color={c} key={c} onClick={() => setF({ ...f, colcom: c })} className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[13.5px] font-medium ${color === c ? "border-marino-700 bg-marino-700 text-white" : "border-slate-300 hover:bg-slate-50 dark:border-white/15 dark:hover:bg-white/5"}`}><span className="h-3.5 w-3.5 rounded-full ring-1 ring-black/15" style={{ background: COLOR_HEX[c] }} />{c}</button>
+            <Campo etiqueta="Color" error={err.colcom} ayuda="Escribe el color tal como figura en la cotización de Crosland.">
+              <div className="flex flex-wrap gap-2">
+                {(modelo?.colores?.length ? modelo.colores : COLORES).map((c) => (
+                  <button type="button" key={c} onClick={() => setF({ ...f, colcom: c })} className={`rounded-full border px-3.5 py-1.5 text-[13.5px] font-medium ${color.toLowerCase() === c.toLowerCase() ? "border-marino-700 bg-marino-700 text-white" : "border-slate-300 hover:bg-slate-50 dark:border-white/15 dark:hover:bg-white/5"}`}>{c}</button>
                 ))}
+                <input id="compra-color" className="field-input !w-44" value={f.colcom} maxLength={60} onChange={(e) => setF({ ...f, colcom: e.target.value })} placeholder="Otro color" />
               </div>
             </Campo>
             <Campo etiqueta="Cantidad de motos" error={err.cancom}>
               <div className="flex items-center gap-2">
-                <button type="button" disabled={reintento} aria-label="Restar una" className="grid h-11 w-11 place-items-center rounded-lg border border-slate-300 text-xl dark:border-white/15" onClick={() => setF({ ...f, cancom: Math.max(1, Number(f.cancom) - 1) })}>−</button>
-                <input id="compra-cantidad" disabled={reintento} className="field-input !w-24 text-center text-lg font-bold tabular-nums" inputMode="numeric" value={f.cancom} maxLength={4} onChange={(e) => setF({ ...f, cancom: soloDigitos(e.target.value, 4).replace(/^0+/, "") })} />
-                <button type="button" disabled={reintento} aria-label="Sumar una" className="grid h-11 w-11 place-items-center rounded-lg border border-slate-300 text-xl dark:border-white/15" onClick={() => setF({ ...f, cancom: Math.min(9999, Number(f.cancom || 0) + 1) })}>+</button>
+                <button type="button" aria-label="Restar una" className="grid h-11 w-11 place-items-center rounded-lg border border-slate-300 text-xl dark:border-white/15" onClick={() => setF({ ...f, cancom: Math.max(1, Number(f.cancom) - 1) })}>−</button>
+                <input id="compra-cantidad" className="field-input !w-24 text-center text-lg font-bold tabular-nums" inputMode="numeric" value={f.cancom} onChange={(e) => setF({ ...f, cancom: e.target.value.replace(/\D/g, "") })} />
+                <button type="button" aria-label="Sumar una" className="grid h-11 w-11 place-items-center rounded-lg border border-slate-300 text-xl dark:border-white/15" onClick={() => setF({ ...f, cancom: Number(f.cancom || 0) + 1 })}>+</button>
               </div>
             </Campo>
             {similares.length > 0 && <Aviso tipo="aviso">Ya hay {similares.length} compra(s) pendiente(s) de {modelo?.nombre} en {color} (#{similares.map((c) => c.codcom).join(", #")}). Confirma con la gerencia que no sea la misma antes de registrar otra.</Aviso>}
             {err.general && <Aviso tipo="error">{err.general}</Aviso>}
-            {reintento && <Aviso>Sin respuesta clara del servidor. Los datos quedan bloqueados y se reutilizará la misma clave: si la compra sí se creó, no se duplicará. <button type="button" className="font-semibold underline" onClick={() => { clave.current = uuid(); setReintento(false); }}>Empezar una compra distinta</button></Aviso>}
+            {reintento && <Aviso>Sin respuesta clara del servidor. Se reutilizará la misma clave: si la compra sí se creó, no se duplicará.</Aviso>}
           </div>
         </Card>
 
@@ -168,7 +147,7 @@ export default function RegistrarCompra() {
               <div className="flex justify-between gap-3"><dt className="text-slate-500">Registra</dt><dd className="font-semibold">{user.nombre} (automático)</dd></div>
             </dl>
             <p className="mt-3 break-all text-[11.5px] text-slate-400">Clave de reintento: {clave.current}</p>
-            <button id="compra-registrar" className="btn btn-acento mt-5 w-full !py-3.5 text-[15px] shadow-lg shadow-acento/25" disabled={enviando}>{enviando ? "Registrando…" : reintento ? "Reintentar registro" : "Registrar compra pendiente de factura"}</button>
+            <button className="btn btn-primary mt-5 w-full" disabled={enviando}>{enviando ? "Registrando…" : reintento ? "Reintentar registro" : "Registrar compra"}</button>
           </Card>
         </div>
       </form>

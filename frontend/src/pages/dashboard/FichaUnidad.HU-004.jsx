@@ -4,6 +4,7 @@ import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { ESTADOS_PREPARACION, PROVEEDORES_TECHO, TECHO_REQUIERE_PROVEEDOR, TIPOS_TECHO } from "../../data/mockData";
 import { Aviso, Campo, Card, PageHeader, useConfirm, useToast } from "../../components/ui";
+import HUBadge from "../../components/HUBadge";
 
 const DESCRIPCION_TECHO = {
   "Sin techo": "La unidad no lleva techo instalado.",
@@ -94,7 +95,8 @@ function FichaUnidad({ id }) {
 
   return (
     <div>
-      <PageHeader titulo={`${u.id} · ${m?.nombre || u.nombreModelo || u.modelo}`} subtitulo={`${u.color} · motor ${u.motor} · chasis ${u.chasis}`}>
+      <HUBadge code="HU-004" titulo="Actualizar la configuración del techo" />
+      <PageHeader titulo={`${u.id} · ${m?.nombre || u.modelo}`} subtitulo={`${u.color} · motor ${u.motor} · chasis ${u.chasis}`}>
         <Link to="/admin/inventario" className="btn btn-secondary !py-2.5">← Inventario</Link>
       </PageHeader>
 
@@ -182,7 +184,7 @@ function FichaUnidad({ id }) {
           <Card>
             <h2 className="mb-3 font-bold text-marino dark:text-white">Datos de la unidad</h2>
             <dl className="divide-y divide-slate-100 text-[13.5px] dark:divide-white/10">
-              {[["Modelo", m?.nombre || u.nombreModelo || u.modelo], ["Color", u.color], ["N° de motor", u.motor], ["N° de chasis", u.chasis], ["Ubicación", u.ubicacion || "Sin recepción"], ["Disponibilidad", u.disponibilidad]].map(([k, v]) => (
+              {[["Modelo", m?.nombre || u.modelo], ["Color", u.color], ["N° de motor", u.motor], ["N° de chasis", u.chasis], ["Ubicación", u.ubicacion || "Sin recepción"], ["Disponibilidad", u.disponibilidad]].map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-4 py-2"><dt className="text-slate-500">{k}</dt><dd className="text-right font-semibold text-marino dark:text-white">{v}</dd></div>
               ))}
               <div className="flex justify-between gap-4 py-2"><dt className="text-slate-500">Compra</dt><dd className="text-right font-semibold">{compra ? <Link className="text-marino-700 underline-offset-2 hover:underline dark:text-white" to={`/admin/compras/${compra.codcom}`}>#{compra.codcom} · {compra.estcom}</Link> : "Registro anterior"}</dd></div>

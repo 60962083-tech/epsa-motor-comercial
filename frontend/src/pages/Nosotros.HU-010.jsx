@@ -5,14 +5,16 @@ import { useApp } from "../store/appStore.jsx";
 import { useCotizar } from "../components/CotizarModal";
 import { IconWhatsapp, IconPhone, IconMail, IconPin } from "../components/Icons";
 import { WHATSAPP_NUMERO } from "../lib/config";
+import HUBadge from "../components/HUBadge";
 import { IconShield, IconMapArea, IconCreditCard, IconDocument } from "../components/Icons";
 
-// Fotos de la web de EPSA Motor (el polo del asesor se ajustó al azul marino y al logo de esta web).
+// "imagen" es opcional: cuando EPSA Motor entregue fotos reales, se guardan en public/images/nosotros
+// y se escribe aquí la ruta (por ejemplo "/images/nosotros/socio-1.jpg"); la tarjeta la muestra arriba.
 const SOCIO = [
-  { imagen: "/images/nosotros/socio-respaldo.webp", stat: "+12 años", statNota: "EN EL MERCADO", titulo: "Respaldo comercial", texto: "Experiencia acompañando la compra y el financiamiento de tu herramienta de trabajo.", Icono: IconShield },
-  { imagen: "/images/nosotros/socio-presencia.webp", stat: "20555595469", statNota: "RUC EPSA MOTOR", titulo: "Presencia local", texto: "INVERSIONES EPSA MOTOR S.A.C., empresa formal y distribuidor autorizado de Torito Bajaj.", Icono: IconMapArea },
-  { imagen: "/images/nosotros/socio-credito.webp", stat: "A tu medida", statNota: "CUOTAS FLEXIBLES", titulo: "Crédito directo flexible", texto: "Evaluamos tu historial crediticio con tu DNI y un recibo de servicios. Diseñamos cuotas a tu medida para facilitar el pago progresivo.", Icono: IconCreditCard },
-  { imagen: "/images/nosotros/socio-placa.webp", stat: "Gratis", statNota: "PLACA Y TARJETA", titulo: "Placa y tarjeta de propiedad", texto: "Gestionamos ante Sunarp el registro de placa y la tarjeta de propiedad, de manera gratuita y veloz, con la compra de tu mototaxi nuevo.", Icono: IconDocument },
+  { imagen: null, stat: "+12 años", statNota: "EN EL MERCADO", titulo: "Respaldo comercial", texto: "Experiencia acompañando la compra y el financiamiento de tu herramienta de trabajo.", Icono: IconShield },
+  { imagen: null, stat: "3 sedes", statNota: "LIMA Y CALLAO", titulo: "Presencia local", texto: "INVERSIONES EPSA MOTOR S.A.C., empresa formal y distribuidor autorizado de Torito Bajaj.", Icono: IconMapArea },
+  { imagen: null, stat: "A tu medida", statNota: "CON UN ASESOR", titulo: "Crédito Directo Flexible", texto: "Opciones de financiamiento que se coordinan directamente con un asesor.", Icono: IconCreditCard },
+  { imagen: null, stat: "Trámite", statNota: "ACOMPAÑADO", titulo: "Placa y Tarjeta de Propiedad", texto: "Acompañamiento en el trámite de documentos de la unidad.", Icono: IconDocument },
 ];
 
 /**
@@ -30,6 +32,7 @@ export default function Nosotros() {
   const cotizar = useCotizar();
   return (
     <div className="fade-in">
+      <HUBadge code="HU-010" titulo="Información de EPSA Motor y sus sedes" />
 
       {/* Hero con el estilo de la web principal de EPSA Motor */}
       <section className="relative overflow-hidden bg-marino text-white">
@@ -95,22 +98,16 @@ export default function Nosotros() {
         <div className="wrap">
           <p className="text-[12.5px] font-semibold uppercase tracking-[0.16em] text-white/50">Por qué EPSA Motor</p>
           <h2 className="mt-2 font-display text-[2.4rem] font-bold uppercase leading-none tracking-tight sm:text-[3rem]">Tu socio en movilidad de trabajo</h2>
-          <p className="mt-3 max-w-2xl text-[15px] text-white/65">Confianza que se demuestra: más de una década acompañando a quienes trabajan con su Torito.</p>
-          <div className="mt-10 grid gap-5 md:grid-cols-2">
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {SOCIO.map(({ imagen, stat, statNota, titulo, texto, Icono }) => (
-              <article key={titulo} className="group flex flex-col overflow-hidden rounded-2xl bg-white text-marino shadow-xl shadow-black/20 ring-1 ring-white/10 dark:bg-[#101c33] dark:text-white">
-                <div className="relative overflow-hidden">
-                  <img src={imagen} alt={titulo} loading="lazy" className="aspect-[16/9] w-full object-cover transition duration-700 group-hover:scale-[1.04]" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-marino/90 via-marino/10 to-transparent" />
-                  <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-marino/80 text-white ring-1 ring-white/20 backdrop-blur"><Icono className="h-[18px] w-[18px]" /></span>
-                  <p className="absolute bottom-3 left-4 flex flex-wrap items-baseline gap-x-2 text-white">
-                    <span className="font-display text-[2rem] font-bold leading-none sm:text-[2.3rem]">{stat}</span>
-                    <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/80">{statNota}</span>
-                  </p>
-                </div>
-                <div className="flex flex-1 flex-col p-5 sm:p-6">
-                  <h3 className="text-[15px] font-bold uppercase tracking-[0.06em]">{titulo}</h3>
-                  <p className="mt-1.5 text-[14px] leading-relaxed text-slate-600 dark:text-white/65">{texto}</p>
+              <article key={titulo} className="flex flex-col overflow-hidden rounded-2xl bg-white/[0.04] ring-1 ring-white/10">
+                {imagen && <img src={imagen} alt={titulo} className="aspect-[16/10] w-full object-cover" />}
+                <div className="flex flex-1 flex-col p-6">
+                  <span className="grid h-11 w-11 place-items-center rounded-xl bg-white/10"><Icono className="h-[22px] w-[22px]" /></span>
+                  <p className="mt-7 font-display text-[2.3rem] font-bold leading-none">{stat}</p>
+                  <p className="mt-1.5 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-white/50">{statNota}</p>
+                  <h3 className="mt-6 text-[16px] font-semibold">{titulo}</h3>
+                  <p className="mt-1.5 text-[14px] leading-relaxed text-white/65">{texto}</p>
                 </div>
               </article>
             ))}
