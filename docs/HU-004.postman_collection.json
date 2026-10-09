@@ -1,0 +1,83 @@
+{
+  "info": {
+    "name": "EPSA HU-004 Configuración de techo",
+    "description": "Consultas autenticadas de catálogos y configuración y actualización de techo. La actualización representa una selección, no instalación física.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "api_url", "value": "http://localhost:3000" },
+    { "key": "access_token", "value": "" },
+    { "key": "coduni", "value": "" },
+    { "key": "codtte_sin_techo", "value": "" },
+    { "key": "codtte_deportiva", "value": "" },
+    { "key": "codpro_fivesa", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Listar tipos de techo activos",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{api_url}}/api/unidades/catalogos/tipos-techo"
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+          "const data = pm.response.json().data || [];",
+          "const tipo = data.find(item => item.nomtte === 'Techo de fibra deportiva');",
+          "if (tipo) pm.collectionVariables.set('codtte_deportiva', tipo.codtte);",
+          "const sinTecho = data.find(item => item.nomtte === 'Sin techo');",
+          "if (sinTecho) pm.collectionVariables.set('codtte_sin_techo', sinTecho.codtte);"
+        ] }
+      }]
+    },
+    {
+      "name": "Listar proveedores de techo activos",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{api_url}}/api/unidades/catalogos/proveedores-techo"
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+          "const data = pm.response.json().data || [];",
+          "const proveedor = data.find(item => item.nompro === 'FIVESA');",
+          "if (proveedor) pm.collectionVariables.set('codpro_fivesa', proveedor.codpro);"
+        ] }
+      }]
+    },
+    {
+      "name": "Consultar configuración de techo",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{api_url}}/api/unidades/{{coduni}}/techo"
+      }
+    },
+    {
+      "name": "Actualizar a Sin techo",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"codtte\": \"{{codtte_sin_techo}}\",\n  \"codpro\": null,\n  \"detalle\": null\n}" },
+        "url": "{{api_url}}/api/unidades/{{coduni}}/techo"
+      }
+    },
+    {
+      "name": "Actualizar a fibra deportiva con FIVESA",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"codtte\": \"{{codtte_deportiva}}\",\n  \"codpro\": \"{{codpro_fivesa}}\",\n  \"detalle\": \"Cámara de retroceso\"\n}" },
+        "url": "{{api_url}}/api/unidades/{{coduni}}/techo"
+      }
+    }
+  ]
+}

@@ -21,7 +21,10 @@ async function authFetch(grant, cuerpo) {
     });
   } catch { throw new ApiError(0, "Sin conexión con Supabase"); }
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new ApiError(r.status === 400 ? 401 : r.status, j.error_description || j.msg || "Credenciales inválidas");
+  if (!r.ok) {
+    if (r.status === 400 || r.status === 401) throw new ApiError(401, grant === "password" ? "Correo o contraseña incorrectos." : "Tu sesión venció. Vuelve a iniciar sesión.");
+    throw new ApiError(r.status, j.error_description || j.msg || "No se pudo iniciar sesión.");
+  }
   return j;
 }
 
@@ -38,7 +41,40 @@ export async function iniciarSesion(correo, clave) {
   const d = await r.json().catch(() => null);
   const u = Array.isArray(d) ? d[0] : d;
   if (!r.ok || !u?.rol) { guardarSesion(null); throw new ApiError(403, "Tu usuario no tiene un rol activo en EPSA Motor."); }
-  return { nombre: correo.split("@")[0], rol: String(u.rol).toLowerCase(), codusu: u.codusu };
+  // Nombre y contraseña temporal: salen de Supabase Auth (user_metadata.nombre / clave_temporal)
+  const meta = j.user?.user_metadata || {};
+  // Sin nombre en Supabase: se arma con el correo (gerente.demo@… → «Gerente Demo»)
+  const local = correo.split("@")[0];
+  const nombre = meta.nombre || (/^\d+$/.test(local) ? local : local.replace(/[._-]+/g, " ").replace(/(^|\s)(\p{L})/gu, (_, e, l) => e + l.toUpperCase()));
+  return { nombre, rol: String(u.rol).toLowerCase(), codusu: u.codusu, claveTemporal: meta.clave_temporal === true };
+}
+
+/** Equipo registrado en Supabase (tabla usuario del backend, con su rol). Solo lectura. */
+export async function listarUsuariosSupabase() {
+  let r;
+  try {
+    r = await fetch(`${SUPABASE_URL}/rest/v1/usuario?select=codusu,nomusu,apepatusu,apematusu,corusu,estusu,rol(nomrol)&order=codusu`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${leerSesion()?.access_token || ""}` },
+    });
+  } catch { throw new ApiError(0, "Sin conexión con Supabase"); }
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !Array.isArray(j)) throw new ApiError(r.status, j?.message || "No se pudo leer la tabla de usuarios.");
+  return j;
+}
+
+/** Cambia la contraseña del usuario conectado en Supabase Auth y marca que ya no es temporal. */
+export async function cambiarClaveApi(nueva) {
+  let r;
+  try {
+    r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${leerSesion()?.access_token || ""}` },
+      body: JSON.stringify({ password: nueva, data: { clave_temporal: false } }),
+    });
+  } catch { throw new ApiError(0, "Sin conexión con Supabase"); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new ApiError(r.status, j.msg || j.error_description || "No se pudo cambiar la contraseña.");
+  return true;
 }
 
 async function refrescar() {

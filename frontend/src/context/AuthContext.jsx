@@ -12,12 +12,12 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    // Las sesiones guardadas por versiones anteriores del panel se descartan (v: 3)
-    try { const s = JSON.parse(sessionStorage.getItem("epsa-user") || "null"); return s?.v === 3 ? s : null; } catch { return null; }
+    // Las sesiones guardadas por versiones anteriores del panel se descartan (v: 4)
+    try { const s = JSON.parse(sessionStorage.getItem("epsa-user") || "null"); return s?.v === 4 ? s : null; } catch { return null; }
   });
 
   function login(nombre, rol, extra = {}) {
-    const nuevo = { nombre, rol, ...extra, v: 3 };
+    const nuevo = { nombre, rol, ...extra, v: 4 };
     try { sessionStorage.setItem("epsa-user", JSON.stringify(nuevo)); } catch { /* */ }
     setUser(nuevo);
   }

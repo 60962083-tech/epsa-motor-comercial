@@ -2,16 +2,14 @@ import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
-import { TIPOS_TECHO } from "../../data/mockData";
+import { COLORES } from "../../data/mockData";
 import { Aviso, Campo, Card, Modal, PageHeader, Stat, Tabla, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
-import HUBadge from "../../components/HUBadge";
 
 const DISP = { "No disponible": "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-white/70", Disponible: "bg-emerald-100 text-emerald-700", Separada: "bg-amber-100 text-amber-700", Vendida: "bg-slate-200 text-slate-600" };
 const POR_PAGINA = 15;
 
 /**
- * Inventario de unidades — HU-004 "Actualizar la configuración del techo".
- * Regla del backend (HU-002): toda unidad nace de una compra identificada, con estado "No disponible"
+ * Inventario de unidades. Toda unidad nace de una compra identificada, con estado "No disponible"
  * y sin ubicación. Aquí se registra la recepción, el techo/preparación, el traslado y la liberación para venta.
  */
 export default function Inventario() {
@@ -19,17 +17,18 @@ export default function Inventario() {
   const { state } = useLocation();
   const { puede, user } = useAuth();
   const toast = useToast(); const confirmar = useConfirm();
-  const [f, setF] = useState({ q: "", disp: "", modelo: "", ubic: state?.ubic || "", color: "", techo: "" });
+  const [f, setF] = useState({ q: "", disp: "", modelo: "", ubic: state?.ubic || "", color: "" });
   const [pag, setPag] = useState(1);
   const [modal, setModal] = useState(null); // {tipo:'trasladar'|'historial'|'recibir', u}
   const [d, setD] = useState({}); const [err, setErr] = useState({});
-  const nombreModelo = (id) => modelos.find((m) => m.id === id)?.nombre || id;
+  // Las unidades de un modelo de Supabase sin ficha en la web guardan el nombre que dio la compra
+  const nombreModelo = (u) => modelos.find((m) => m.id === u.modelo)?.nombre || u.nombreModelo || u.modelo || "—";
   const activas = ubicaciones.filter((u) => u.activo);
 
   const lista = useMemo(() => unidades.filter((u) => {
     const q = f.q.toLowerCase();
     if (q && !`${u.id} ${u.motor} ${u.chasis}`.toLowerCase().includes(q)) return false;
-    return (!f.disp || u.disponibilidad === f.disp) && (!f.modelo || u.modelo === f.modelo) && (!f.ubic || (f.ubic === "__sin" ? !u.ubicacion : u.ubicacion === f.ubic)) && (!f.color || u.color === f.color) && (!f.techo || u.techo === f.techo);
+    return (!f.disp || u.disponibilidad === f.disp) && (!f.modelo || u.modelo === f.modelo) && (!f.ubic || (f.ubic === "__sin" ? !u.ubicacion : u.ubicacion === f.ubic)) && (!f.color || u.color === f.color);
   }), [unidades, f]);
   const paginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
   const visibles = lista.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
@@ -73,8 +72,7 @@ export default function Inventario() {
 
   return (
     <div>
-      <HUBadge code="HU-004" titulo="Actualizar la configuración del techo" />
-      <PageHeader titulo="Inventario" subtitulo={`${unidades.length} unidades. Abre la ficha de una unidad para configurar su techo y proveedor (HU-004), recibirla, trasladarla o liberarla para la venta.`}>
+      <PageHeader titulo="Inventario" subtitulo="Cada unidad con su modelo, color, ubicación y techo. Abre «Ficha y techo» para configurar el techo y su fibrera.">
         {puede("compras.registrar") && <Link className="btn btn-primary !py-2.5" to="/admin/compras">+ Identificar unidades de una compra</Link>}
       </PageHeader>
       <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-5">
@@ -99,7 +97,7 @@ export default function Inventario() {
                     <td className="py-2 pr-3 font-semibold text-marino dark:text-white">{m.nombre}</td>
                     {cols.map((a) => {
                       const n = unidades.filter((u) => u.modelo === m.id && u.ubicacion === a.nombre && u.disponibilidad === "Disponible").length;
-                      return <td key={a.id} className="px-2 py-2 text-center"><button onClick={() => { setF({ q: "", disp: "Disponible", modelo: m.id, ubic: a.nombre, color: "", techo: "" }); setPag(1); }} className={`min-w-[2rem] rounded-md px-2 py-0.5 font-bold ${n ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : "text-slate-300"}`}>{n}</button></td>;
+                      return <td key={a.id} className="px-2 py-2 text-center"><button onClick={() => { setF({ q: "", disp: "Disponible", modelo: m.id, ubic: a.nombre, color: "" }); setPag(1); }} className={`min-w-[2rem] rounded-md px-2 py-0.5 font-bold ${n ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : "text-slate-300"}`}>{n}</button></td>;
                     })}
                     <td className="px-2 py-2 text-center font-extrabold text-marino dark:text-white">{tot}</td>
                   </tr>
@@ -110,13 +108,12 @@ export default function Inventario() {
         </div>
       </Card>
       <Card className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <div className="lg:col-span-2"><label className="field-label">Código o serie</label><input className="field-input" value={f.q} onChange={(e) => setFiltro("q", e.target.value)} placeholder="MC-001, motor o chasis" /></div>
+        <div className="sm:col-span-2"><label className="field-label">Código o serie</label><input className="field-input" value={f.q} onChange={(e) => setFiltro("q", e.target.value)} placeholder="MC-001, motor o chasis" /></div>
         {sel("disp", "Disponibilidad", ["No disponible", "Disponible", "Separada", "Vendida"])}
         {sel("modelo", "Modelo", modelos.map((m) => ({ v: m.id, t: m.nombre })))}
         {sel("ubic", "Ubicación actual", [{ v: "__sin", t: "Sin recepción" }, ...ubicaciones.map((u) => u.nombre)])}
-        {sel("color", "Color", ["Rojo", "Blanco", "Azul"])}
-        {sel("techo", "Tipo de techo", TIPOS_TECHO)}
-        <div className="flex items-end"><button className="pb-3 text-[13px] font-semibold text-acento hover:underline" onClick={() => { setF({ q: "", disp: "", modelo: "", ubic: "", color: "", techo: "" }); setPag(1); }}>Limpiar filtros</button></div>
+        {sel("color", "Color", COLORES)}
+        <div className="flex items-end"><button className="pb-3 text-[13px] font-semibold text-acento hover:underline" onClick={() => { setF({ q: "", disp: "", modelo: "", ubic: "", color: "" }); setPag(1); }}>Limpiar filtros</button></div>
       </Card>
 
       {lista.length === 0 ? <Vacio titulo="Sin unidades con esos filtros" /> : (
@@ -125,10 +122,10 @@ export default function Inventario() {
             {visibles.map((u) => (
               <tr key={u.id}>
                 <td className="px-4 py-3"><p className="font-semibold text-marino dark:text-white">{u.id}</p><p className="text-[11.5px] text-slate-400">{u.motor}</p></td>
-                <td className="px-4 py-3">{nombreModelo(u.modelo)}<span className="block text-[12px] text-slate-400">{u.color}</span></td>
+                <td className="px-4 py-3">{nombreModelo(u)}<span className="block text-[12px] text-slate-400">{u.color}</span></td>
                 <td className="px-4 py-3">{u.ubicacion || <span className="text-amber-600">Sin recepción</span>}</td>
                 <td className="px-4 py-3">{u.preparacion}</td>
-                <td className="px-4 py-3">{u.techo}{u.proveedorTecho && <span className="text-slate-400"> · {u.proveedorTecho}</span>}{u.estadoTecho && <span className={`mt-1 block w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${u.estadoTecho === "Instalado" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{u.estadoTecho}</span>}</td>
+                <td className="px-4 py-3" data-techo={u.techo}><span className={`rounded-md px-2 py-0.5 text-[12.5px] font-semibold ${u.techo && u.techo !== "Sin techo" ? "bg-sky-50 text-sky-800 dark:bg-sky-500/10 dark:text-sky-200" : "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-white/60"}`}>{u.techo || "Sin techo"}</span>{u.proveedorTecho && <span className="text-slate-400"> · {u.proveedorTecho}</span>}{u.estadoTecho && <span className={`mt-1 block w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${u.estadoTecho === "Instalado" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{u.estadoTecho}</span>}</td>
                 <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${DISP[u.disponibilidad]}`}>{u.disponibilidad}</span></td>
                 <td className="px-4 py-3"><div className="flex flex-wrap gap-1.5">
                   {puede("unidades.gestionar") && !u.ubicacion && <button className={btnMini} onClick={() => abrir("recibir", u)}>Recibir</button>}
