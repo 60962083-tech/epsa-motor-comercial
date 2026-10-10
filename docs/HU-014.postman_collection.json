@@ -1,0 +1,328 @@
+{
+  "info": {
+    "description": "Solo usuarios autenticados. Sin credenciales reales. Configurar IDs existentes y cuenta QA. No implementa modo ausencia ni conversión.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "name": "EPSA HU-014 Registro manual de interesado"
+  },
+  "variable": [
+    {
+      "value": "http://localhost:3000",
+      "key": "api_url"
+    },
+    {
+      "value": "https://TU-PROYECTO.supabase.co",
+      "key": "supabase_url"
+    },
+    {
+      "value": "",
+      "key": "supabase_anon_key"
+    },
+    {
+      "value": "",
+      "key": "email"
+    },
+    {
+      "value": "",
+      "key": "password"
+    },
+    {
+      "value": "",
+      "key": "access_token"
+    },
+    {
+      "value": "",
+      "key": "codmod"
+    },
+    {
+      "value": "",
+      "key": "codusu_responsable"
+    },
+    {
+      "value": "",
+      "key": "codsed"
+    },
+    {
+      "value": "",
+      "key": "codcwa"
+    },
+    {
+      "value": "999000001",
+      "key": "telefono_normal"
+    },
+    {
+      "value": "999000002",
+      "key": "telefono_presencial"
+    },
+    {
+      "value": "999000003",
+      "key": "telefono_whatsapp"
+    },
+    {
+      "value": "",
+      "key": "fecha_seguimiento"
+    }
+  ],
+  "auth": {
+    "bearer": [
+      {
+        "type": "string",
+        "key": "token",
+        "value": "{{access_token}}"
+      }
+    ],
+    "type": "bearer"
+  },
+  "event": [
+    {
+      "script": {
+        "exec": [
+          "if (!pm.collectionVariables.get(\"fecha_seguimiento\")) pm.collectionVariables.set(\"fecha_seguimiento\", new Date(Date.now()+86400000).toISOString());"
+        ],
+        "type": "text/javascript"
+      },
+      "listen": "prerequest"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Iniciar sesión QA",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "value": "{{supabase_anon_key}}",
+            "key": "apikey"
+          },
+          {
+            "value": "application/json",
+            "key": "Content-Type"
+          }
+        ],
+        "url": "{{supabase_url}}/auth/v1/token?grant_type=password",
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"password\": \"{{password}}\",\r\n  \"email\": \"{{email}}\"\r\n}"
+        }
+      },
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test(\"Sesión válida\", () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set(\"access_token\", pm.response.json().access_token || \"\");"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "name": "2. Registro normal",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "value": "application/json",
+            "key": "Content-Type"
+          }
+        ],
+        "url": "{{api_url}}/api/leads",
+        "description": "Gerente, Administradora o Vendedor. IDs existentes. Origen y color NULL. Crea seguimiento inicial.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"nomlea\": \"Persona QA\",\r\n  \"tellea\": \"{{telefono_normal}}\",\r\n  \"codmod\": \"{{codmod}}\",\r\n  \"collea\": null,\r\n  \"canlea\": \"Llamada\",\r\n  \"orilea\": null,\r\n  \"codusu\": \"{{codusu_responsable}}\",\r\n  \"estlea\": \"Nuevo\",\r\n  \"fecprosle\": \"{{fecha_seguimiento}}\",\r\n  \"obslea\": \"Consulta ficticia QA\",\r\n  \"nueva_oportunidad\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Estado esperado', () => pm.response.to.have.status(201));"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "name": "3. Registro presencial",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "value": "application/json",
+            "key": "Content-Type"
+          }
+        ],
+        "url": "{{api_url}}/api/leads",
+        "description": "Requiere codsed existente.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"nomlea\": \"Persona QA\",\r\n  \"tellea\": \"{{telefono_presencial}}\",\r\n  \"codmod\": \"{{codmod}}\",\r\n  \"collea\": null,\r\n  \"canlea\": \"Presencial\",\r\n  \"orilea\": null,\r\n  \"codusu\": \"{{codusu_responsable}}\",\r\n  \"estlea\": \"Contactado\",\r\n  \"fecprosle\": \"{{fecha_seguimiento}}\",\r\n  \"obslea\": \"Consulta ficticia QA\",\r\n  \"nueva_oportunidad\": false,\r\n  \"codsed\": \"{{codsed}}\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Estado esperado', () => pm.response.to.have.status(201));"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "name": "4. Registro WhatsApp",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "value": "application/json",
+            "key": "Content-Type"
+          }
+        ],
+        "url": "{{api_url}}/api/leads",
+        "description": "Requiere codcwa existente. Canal WhatsApp, origen Facebook y tipo Manual son distintos.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"nomlea\": \"Persona QA\",\r\n  \"tellea\": \"{{telefono_whatsapp}}\",\r\n  \"codmod\": \"{{codmod}}\",\r\n  \"collea\": \"rojo\",\r\n  \"canlea\": \"WhatsApp\",\r\n  \"orilea\": \"Facebook\",\r\n  \"codusu\": \"{{codusu_responsable}}\",\r\n  \"estlea\": \"En seguimiento\",\r\n  \"fecprosle\": \"{{fecha_seguimiento}}\",\r\n  \"obslea\": \"Consulta ficticia QA\",\r\n  \"nueva_oportunidad\": false,\r\n  \"codcwa\": \"{{codcwa}}\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Estado esperado', () => pm.response.to.have.status(201));"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "name": "5. Repetir registro normal: coincidencia",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "value": "application/json",
+            "key": "Content-Type"
+          }
+        ],
+        "url": "{{api_url}}/api/leads",
+        "description": "Ejecutar después de registro normal. Devuelve coincidencia mínima sin crear otro lead.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"nomlea\": \"Persona QA\",\r\n  \"tellea\": \"{{telefono_normal}}\",\r\n  \"codmod\": \"{{codmod}}\",\r\n  \"collea\": null,\r\n  \"canlea\": \"Llamada\",\r\n  \"orilea\": null,\r\n  \"codusu\": \"{{codusu_responsable}}\",\r\n  \"estlea\": \"Nuevo\",\r\n  \"fecprosle\": \"{{fecha_seguimiento}}\",\r\n  \"obslea\": \"Consulta ficticia QA\",\r\n  \"nueva_oportunidad\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Estado esperado', () => pm.response.to.have.status(409));"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "name": "6. Nueva oportunidad explícita",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "value": "application/json",
+            "key": "Content-Type"
+          }
+        ],
+        "url": "{{api_url}}/api/leads",
+        "description": "Mismo móvil; nueva_oportunidad=true permite otro lead sin modificar el anterior.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"nomlea\": \"Persona QA\",\r\n  \"tellea\": \"{{telefono_normal}}\",\r\n  \"codmod\": \"{{codmod}}\",\r\n  \"collea\": null,\r\n  \"canlea\": \"Llamada\",\r\n  \"orilea\": null,\r\n  \"codusu\": \"{{codusu_responsable}}\",\r\n  \"estlea\": \"Nuevo\",\r\n  \"fecprosle\": \"{{fecha_seguimiento}}\",\r\n  \"obslea\": \"Consulta ficticia QA\",\r\n  \"nueva_oportunidad\": true\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Estado esperado', () => pm.response.to.have.status(201));"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "name": "7. Cerrado sin próximo seguimiento",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "value": "application/json",
+            "key": "Content-Type"
+          }
+        ],
+        "url": "{{api_url}}/api/leads",
+        "description": "Responsable obligatorio; cita NULL. Nueva oportunidad explícita para no depender de otros escenarios.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"nomlea\": \"Persona QA\",\r\n  \"tellea\": \"{{telefono_normal}}\",\r\n  \"codmod\": \"{{codmod}}\",\r\n  \"collea\": null,\r\n  \"canlea\": \"Llamada\",\r\n  \"orilea\": null,\r\n  \"codusu\": \"{{codusu_responsable}}\",\r\n  \"estlea\": \"Cerrado\",\r\n  \"fecprosle\": null,\r\n  \"obslea\": \"Consulta ficticia QA\",\r\n  \"nueva_oportunidad\": true\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Estado esperado', () => pm.response.to.have.status(201));"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    }
+  ]
+}
