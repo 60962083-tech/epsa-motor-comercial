@@ -18,7 +18,7 @@ export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClien
 
   app.use(cors());
   app.use(express.json({ limit: '32kb' }));
-  app.use('/api/modelos', crearRutasModelo(fabricaPublica));
+  app.use('/api/modelos', crearRutasModelo(fabricaPublica, fabrica));
   app.use('/api/sedes', crearRutasSede(fabricaPublica));
   app.use('/api/leads', crearRutasLead(fabrica));
 

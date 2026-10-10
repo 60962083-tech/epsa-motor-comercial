@@ -16,7 +16,7 @@ async function entorno(fabrica: FabricaClientePublico, verificar: (url: string) 
   }
 }
 
-test('HU-012: catálogo público sin sesión; no propaga token, body ni filtros a la RPC', async () => {
+test('HU-012: catálogo público sin sesión; incluye precio y colores sin propagar filtros a la RPC', async () => {
   const llamadas: unknown[][] = [];
   const fabrica = (...args: unknown[]) => {
     assert.deepEqual(args, []);
@@ -40,7 +40,8 @@ test('HU-012: catálogo público sin sesión; no propaga token, body ni filtros 
       assert.equal('data' in await respuesta.json(), false);
     }
     assert.equal(llamadas.length, 2);
-    assert.equal((await fetch(url, { method: 'POST' })).status, 404);
+    assert.equal((await fetch(url, { method: 'POST' })).status, 401);
+    assert.equal((await fetch(`${url}/admin`)).status, 401);
     assert.equal((await fetch(`${url}/1`, { method: 'DELETE' })).status, 404);
     assert.equal((await fetch(url.replace('/modelos', '/compras'))).status, 401);
     assert.equal((await fetch(url.replace('/modelos', '/ubicaciones'))).status, 401);
@@ -65,6 +66,7 @@ test('HU-009: ficha pública usa la RPC por ID sin sesión y devuelve solo model
       return { data: {
         codmod: '1', nommod: 'Modelo prueba 1', marmod: 'Bajaj',
         desmod: 'Modelo registrado para pruebas', carmod: 'Configuración estándar',
+        premod: null, colores: [],
         imagenes: [{ urlimo: 'https://example.test/foto-1.jpg', ordimo: 1 }]
       }, error: null };
     } } as unknown as SupabaseClient;
@@ -76,6 +78,7 @@ test('HU-009: ficha pública usa la RPC por ID sin sesión y devuelve solo model
     assert.deepEqual(await respuesta.json(), { ok: true, data: {
       codmod: '1', nommod: 'Modelo prueba 1', marmod: 'Bajaj',
       desmod: 'Modelo registrado para pruebas', carmod: 'Configuración estándar',
+      premod: null, colores: [],
       imagenes: [{ urlimo: 'https://example.test/foto-1.jpg', ordimo: 1 }]
     } });
     assert.deepEqual(llamadas, [['hu009_modelo_publicado_por_id', { p_codmod: '1' }]]);
@@ -95,7 +98,8 @@ test('HU-009: ficha pública usa la RPC por ID sin sesión y devuelve solo model
 test('HU-009: inexistente, Borrador, No publicado y despublicado comparten 404', async () => {
   const fabrica = () => ({ rpc: async (_nombre: string, parametros: { p_codmod: string }) => ({
     data: parametros.p_codmod === '1' ? {
-      codmod: '1', nommod: 'Modelo', marmod: 'Bajaj', desmod: 'Descripción', carmod: 'Características', imagenes: []
+      codmod: '1', nommod: 'Modelo', marmod: 'Bajaj', desmod: 'Descripción', carmod: 'Características',
+      premod: null, colores: [], imagenes: []
     } : null,
     error: null
   }) }) as unknown as SupabaseClient;
