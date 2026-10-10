@@ -1,8 +1,8 @@
 /* global __EPSA_API_URL__, __EPSA_SUPABASE_URL__, __EPSA_SUPABASE_ANON_KEY__ */
-// Configuración de conexión. Se define en frontend/.env (ver .env.example) o en las variables de Netlify.
-// Acepta los nombres de la API de Michelle (SUPABASE_URL, SUPABASE_ANON_KEY) o con VITE_ delante:
-// vite.config.js los lee y solo expone estas tres al navegador.
-// Si falta cualquiera de las tres, la web funciona en MODO DEMOSTRACIÓN con datos locales.
+// Configuración de conexión (vite.config.js la arma y solo expone estas tres al navegador).
+// La API (https://epsa-motor-api.onrender.com) y la URL de Supabase ya vienen puestas.
+// La clave anon de Supabase sale de las variables de Netlify, de frontend/.env o del .env de la raíz del repositorio.
+// Sin la clave, la web funciona en MODO DEMOSTRACIÓN con datos locales.
 const limpiar = (v) => (v ? String(v).trim().replace(/\/$/, "") : "");
 
 export const API_URL = limpiar(typeof __EPSA_API_URL__ !== "undefined" ? __EPSA_API_URL__ : "");

@@ -44,7 +44,7 @@ export function TarjetaModelo({ m, stock, colores = true, colorInicial }) {
         <p className="mt-1.5 text-[13px] text-slate-500">{m.tipoMotor} · {m.combustible}{potencia ? ` · ${potencia}` : ""}</p>
         <div className="mt-auto pt-4">
           <p className="flex items-baseline gap-2">
-            <span className="text-[12.5px] text-slate-500">Desde</span>
+            <span className="text-[12.5px] text-slate-500">{m.precioDesde ? "Desde" : "Precio"}</span>
             <span className="cifra font-display text-[1.75rem] font-bold leading-none text-marino dark:text-white">{formatoSoles(m.precioDesde)}</span>
           </p>
           <div className="mt-4 flex gap-2">
@@ -61,7 +61,7 @@ export function TarjetaModelo({ m, stock, colores = true, colorInicial }) {
 /* Filtro único del catálogo                                           */
 /* ------------------------------------------------------------------ */
 
-const sinTildes = (t) => String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const sinTildes = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const corto = (familia) => familia.replace(/^Motores\s+/i, "");
 const potenciaDe = (m) => numero(m.resumen?.Potencia) ?? 0;
 
@@ -146,12 +146,12 @@ export default function Modelos() {
   const qn = sinTildes(q.trim());
   // Un modelo pasa si cumple todo; "excepto" ignora un grupo para calcular cuántos quedarían al marcar otra opción.
   const pasa = (m, excepto) => (!qn || sinTildes(`${m.nombre} ${m.familia} ${m.combustible} ${m.tipoMotor}`).includes(qn))
-    && (precio == null || m.precioDesde <= precio)
+    && (precio == null || !m.precioDesde || m.precioDesde <= precio)
     && GRUPOS.every(({ k }) => k === excepto || !sel[k].length || sel[k].includes(m[k]));
 
   const lista = publicos.filter((m) => pasa(m)).sort((a, b) => (
-    orden === "precio-asc" ? a.precioDesde - b.precioDesde
-      : orden === "precio-desc" ? b.precioDesde - a.precioDesde
+    orden === "precio-asc" ? (a.precioDesde || Number.MAX_SAFE_INTEGER) - (b.precioDesde || Number.MAX_SAFE_INTEGER)
+      : orden === "precio-desc" ? (b.precioDesde || 0) - (a.precioDesde || 0)
         : orden === "potencia" ? potenciaDe(b) - potenciaDe(a)
           : a.nombre.localeCompare(b.nombre)));
   const conteo = (k, v) => publicos.filter((m) => pasa(m, k) && m[k] === v).length;

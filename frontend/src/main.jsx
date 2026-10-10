@@ -10,6 +10,7 @@ import App from "./App.jsx";
 import { ThemeProvider } from "./ThemeContext.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { AppProvider } from "./store/appStore.jsx";
+import FiltrosColor from "./components/FiltrosColor.jsx";
 
 // Punto de entrada. ThemeProvider, AuthProvider y AppProvider envuelven
 // a App para que cualquier pantalla use useTheme()/useAuth()/useCatalog()
@@ -20,6 +21,7 @@ createRoot(document.getElementById("root")).render(
       <ThemeProvider>
         <AuthProvider>
           <AppProvider>
+            <FiltrosColor />
             <App />
           </AppProvider>
         </AuthProvider>

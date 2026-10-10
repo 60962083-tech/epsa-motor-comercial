@@ -85,18 +85,20 @@ async function refrescar() {
 }
 
 /** Petición al backend de Michelle. Devuelve `data` ({ok,data,message}). */
-export async function pedir(ruta, { metodo = "GET", cuerpo, headers = {}, privada = true } = {}, reintento = true) {
+export async function pedir(ruta, { metodo = "GET", cuerpo, formulario, headers = {}, privada = true } = {}, reintento = true) {
   if (!MODO_REAL) throw new ApiError(0, "Modo demostración: backend no configurado");
   const h = { ...headers };
   if (cuerpo !== undefined) h["Content-Type"] = "application/json";
   if (privada) h.Authorization = `Bearer ${leerSesion()?.access_token || ""}`;
+  // formulario (FormData): el navegador arma el multipart/form-data con su boundary
+  const body = formulario || (cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined);
   let r;
   try {
-    r = await fetch(`${API_URL}${ruta}`, { method: metodo, headers: h, body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined });
-  } catch { throw new ApiError(0, "Sin conexión con el servidor"); }
+    r = await fetch(`${API_URL}${ruta}`, { method: metodo, headers: h, body });
+  } catch { throw new ApiError(0, "Sin conexión con el servidor. Si es la primera consulta del día, espera un minuto: el servidor se está encendiendo."); }
   const j = await r.json().catch(() => ({}));
   if (r.status === 401 && privada && reintento) {
-    try { await refrescar(); return pedir(ruta, { metodo, cuerpo, headers, privada }, false); } catch { /* cae al error */ }
+    try { await refrescar(); return pedir(ruta, { metodo, cuerpo, formulario, headers, privada }, false); } catch { /* cae al error */ }
   }
   if (!r.ok || j.ok === false) throw new ApiError(r.status, j.message || "Error", j);
   return { data: j.data, message: j.message, status: r.status };
@@ -115,5 +117,20 @@ export const obtenerCompra = (id) => pedir(`/api/compras/${id}`);
 export const crearCompra = (b, idempotencia) => pedir("/api/compras", { metodo: "POST", cuerpo: b, headers: { "Idempotency-Key": idempotencia } });
 
 export const registrarFactura = (id, b) => pedir(`/api/compras/${id}/factura`, { metodo: "PUT", cuerpo: b });
+// PDF de la factura (endpoints de Michelle): bucket privado, ruta compras/{codcom}/factura.pdf, un solo PDF por factura
+export const subirPdfFacturaApi = (id, archivo) => {
+  const fd = new FormData();
+  fd.append("archivo", archivo instanceof File && archivo.type === "application/pdf" ? archivo : new File([archivo], archivo.name || "factura.pdf", { type: "application/pdf" }));
+  return pedir(`/api/compras/${id}/factura/archivo`, { metodo: "POST", formulario: fd });
+};
+export const consultarPdfFacturaApi = (id) => pedir(`/api/compras/${id}/factura/archivo`);
+export const urlPdfFacturaApi = (id) => pedir(`/api/compras/${id}/factura/archivo/url`);
+// HU-004: configuración de techo de una unidad identificada en Supabase
+export const tiposTechoApi = () => pedir("/api/unidades/catalogos/tipos-techo");
+export const proveedoresTechoApi = () => pedir("/api/unidades/catalogos/proveedores-techo");
+export const techoUnidadApi = (coduni) => pedir(`/api/unidades/${coduni}/techo`);
+export const guardarTechoUnidadApi = (coduni, b) => pedir(`/api/unidades/${coduni}/techo`, { metodo: "PUT", cuerpo: b });
+// HU-009: ficha pública de un modelo publicado
+export const modeloPublicadoApi = (codmod) => pedir(`/api/modelos/${codmod}`, { privada: false });
 export const listarUnidadesCompra = (id) => pedir(`/api/compras/${id}/unidades`);
 export const vincularUnidades = (id, unidades) => pedir(`/api/compras/${id}/unidades`, { metodo: "POST", cuerpo: { unidades } });

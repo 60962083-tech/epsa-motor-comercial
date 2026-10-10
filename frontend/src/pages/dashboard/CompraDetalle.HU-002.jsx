@@ -8,7 +8,7 @@ import { mensajeError } from "../../lib/errores";
 import { Aviso, Campo, Card, PageHeader, Tabla, useConfirm, useToast } from "../../components/ui";
 import { Progreso } from "../../components/charts";
 import { ESTADO_COMPRA } from "./Compras.HU-034";
-import { adjuntoRecordado, buscarPdfFactura, recordarAdjunto, subirPdfFactura, urlPdfFactura, validarPdf } from "../../lib/archivos";
+import { adjuntoRecordado, buscarPdfFactura, recordarAdjunto, subirPdfFactura, urlPdfFactura, validarPdf, validarPdfContenido } from "../../lib/archivos";
 import { soloDigitos } from "../../lib/validar";
 import { claveModelo } from "../../lib/modelos";
 
@@ -18,6 +18,8 @@ const norm = (t) => String(t || "").trim().replace(/\s+/g, " ");
 const serie = (t) => norm(t).toUpperCase();
 // Fecha local (Lima), no UTC: después de las 7 p. m. el UTC ya es el día siguiente
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+// La factura no puede ser de más de un año antes de la compra registrada (evita fechas como 1900)
+const fechaMinimaFactura = (feccom) => { const d = new Date(`${String(feccom || hoyISO()).slice(0, 10)}T12:00:00`); d.setFullYear(d.getFullYear() - 1); return d.toLocaleDateString("en-CA"); };
 
 /**
  * Detalle de la compra: factura (con PDF adjunto) e identificación de motos.
@@ -36,6 +38,7 @@ export default function CompraDetalle() {
   const [det, setDet] = useState({ factura: null, unidades: [], requiere_revision: false });
   const [cargando, setCargando] = useState(true); const [errorCarga, setErrorCarga] = useState("");
   const [fac, setFac] = useState({ emisor: "Crosland Perú S.A.C.", numero: "", fecha_emision: "", cantidad_motos: "" }); const [ferr, setFerr] = useState({});
+  const guardandoFactura = useRef(false); const [enviandoFactura, setEnviandoFactura] = useState(false);
   const [filas, setFilas] = useState([FILA()]); const [uerr, setUerr] = useState({}); const [conflicto, setConflicto] = useState(null);
   const [lote, setLote] = useState(""); const [enviando, setEnviando] = useState(false);
   const [pdf, setPdf] = useState(null); const [pdfErr, setPdfErr] = useState(""); const [subiendo, setSubiendo] = useState(false);
@@ -83,26 +86,27 @@ export default function CompraDetalle() {
     lista.forEach((r, i) => agregar("unidades", { id: `MC-${String(base + i + 1).padStart(3, "0")}`, coduni: r.coduni, codcom: String(compra.codcom), modelo: modeloLocal?.id || "", nombreModelo: compra.nommod, color: r.coluni || compra.colcom, ubicacion: "", preparacion: "Sin preparar", techo: "Sin techo", disponibilidad: "No disponible", motor: r.nummotuni, chasis: r.chauni, observaciones: [], historial: [{ fecha: hoyISO(), detalle: `Identificada en compra #${compra.codcom} · ${user.nombre}` }] }));
   }
 
-  const adjunto = det.factura?.adjunto || adjReal || adjuntoRecordado(compra.codcom);
+  // Conectado: el estado del PDF lo da el backend (GET /api/compras/:id/factura/archivo); en demostración, este navegador
+  const adjunto = MODO_REAL ? adjReal : (det.factura?.adjunto || adjuntoRecordado(compra.codcom));
 
-  function elegirPdf(e) {
+  // Se revisa el contenido al elegirlo (un PDF real empieza con «%PDF»): así el aviso sale antes de registrar la factura
+  async function elegirPdf(e) {
     const a = e.target.files?.[0]; e.target.value = "";
-    if (!a) return;
-    const m = validarPdf(a); setPdfErr(m);
+    if (!a) return null;
+    const m = validarPdf(a) || await validarPdfContenido(a); setPdfErr(m);
     setPdf(m ? null : a);
     return m ? null : a;
   }
   async function subirPdf(archivo) {
     const adj = await subirPdfFactura(compra.codcom, archivo);
+    if (MODO_REAL) { setAdjReal(adj); return adj; }
     recordarAdjunto(compra.codcom, adj);
-    if (!MODO_REAL) {
-      const actual = compras.find((x) => x.codcom === compra.codcom);
-      actualizar("compras", compra.id, { factura: { ...(actual?.factura || {}), archivo_adjuntado: true, adjunto: adj } }, `PDF de factura adjuntado (compra #${compra.codcom})`);
-    }
+    const actual = compras.find((x) => x.codcom === compra.codcom);
+    actualizar("compras", compra.id, { factura: { ...(actual?.factura || {}), archivo_adjuntado: true, adjunto: adj } }, `PDF de factura adjuntado (compra #${compra.codcom})`);
     return adj;
   }
   async function adjuntarDespues(e) {
-    const a = elegirPdf(e); if (!a) return;
+    const a = await elegirPdf(e); if (!a) return;
     setSubiendo(true);
     try { await subirPdf(a); setPdf(null); toast("PDF de la factura adjuntado"); cargar(); }
     catch (er) { setPdfErr(mensajeError(er)); toast(mensajeError(er), "error"); }
@@ -111,8 +115,11 @@ export default function CompraDetalle() {
   async function abrirPdf(descargar) {
     const ventana = descargar ? null : window.open("", "_blank");
     try {
-      const url = await urlPdfFactura(adjunto);
-      if (descargar) { const a = document.createElement("a"); a.href = url; a.download = adjunto.nombre || `factura-compra-${compra.codcom}.pdf`; document.body.appendChild(a); a.click(); a.remove(); }
+      const nombre = `factura-compra-${compra.codcom}.pdf`;
+      let url = await urlPdfFactura(adjunto);
+      // Enlace firmado de Supabase: «download» hace que el navegador lo descargue en vez de abrirlo
+      if (descargar && /^https?:/i.test(url)) url += `${url.includes("?") ? "&" : "?"}download=${encodeURIComponent(nombre)}`;
+      if (descargar) { const a = document.createElement("a"); a.href = url; a.download = nombre; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
       else if (ventana) ventana.location.href = url; else window.open(url, "_blank");
     } catch (er) { ventana?.close(); toast(mensajeError(er), "error"); }
   }
@@ -122,14 +129,19 @@ export default function CompraDetalle() {
     const cuerpo = { emisor: norm(fac.emisor), numero: norm(fac.numero), fecha_emision: fac.fecha_emision, cantidad_motos: Number(fac.cantidad_motos) };
     if (!cuerpo.emisor) x.emisor = "Copia el emisor tal como aparece en la factura."; else if (cuerpo.emisor.length > 160) x.emisor = "Máximo 160 caracteres.";
     if (!cuerpo.numero) x.numero = "Copia el número de la factura tal como figura en el documento."; else if (cuerpo.numero.length > 80) x.numero = "Máximo 80 caracteres.";
+    else if (cuerpo.numero.length < 4 || !/\d/.test(cuerpo.numero) || !/^[\p{L}\d][\p{L}\d ./-]*$/u.test(cuerpo.numero)) x.numero = "Revisa el número: debe tener serie y correlativo, por ejemplo F001-000123.";
+    else if (!MODO_REAL && compras.some((c) => c.codcom !== compra.codcom && c.factura && norm(c.factura.numero).toLowerCase() === cuerpo.numero.toLowerCase() && norm(c.factura.emisor).toLowerCase() === cuerpo.emisor.toLowerCase())) x.numero = "Esta factura ya está registrada en otra compra.";
+    const minimo = fechaMinimaFactura(compra.feccom);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(cuerpo.fecha_emision)) x.fecha_emision = "Indica la fecha de emisión."; else if (cuerpo.fecha_emision > hoyISO()) x.fecha_emision = "La fecha de emisión no puede ser futura.";
+    else if (cuerpo.fecha_emision < minimo) x.fecha_emision = `La fecha es muy anterior a la compra: debe ser desde el ${minimo}.`;
     if (!Number.isInteger(cuerpo.cantidad_motos) || cuerpo.cantidad_motos < 1) x.cantidad_motos = "Cantidad entera mayor a 0.";
     setFerr(x); if (Object.keys(x).length) return;
     const difiere = cuerpo.cantidad_motos !== compra.cancom;
     const ok = await confirmar(difiere
       ? { titulo: "La cantidad no coincide", texto: `La factura declara ${cuerpo.cantidad_motos} motos y la compra es de ${compra.cancom}. Se registrará el documento, pero la identificación quedará bloqueada hasta que la gerencia revise el dato . ¿Registrar igual?`, boton: "Registrar con revisión", peligro: true }
       : { titulo: "Registrar factura", texto: `Factura ${cuerpo.numero} de ${cuerpo.emisor}, emitida el ${cuerpo.fecha_emision}, por ${cuerpo.cantidad_motos} motos. Una vez registrada no se puede sobrescribir.`, boton: "Registrar factura" });
-    if (!ok) return;
+    if (!ok || guardandoFactura.current) return;
+    guardandoFactura.current = true; setEnviandoFactura(true);
     try {
       let adj = null;
       if (MODO_REAL) {
@@ -143,24 +155,33 @@ export default function CompraDetalle() {
       }
       setPdf(null); cargar();
     } catch (er) { toast(mensajeError(er), "error"); }
+    finally { guardandoFactura.current = false; setEnviandoFactura(false); }
   }
 
   const setFila = (i, k, v) => setFilas((p) => p.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
   function cargarLote() {
-    const rows = lote.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const [a, b] = l.split(/[,;\t]+/); return { nummotuni: (a || "").trim(), chauni: (b || "").trim() }; });
+    const todas = lote.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const [a, b] = l.split(/[,;\t]+/); return { nummotuni: (a || "").trim(), chauni: (b || "").trim() }; });
+    // Una línea sin números es un encabezado copiado de Excel (MOTOR, CHASIS): no es una moto
+    const rows = todas.filter((r) => /\d/.test(`${r.nummotuni}${r.chauni}`));
     if (!rows.length) return toast("Pega una línea por moto: MOTOR, CHASIS", "error");
     const max = Math.min(100, compra.cantidad_pendiente);
     setFilas(rows.slice(0, max)); setLote("");
-    toast(rows.length > max ? `Se cargaron ${max} filas (faltan ${compra.cantidad_pendiente} por identificar).` : `${rows.length} filas cargadas`);
+    const omitidas = todas.length - rows.length;
+    toast(`${rows.length > max ? `Se cargaron ${max} filas (faltan ${compra.cantidad_pendiente} por identificar).` : `${rows.length} filas cargadas`}${omitidas ? ` Se omitió ${omitidas} línea(s) sin números (encabezado).` : ""}`);
   }
 
   async function identificar(e) {
     e.preventDefault(); setConflicto(null); const x = {};
     const rows = filas.map((r) => ({ nummotuni: serie(r.nummotuni), chauni: serie(r.chauni) }));
     if (rows.length > compra.cantidad_pendiente) x.general = `Solo faltan ${compra.cantidad_pendiente} unidades por identificar.`;
+    // Motor y chasis: letras y números como en la placa del fabricante (mínimo 5, con al menos un número)
+    const formato = (v) => v.length >= 5 && /\d/.test(v) && /^[A-Z0-9][A-Z0-9 ./-]*$/.test(v);
     rows.forEach((r, i) => {
       if (!r.nummotuni) x[`m${i}`] = "Ingresa el número de motor."; else if (r.nummotuni.length > 100) x[`m${i}`] = "Máximo 100 caracteres.";
+      else if (!formato(r.nummotuni)) x[`m${i}`] = "Revisa el número de motor: letras y números, mínimo 5 y con al menos un número.";
       if (!r.chauni) x[`c${i}`] = "Ingresa el número de chasis."; else if (r.chauni.length > 100) x[`c${i}`] = "Máximo 100 caracteres.";
+      else if (!formato(r.chauni)) x[`c${i}`] = "Revisa el número de chasis: letras y números, mínimo 5 y con al menos un número.";
+      if (r.nummotuni && r.nummotuni === r.chauni) x[`c${i}`] = "El chasis no puede ser igual al motor.";
     });
     rows.forEach((r, i) => {
       if (r.nummotuni && rows.findIndex((o) => o.nummotuni === r.nummotuni) !== i) x[`m${i}`] = "Motor repetido en este lote.";
@@ -257,7 +278,7 @@ export default function CompraDetalle() {
             <form onSubmit={guardarFactura} className="mt-3 grid gap-4 sm:grid-cols-2" noValidate>
               <Campo etiqueta="Emisor (tal como figura en la factura)" error={ferr.emisor}><input className="field-input" maxLength={170} value={fac.emisor} onChange={(e) => setFac({ ...fac, emisor: e.target.value })} /></Campo>
               <Campo etiqueta="N° de factura" error={ferr.numero}><input id="fac-numero" className="field-input" maxLength={90} value={fac.numero} onChange={(e) => setFac({ ...fac, numero: e.target.value })} placeholder="F001-000123" /></Campo>
-              <Campo etiqueta="Fecha de emisión" error={ferr.fecha_emision}><input type="date" max={hoyISO()} className="field-input" value={fac.fecha_emision} onChange={(e) => setFac({ ...fac, fecha_emision: e.target.value })} /></Campo>
+              <Campo etiqueta="Fecha de emisión" error={ferr.fecha_emision}><input type="date" min={fechaMinimaFactura(compra.feccom)} max={hoyISO()} className="field-input" value={fac.fecha_emision} onChange={(e) => setFac({ ...fac, fecha_emision: e.target.value })} /></Campo>
               <Campo etiqueta="Cantidad de motos en la factura" error={ferr.cantidad_motos} ayuda={`La compra es de ${compra.cancom} motos. No cuentes aceites ni bonificaciones.`}><input id="fac-cantidad" className="field-input" inputMode="numeric" maxLength={4} value={fac.cantidad_motos} onChange={(e) => setFac({ ...fac, cantidad_motos: soloDigitos(e.target.value, 4).replace(/^0+/, "") })} /></Campo>
               <div className="sm:col-span-2">
                 <span className="field-label">PDF de la factura</span>
@@ -275,7 +296,7 @@ export default function CompraDetalle() {
                 )}
                 {pdfErr && <p className="mt-1 text-[12px] font-medium text-acento">{pdfErr}</p>}
               </div>
-              <div className="sm:col-span-2"><button className="btn btn-primary !py-2.5">Registrar factura{pdf ? " con PDF" : ""}</button></div>
+              <div className="sm:col-span-2"><button className="btn btn-primary !py-2.5" disabled={enviandoFactura}>{enviandoFactura ? "Registrando…" : `Registrar factura${pdf ? " con PDF" : ""}`}</button></div>
             </form>
           ) : <p className="mt-2 text-[14px] text-slate-500">Aún sin factura registrada. Solo gerente y administradora la registran.</p>}
         </Card>

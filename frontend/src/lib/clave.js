@@ -44,6 +44,8 @@ export const resumenClave = (correo, clave) => sha256(`epsa|${String(correo).tri
 export const MIN_CLAVE = 8;
 export function validarClaveNueva(clave, confirmar, temporal) {
   if (!clave || clave.length < MIN_CLAVE) return `La contraseña debe tener al menos ${MIN_CLAVE} caracteres.`;
+  if (clave.length > 72) return "La contraseña admite hasta 72 caracteres.";
+  if (clave !== clave.trim()) return "La contraseña no puede empezar ni terminar con espacios.";
   if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(clave) || !/\d/.test(clave)) return "Usa letras y números.";
   if (temporal && clave === temporal) return "La nueva contraseña debe ser distinta a la temporal.";
   if (confirmar !== undefined && clave !== confirmar) return "Las contraseñas no coinciden.";

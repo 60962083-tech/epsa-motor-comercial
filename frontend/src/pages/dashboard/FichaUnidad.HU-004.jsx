@@ -1,19 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
-import { ESTADOS_PREPARACION, PROVEEDORES_TECHO, TECHO_REQUIERE_PROVEEDOR, TIPOS_TECHO } from "../../data/mockData";
+import { ESTADOS_PREPARACION, MAX_DETALLE_TECHO, PROVEEDORES_TECHO, TECHO_REQUIERE_PROVEEDOR, TIPOS_TECHO, normalizarTecho } from "../../data/mockData";
+import { MODO_REAL } from "../../lib/config";
+import * as api from "../../lib/api";
+import { mensajeError } from "../../lib/errores";
 import { Aviso, Campo, Card, PageHeader, useConfirm, useToast } from "../../components/ui";
 
 const DESCRIPCION_TECHO = {
   "Sin techo": "La unidad no lleva techo instalado.",
   Lona: "Techo de lona de fábrica. No necesita proveedor externo.",
-  "Fibra Básico": "Techo de fibra instalado por un proveedor externo.",
-  "Fibra Superlujo": "Fibra con acabado superlujo, instalada por un proveedor externo.",
-  "Fibra Superlujo Deportivo": "Fibra deportiva superlujo, instalada por un proveedor externo.",
+  "Techo clásico de fibra": "Fibra fabricada por EPSA Motor. No necesita proveedor externo.",
+  "Techo de fibra deportiva": "Fibra deportiva hecha por un proveedor externo: FIVESA, JAVICAR o FIBRAT.",
 };
+const limpiar = (t) => String(t || "").trim().replace(/\s+/g, " ");
 const DISP = { "No disponible": "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-white/70", Disponible: "bg-emerald-100 text-emerald-700", Separada: "bg-amber-100 text-amber-700", Vendida: "bg-slate-200 text-slate-600" };
-const hoy = () => new Date().toISOString().slice(0, 10);
+const hoy = () => new Date().toLocaleDateString("en-CA"); // fecha local (no UTC)
 
 /** Ícono simple de techo para las opciones (perfil lateral de la cabina). */
 function SiluetaTecho({ tipo }) {
@@ -25,7 +28,7 @@ function SiluetaTecho({ tipo }) {
       <circle cx="48" cy="29" r="4" fill="none" stroke="currentColor" strokeWidth="2.2" opacity=".8" />
       <path d="M12 24V16l6-4h26l8 6v6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" opacity=".8" />
       {tipo === "Lona" && <path d="M14 12c6-6 30-6 36 0" fill="none" stroke="#c62828" strokeWidth="2.5" strokeDasharray="3 3" />}
-      {fibra && <path d={tipo === "Fibra Superlujo Deportivo" ? "M12 12l8-7h26l10 8" : "M13 12l7-6h25l8 6"} fill="none" stroke="#c62828" strokeWidth="3.5" strokeLinejoin="round" />}
+      {/fibra/i.test(tipo) && <path d={fibra ? "M12 12l8-7h26l10 8" : "M13 12l7-6h25l8 6"} fill="none" stroke="#c62828" strokeWidth="3.5" strokeLinejoin="round" />}
     </svg>
   );
 }
@@ -48,32 +51,85 @@ function FichaUnidad({ id }) {
   const u = unidades.find((x) => x.id === id);
   const gestiona = puede("unidades.gestionar");
   const observa = gestiona || puede("unidades.observar");
-  const [f, setF] = useState(() => ({ techo: u?.techo || "Sin techo", proveedor: u?.proveedorTecho || "", detalle: u?.detalleTecho || "", preparacion: u?.preparacion || "Sin preparar" }));
+  const [f, setF] = useState(() => ({ techo: normalizarTecho(u?.techo, u?.proveedorTecho), proveedor: u?.proveedorTecho || "", detalle: u?.detalleTecho || "", preparacion: u?.preparacion || "Sin preparar" }));
   const [err, setErr] = useState({});
-  const [obs, setObs] = useState("");
+  const [obs, setObs] = useState(""); const [obsErr, setObsErr] = useState("");
+  // Conectado: si la unidad existe en Supabase (coduni), el techo se lee y guarda con los endpoints de HU-004
+  const conectada = Boolean(MODO_REAL && u?.coduni);
+  const [cat, setCat] = useState(null);
+  const [cargandoApi, setCargandoApi] = useState(conectada);
+  const [errApi, setErrApi] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => {
+    if (!conectada) return undefined;
+    let vivo = true;
+    Promise.all([api.tiposTechoApi(), api.proveedoresTechoApi(), api.techoUnidadApi(u.coduni)])
+      .then(([t, p, c]) => {
+        if (!vivo) return;
+        setCat({ tipos: t.data || [], proveedores: p.data || [] });
+        const conf = c.data || {};
+        const techo = conf.tipoTecho?.nombre || "Sin techo", proveedor = conf.proveedor?.nombre || "", detalle = conf.detalle || "";
+        setF((prev) => ({ ...prev, techo, proveedor, detalle }));
+        // Si en Supabase la configuración es otra (la cambiaron desde otra computadora), el inventario del panel se pone al día
+        const antes = normalizarTecho(u.techo, u.proveedorTecho);
+        if (antes !== techo || (u.proveedorTecho || "") !== proveedor || (u.detalleTecho || "") !== detalle) {
+          const estadoTecho = techo === "Sin techo" ? "" : antes === techo && (u.proveedorTecho || "") === proveedor ? u.estadoTecho : "Pendiente de instalación";
+          const retirar = estadoTecho === "Pendiente de instalación" && u.disponibilidad === "Disponible";
+          actualizar("unidades", u.id, { techo, proveedorTecho: proveedor, detalleTecho: detalle, estadoTecho, ...(retirar ? { disponibilidad: "No disponible" } : {}),
+            historial: [...(u.historial || []), { fecha: hoy(), detalle: `Techo actualizado desde Supabase: ${techo}${proveedor ? ` (${proveedor})` : ""}${retirar ? " · sale de la venta hasta instalarlo" : ""}` }] });
+        }
+      })
+      .catch((e) => vivo && setErrApi(mensajeError(e)))
+      .finally(() => vivo && setCargandoApi(false));
+    return () => { vivo = false; };
+  }, [conectada]); // eslint-disable-line
 
   if (!u) return <div className="space-y-3"><Aviso tipo="error">No encontramos la unidad {id}. Puede que se haya eliminado.</Aviso><Link className="btn btn-secondary" to="/admin/inventario">Volver al inventario</Link></div>;
 
   const m = modelos.find((x) => x.id === u.modelo);
   const compra = compras.find((c) => c.codcom === u.codcom);
-  const requiere = TECHO_REQUIERE_PROVEEDOR(f.techo);
+  const orden = (n) => { const i = TIPOS_TECHO.indexOf(n); return i < 0 ? 99 : i; };
+  const tipos = conectada && cat ? [...cat.tipos].sort((a, b) => orden(a.nomtte) - orden(b.nomtte)).map((t) => t.nomtte) : TIPOS_TECHO;
+  const requiere = conectada && cat ? Boolean(cat.tipos.find((t) => t.nomtte === f.techo)?.reqprotte) : TECHO_REQUIERE_PROVEEDOR(f.techo);
+  const proveedores = conectada && cat ? cat.proveedores.map((p) => p.nompro) : PROVEEDORES_TECHO;
+  const techoActual = normalizarTecho(u.techo, u.proveedorTecho);
   const log = (detalle) => [...(u.historial || []), { fecha: hoy(), detalle: `${detalle} · ${user.nombre}` }];
-  const cambio = f.techo !== u.techo || (requiere && f.proveedor !== (u.proveedorTecho || "")) || f.detalle !== (u.detalleTecho || "") || f.preparacion !== u.preparacion;
+  const cambio = f.techo !== techoActual || (requiere && f.proveedor !== (u.proveedorTecho || "")) || limpiar(f.detalle) !== limpiar(u.detalleTecho) || f.preparacion !== u.preparacion;
 
   async function guardar(e) {
     e.preventDefault();
+    if (guardando) return;
     const x = {};
-    if (requiere && !f.proveedor) x.proveedor = "Elige el proveedor que instalará la fibra.";
+    const detalle = requiere ? limpiar(f.detalle) : "";
+    if (!tipos.includes(f.techo)) x.techo = "Elige un tipo de techo.";
+    if (requiere && !f.proveedor) x.proveedor = "Elige el proveedor que hará la fibra deportiva.";
+    if (requiere && f.proveedor && !proveedores.includes(f.proveedor)) x.proveedor = "Ese proveedor no está habilitado para techos.";
+    if (detalle.length > MAX_DETALLE_TECHO) x.detalle = `Máximo ${MAX_DETALLE_TECHO} caracteres.`;
+    if (f.preparacion === "Lista para entrega" && !u.ubicacion) x.preparacion = "Primero registra la recepción de la unidad en una sede o almacén.";
     if (u.disponibilidad === "Vendida") x.general = "La unidad ya se vendió: su configuración no se modifica.";
+    if (conectada && !cat) x.general = errApi || "Espera a que cargue la configuración guardada en Supabase.";
     setErr(x); if (Object.keys(x).length) return;
-    const techoCambia = f.techo !== u.techo || (requiere && f.proveedor !== u.proveedorTecho);
+    const techoCambia = f.techo !== techoActual || (requiere && f.proveedor !== u.proveedorTecho);
     const estado = f.techo === "Sin techo" ? "" : techoCambia ? "Pendiente de instalación" : u.estadoTecho;
     const prep = estado === "Pendiente de instalación" && f.preparacion === "Lista para entrega" ? "Pendiente de techo" : f.preparacion;
-    const texto = `Techo: ${f.techo}${requiere ? ` (${f.proveedor})` : ""}${estado ? ` · ${estado.toLowerCase()}` : ""}${f.detalle ? ` · ${f.detalle}` : ""}${prep !== u.preparacion ? ` · preparación: ${prep}` : ""}`;
-    if (!(await confirmar({ titulo: "¿Guardar la configuración?", texto: `${u.id}: ${texto}.${techoCambia && u.estadoTecho === "Instalado" ? " El techo anterior figuraba instalado; el nuevo quedará pendiente de instalación." : ""}`, boton: "Guardar configuración" }))) return;
-    actualizar("unidades", u.id, { techo: f.techo, proveedorTecho: requiere ? f.proveedor : "", detalleTecho: f.detalle.trim(), estadoTecho: estado, preparacion: prep, historial: log(texto) }, `Techo actualizado en ${u.id}`);
-    if (prep !== f.preparacion) setF((p) => ({ ...p, preparacion: prep }));
-    toast("Configuración de techo guardada");
+    const texto = `Techo: ${f.techo}${requiere ? ` (${f.proveedor})` : ""}${estado ? ` · ${estado.toLowerCase()}` : ""}${detalle ? ` · ${detalle}` : ""}${prep !== u.preparacion ? ` · preparación: ${prep}` : ""}`;
+    if (!(await confirmar({ titulo: "¿Guardar la configuración?", texto: `${u.id}: ${texto}.${techoCambia && u.estadoTecho === "Instalado" ? " El techo anterior figuraba instalado; el nuevo quedará pendiente de instalación." : ""}${estado === "Pendiente de instalación" && u.disponibilidad === "Disponible" ? " La unidad saldrá del stock de la web hasta que se instale el techo y la vuelvas a liberar." : ""}`, boton: "Guardar configuración" }))) return;
+    if (conectada) {
+      const tipo = cat.tipos.find((t) => t.nomtte === f.techo);
+      const prov = requiere ? cat.proveedores.find((p) => p.nompro === f.proveedor) : null;
+      setGuardando(true);
+      try {
+        const r = await api.guardarTechoUnidadApi(u.coduni, { codtte: String(tipo.codtte), codpro: prov ? String(prov.codpro) : null, detalle: detalle || null });
+        const conf = r.data || {};
+        setF((p) => ({ ...p, techo: conf.tipoTecho?.nombre || f.techo, proveedor: conf.proveedor?.nombre || "", detalle: conf.detalle || "" }));
+      } catch (er) { setErr({ general: mensajeError(er) }); toast(mensajeError(er), "error"); return; }
+      finally { setGuardando(false); }
+    }
+    // Si una unidad disponible queda con techo pendiente de instalación, sale de la venta hasta que se instale y se libere
+    const retirar = estado === "Pendiente de instalación" && u.disponibilidad === "Disponible";
+    actualizar("unidades", u.id, { techo: f.techo, proveedorTecho: requiere ? f.proveedor : "", detalleTecho: detalle, estadoTecho: estado, preparacion: prep, ...(retirar ? { disponibilidad: "No disponible" } : {}), historial: log(`${texto}${retirar ? " · sale de la venta hasta instalar el techo y liberarla" : ""}`) }, `Techo actualizado en ${u.id}`);
+    setF((p) => ({ ...p, detalle, preparacion: prep }));
+    toast(conectada ? "Configuración de techo guardada en Supabase" : "Configuración de techo guardada");
   }
 
   async function confirmarInstalacion() {
@@ -86,8 +142,10 @@ function FichaUnidad({ id }) {
 
   function agregarObservacion(e) {
     e.preventDefault();
-    const t = obs.trim();
-    if (t.length < 3) return toast("Escribe la observación.", "error");
+    const t = limpiar(obs);
+    if (t.length < 3 || (t.match(/[\p{L}\d]/gu) || []).length < 3) { setObsErr("Escribe la observación (mínimo 3 letras o números)."); return; }
+    if (t.length > 300) { setObsErr("Máximo 300 caracteres."); return; }
+    setObsErr("");
     actualizar("unidades", u.id, { observaciones: [...(u.observaciones || []), { fecha: hoy(), autor: user.nombre, texto: t }], historial: log(`Observación comercial: ${t}`) }, `Observación en ${u.id}`);
     setObs(""); toast("Observación agregada. La configuración técnica no cambió.");
   }
@@ -116,6 +174,8 @@ function FichaUnidad({ id }) {
               {u.estadoTecho === "Pendiente de instalación" && gestiona && <button className="btn btn-primary !py-2" onClick={confirmarInstalacion}>Confirmar instalación</button>}
             </div>
 
+            {conectada && cargandoApi && <p className="mt-4 text-[13px] text-slate-500" data-techo-cargando>Cargando la configuración guardada en Supabase…</p>}
+            {conectada && errApi && <div className="mt-4"><Aviso tipo="error">No se pudo leer el techo desde Supabase: {errApi}</Aviso></div>}
             {u.estadoTecho === "Pendiente de instalación" && <div className="mt-4"><Aviso tipo="aviso">El techo {u.techo}{u.proveedorTecho ? ` de ${u.proveedorTecho}` : ""} figura pendiente de instalación.</Aviso></div>}
             {u.estadoTecho === "Instalado" && <div className="mt-4"><Aviso tipo="ok">Techo {u.techo}{u.proveedorTecho ? ` de ${u.proveedorTecho}` : ""} instalado{u.fechaInstalacion ? ` el ${u.fechaInstalacion}` : ""}.</Aviso></div>}
 
@@ -123,39 +183,40 @@ function FichaUnidad({ id }) {
               <form onSubmit={guardar} className="mt-5 space-y-5" noValidate>
                 <fieldset>
                   <legend className="field-label">Tipo de techo</legend>
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    {TIPOS_TECHO.map((t) => (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {tipos.map((t) => (
                       <label key={t} className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-3 transition ${f.techo === t ? "border-marino-700 bg-marino-50 text-marino dark:border-white/50 dark:bg-white/10 dark:text-white" : "border-slate-200 text-slate-500 hover:border-slate-300 dark:border-white/10"}`}>
-                        <input type="radio" name="techo" className="sr-only" checked={f.techo === t} onChange={() => setF({ ...f, techo: t, proveedor: TECHO_REQUIERE_PROVEEDOR(t) ? f.proveedor : "" })} />
+                        <input type="radio" name="techo" className="sr-only" checked={f.techo === t} onChange={() => { const req = conectada && cat ? Boolean(cat.tipos.find((x) => x.nomtte === t)?.reqprotte) : TECHO_REQUIERE_PROVEEDOR(t); setF({ ...f, techo: t, proveedor: req ? f.proveedor : "", detalle: req ? f.detalle : "" }); }} />
                         <SiluetaTecho tipo={t} />
-                        <span className="min-w-0"><span className="block text-[14px] font-semibold text-marino dark:text-white">{t}</span><span className="block text-[12px] leading-snug text-slate-500">{DESCRIPCION_TECHO[t]}</span></span>
+                        <span className="min-w-0"><span className="block text-[14px] font-semibold text-marino dark:text-white">{t}</span><span className="block text-[12px] leading-snug text-slate-500">{DESCRIPCION_TECHO[t] || "Tipo de techo registrado en el sistema."}</span></span>
                       </label>
                     ))}
                   </div>
+                  {err.techo && <p className="mt-1 text-[12px] font-medium text-acento">{err.techo}</p>}
                 </fieldset>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Campo etiqueta={requiere ? "Proveedor de la fibra (obligatorio)" : "Proveedor"} error={err.proveedor}>
+                  <Campo etiqueta={requiere ? "Proveedor de la fibra deportiva (obligatorio)" : "Proveedor"} error={err.proveedor}>
                     <select id="ficha-proveedor" className="field-input" value={f.proveedor} disabled={!requiere} onChange={(e) => setF({ ...f, proveedor: e.target.value })}>
                       <option value="">{requiere ? "Elige el proveedor" : "No aplica"}</option>
-                      {PROVEEDORES_TECHO.map((p) => <option key={p}>{p}</option>)}
+                      {proveedores.map((p) => <option key={p}>{p}</option>)}
                     </select>
                   </Campo>
-                  <Campo etiqueta="Preparación de la unidad">
+                  <Campo etiqueta="Preparación de la unidad" error={err.preparacion}>
                     <select id="ficha-preparacion" className="field-input" value={f.preparacion} onChange={(e) => setF({ ...f, preparacion: e.target.value })}>{ESTADOS_PREPARACION.map((p) => <option key={p}>{p}</option>)}</select>
                   </Campo>
-                  <Campo etiqueta="Detalle técnico (opcional)" className="sm:col-span-2">
-                    <input id="ficha-detalle" className="field-input" value={f.detalle} onChange={(e) => setF({ ...f, detalle: e.target.value })} placeholder="Ej: con portaequipaje, color de la fibra" />
+                  <Campo etiqueta={requiere ? "Detalle técnico (opcional)" : "Detalle técnico"} error={err.detalle} ayuda={requiere ? `${limpiar(f.detalle).length}/${MAX_DETALLE_TECHO} caracteres.` : "Solo aplica al techo de fibra deportiva."} className="sm:col-span-2">
+                    <input id="ficha-detalle" className="field-input" value={requiere ? f.detalle : ""} disabled={!requiere} maxLength={MAX_DETALLE_TECHO + 20} onChange={(e) => setF({ ...f, detalle: e.target.value })} placeholder={requiere ? "Ej: con portaequipaje, cámara de retroceso" : "No aplica"} />
                   </Campo>
                 </div>
                 {err.general && <Aviso tipo="error">{err.general}</Aviso>}
                 <div className="flex flex-wrap items-center gap-3">
-                  <button className="btn btn-primary" disabled={!cambio}>Guardar configuración</button>
+                  <button className="btn btn-primary" disabled={!cambio || guardando || (conectada && cargandoApi)}>{guardando ? "Guardando…" : "Guardar configuración"}</button>
                   {!cambio && <span className="text-[12.5px] text-slate-400">Sin cambios por guardar.</span>}
                 </div>
               </form>
             ) : (
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                {[["Tipo de techo", u.techo], ["Proveedor", u.proveedorTecho || "No aplica"], ["Preparación", u.preparacion]].map(([k, v]) => (
+                {[["Tipo de techo", conectada ? f.techo : techoActual], ["Proveedor", (conectada ? f.proveedor : u.proveedorTecho) || "No aplica"], ["Preparación", u.preparacion]].map(([k, v]) => (
                   <div key={k} className="rounded-xl bg-marino-50 p-4 dark:bg-white/5"><p className="text-[12px] text-slate-500">{k}</p><p className="font-semibold text-marino dark:text-white">{v}</p></div>
                 ))}
                 <p className="text-[12.5px] text-slate-500 sm:col-span-3">Tu rol puede consultar la configuración técnica, pero no cambiarla. Si el cliente pide otro techo, déjalo como observación comercial.</p>
@@ -171,8 +232,11 @@ function FichaUnidad({ id }) {
             )}
             {observa && (
               <form onSubmit={agregarObservacion} className="mt-4 flex flex-col gap-2 sm:flex-row" noValidate>
-                <input id="ficha-observacion" className="field-input" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ej: cliente interesado en fibra deportiva roja" />
-                <button className="btn btn-secondary shrink-0 !py-2.5">Agregar observación</button>
+                <div className="min-w-0 flex-1">
+                  <input id="ficha-observacion" className="field-input" maxLength={320} value={obs} onChange={(e) => { setObs(e.target.value); if (obsErr) setObsErr(""); }} placeholder="Ej: cliente interesado en fibra deportiva roja" />
+                  {obsErr && <p className="mt-1 text-[12px] font-medium text-acento" data-error-observacion>{obsErr}</p>}
+                </div>
+                <button className="btn btn-secondary shrink-0 self-start !py-2.5">Agregar observación</button>
               </form>
             )}
           </Card>

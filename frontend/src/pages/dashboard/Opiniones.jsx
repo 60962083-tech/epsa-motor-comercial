@@ -3,7 +3,7 @@ import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { ETIQUETAS_OPINION, SEDES_ATENCION } from "../../data/mockData";
 import { Aviso, Campo, Modal, PageHeader, Stat, Tabla, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
-import { soloLetras } from "../../lib/validar";
+import { esNombre, limpiarTexto, soloLetras } from "../../lib/validar";
 
 const VACIO = { nombre: "", sede: SEDES_ATENCION[0], modelo: "", etiqueta: ETIQUETAS_OPINION[0], estrellas: 5, texto: "", publicado: true, autoriza: false };
 
@@ -22,17 +22,20 @@ export default function Opiniones() {
   function abrir(o) { setErr({}); setF(o ? { ...VACIO, ...o, autoriza: !o.ejemplo } : { ...VACIO, modelo: modelos[0]?.id || "" }); setModal({ o }); }
   function validar() {
     const x = {};
-    if (f.nombre.trim().length < 3) x.nombre = "Escribe el nombre como se mostrará (por ejemplo: Rosa P.).";
-    if (!f.modelo) x.modelo = "Elige el modelo que compró.";
-    if (f.texto.trim().length < 20) x.texto = "La opinión debe tener al menos 20 caracteres.";
-    if (f.texto.length > 240) x.texto = "Máximo 240 caracteres.";
+    if (!esNombre(f.nombre)) x.nombre = "Escribe el nombre como se mostrará (por ejemplo: Rosa P.).";
+    if (!f.modelo || !modelos.some((m) => m.id === f.modelo)) x.modelo = "Elige el modelo que compró.";
+    if (!SEDES_ATENCION.includes(f.sede)) x.sede = "Elige la sede.";
+    const t = limpiarTexto(f.texto);
+    if (t.length < 20 || (t.match(/\p{L}/gu) || []).length < 10) x.texto = "La opinión debe tener al menos 20 caracteres de texto.";
+    else if (t.length > 240) x.texto = "Máximo 240 caracteres.";
+    if (!(Number(f.estrellas) >= 1 && Number(f.estrellas) <= 5)) x.estrellas = "Elige de 1 a 5 estrellas.";
     if (!f.autoriza) x.autoriza = "Confirma que el cliente autorizó publicar su opinión.";
     setErr(x); return Object.keys(x).length === 0;
   }
   function guardar(e) {
     e.preventDefault(); if (!validar()) return;
     const { autoriza, ...datos } = f;
-    datos.nombre = datos.nombre.trim(); datos.texto = datos.texto.trim(); datos.estrellas = Number(datos.estrellas); datos.ejemplo = false;
+    datos.nombre = limpiarTexto(datos.nombre); datos.texto = limpiarTexto(datos.texto); datos.estrellas = Number(datos.estrellas); datos.ejemplo = false;
     if (modal.o) { actualizar("opiniones", modal.o.id, datos, `Opinión editada: ${datos.nombre}`); toast("Opinión actualizada"); }
     else { agregar("opiniones", { ...datos, id: opiniones.reduce((m, o) => Math.max(m, o.id), 0) + 1 }, `Opinión agregada: ${datos.nombre}`); toast(datos.publicado ? "Opinión publicada en el inicio de la web" : "Opinión guardada sin publicar"); }
     setModal(null);

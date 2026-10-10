@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import * as D from "../data/mockData";
 import { MODO_REAL } from "../lib/config";
 import { modelosPublicos } from "../lib/api";
-import { emparejarModelos } from "../lib/modelos";
+import { emparejarModelos, modeloDesdeApi } from "../lib/modelos";
 
 /**
  * appStore — datos de toda la web (pública + panel).
@@ -24,7 +24,14 @@ const BASE = () => ({
 function cargar() {
   try {
     const g = localStorage.getItem(CLAVE);
-    if (g) return { ...BASE(), ...JSON.parse(g) };
+    if (g) {
+      const d = { ...BASE(), ...JSON.parse(g) };
+      // Techos guardados con los nombres anteriores: se pasan a los tipos del backend (HU-004)
+      // El voucher de un pedido se guardaba en «comprobante» (que es la boleta/factura): pasa a «voucherPago»
+      d.ventas = (d.ventas || []).map((v) => (typeof v.comprobante === "string" ? { ...v, voucherPago: v.comprobante, comprobante: null } : v));
+      d.unidades = (d.unidades || []).map((u) => { const techo = D.normalizarTecho(u.techo, u.proveedorTecho); return techo === u.techo ? u : { ...u, techo, proveedorTecho: D.TECHO_REQUIERE_PROVEEDOR(techo) ? u.proveedorTecho : "" }; });
+      return d;
+    }
   } catch { /* storage no disponible */ }
   return BASE();
 }
@@ -52,7 +59,8 @@ export function AppProvider({ children }) {
   const agregar = useCallback((ent, item, nota) => {
     let creado;
     setS((p) => {
-      creado = { id: typeof item.id !== "undefined" ? item.id : siguienteId(p[ent]), ...item };
+      // El id va al final: un «id: undefined» en el objeto no debe borrar el id generado
+      creado = { ...item, id: item.id !== undefined && item.id !== null && item.id !== "" ? item.id : siguienteId(p[ent]) };
       return { ...p, [ent]: [creado, ...p[ent]] };
     });
     if (nota) registrar(nota);
@@ -89,6 +97,9 @@ export function AppProvider({ children }) {
         return { ...m, codmodApi: String(a.codmod), descripcion: m.editadoEnPanel ? m.descripcion : a.desmod || m.descripcion, imagenApi: m.fotoPropia ? undefined : a.imagenes?.[0]?.urlimo };
       })
       .filter(Boolean);
+    // Modelos que Michelle publica en Supabase y que la web aún no tiene: también se ven en la web (con datos básicos)
+    const ocupados = new Set(s.modelos.map((m) => m.id));
+    publicos = publicos.concat(par.sinFicha.map((a) => { const m = modeloDesdeApi(a, ocupados); ocupados.add(m.id); return m; }));
   }
 
   const api = {

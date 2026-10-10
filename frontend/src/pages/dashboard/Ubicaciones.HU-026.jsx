@@ -10,7 +10,7 @@ import { TIPOS_UBICACION, TIPO_A_API, TIPO_DE_API } from "../../data/mockData";
 import { Aviso, Campo, Modal, PageHeader, Tabla, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
 
 const norm = (t) => String(t).trim().replace(/\s+/g, " ").toLowerCase();
-const VACIO = { nombre: "", tipo: "Sede propia", direccion: "", horario: "Lunes a Sábado de 9:00 AM a 5:00 PM", horarioNota: "Domingos: consultar por WhatsApp o en sede", telefono: "51907721481", correo: "inversionesepsamotor@gmail.com" };
+const VACIO = { nombre: "", tipo: "Sede propia", direccion: "", horario: "Lunes a Sábado de 9:00 AM a 5:00 PM", horarioNota: "Domingos: consultar por WhatsApp o en sede", telefono: "907721481", correo: "inversionesepsamotor@gmail.com" };
 
 /**
  * Ubicaciones — HU-026. Con backend: GET/POST/PUT/PATCH /api/ubicaciones (baja lógica, sin DELETE).
@@ -19,6 +19,7 @@ const VACIO = { nombre: "", tipo: "Sede propia", direccion: "", horario: "Lunes 
  */
 export default function Ubicaciones() {
   const { ubicaciones, unidades, agregar, actualizar, eliminar, reemplazar } = useApp();
+  const limpio = (t) => String(t || "").trim().replace(/\s+/g, " ");
   const { puede } = useAuth();
   const toast = useToast(); const confirmar = useConfirm();
   const [q, setQ] = useState(""); const [tipo, setTipo] = useState(""); const [est, setEst] = useState("");
@@ -52,12 +53,18 @@ export default function Ubicaciones() {
     e.preventDefault(); const x = {};
     const nombre = f.nombre.trim().replace(/\s+/g, " ");
     if (!nombre || nombre.length > 120) x.nombre = "El nombre es obligatorio (máx. 120 caracteres).";
+    else if ((nombre.match(/\p{L}/gu) || []).length < 2) x.nombre = "Escribe un nombre con letras (por ejemplo, Almacén Ancón).";
     if (ubicaciones.some((u) => norm(u.nombre) === norm(nombre) && u.id !== modal.u?.id)) x.nombre = "Ya existe una ubicación con ese nombre.";
     if (f.direccion.trim().length > 250) x.direccion = "La dirección admite hasta 250 caracteres.";
+    else if (f.tipo === "Sede propia" && (limpio(f.direccion).length < 8 || (limpio(f.direccion).match(/\p{L}/gu) || []).length < 3)) x.direccion = "Una sede propia se publica en la web: escribe su dirección.";
+    if (f.tipo === "Sede propia") {
+      if (limpio(f.horario).length < 5 || !/\d/.test(f.horario)) x.horario = "Escribe el horario de atención (con sus horas)."; else if (limpio(f.horario).length > 150) x.horario = "Máximo 150 caracteres.";
+      if (limpio(f.horarioNota).length > 150) x.horarioNota = "Máximo 150 caracteres.";
+    }
     if (f.tipo === "Sede propia" && f.telefono && !/^9\d{8}$/.test(f.telefono)) x.telefono = "Celular / WhatsApp de 9 dígitos que empiece con 9.";
     if (f.tipo === "Sede propia" && f.correo && !esCorreo(f.correo)) x.correo = "Escribe un correo válido.";
     setErr(x); if (Object.keys(x).length) return;
-    const datos = { ...f, nombre, direccion: f.direccion.trim(), telefono: f.telefono.replace(/\s/g, "") };
+    const datos = { ...f, nombre, direccion: limpio(f.direccion), horario: limpio(f.horario), horarioNota: limpio(f.horarioNota), telefono: f.telefono.replace(/\s/g, "") };
     setGuardando(true);
     try {
       let id = modal.u?.id;
@@ -66,7 +73,11 @@ export default function Ubicaciones() {
         const r = modal.u ? await api.editarUbicacion(modal.u.id, cuerpo) : await api.crearUbicacion(cuerpo);
         id = Number(r.data?.codubi ?? id);
       }
-      if (modal.u) actualizar("ubicaciones", modal.u.id, { ...datos, id }, `Ubicación editada: ${nombre}`);
+      if (modal.u) {
+        actualizar("ubicaciones", modal.u.id, { ...datos, id }, `Ubicación editada: ${nombre}`);
+        // Las unidades guardan la ubicación por nombre: al renombrarla se actualizan para no perderlas
+        if (modal.u.nombre !== nombre) unidades.filter((u) => u.ubicacion === modal.u.nombre).forEach((u) => actualizar("unidades", u.id, { ubicacion: nombre }));
+      }
       else agregar("ubicaciones", { ...datos, id: id ?? undefined, activo: true }, `Ubicación creada: ${nombre}`);
       toast(modal.u ? "Ubicación actualizada. Los cambios ya se ven en la web." : "Ubicación creada");
       setModal(null);
@@ -77,7 +88,7 @@ export default function Ubicaciones() {
     const nuevo = !u.activo;
     if (!nuevo) {
       // Con backend, la regla la valida la base de datos (PT409) y se muestra su mensaje
-      const n = MODO_REAL ? 0 : unidadesEn(u.nombre);
+      const n = MODO_REAL ? 0 : unidades.filter((x) => x.ubicacion === u.nombre).length; // igual que el backend: cuenta todas
       if (n) {
         if (await confirmar({ titulo: `No se puede desactivar ${u.nombre}`, texto: `Tiene ${n} unidad(es) asignadas. Trasládalas a otra ubicación activa y luego vuelve a intentarlo.`, boton: "Ver esas unidades" })) navigate("/admin/inventario", { state: { ubic: u.nombre } });
         return;
@@ -141,10 +152,10 @@ export default function Ubicaciones() {
         <form id="f-ub" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
           <Campo etiqueta="Nombre" error={err.nombre}><input id="ub-nombre" className="field-input" maxLength={120} value={f.nombre} onChange={set("nombre")} /></Campo>
           <Campo etiqueta="Tipo"><select className="field-input" value={f.tipo} onChange={set("tipo")}>{TIPOS_UBICACION.map((t) => <option key={t}>{t}</option>)}</select></Campo>
-          <Campo etiqueta="Dirección (opcional)" error={err.direccion} className="sm:col-span-2"><input className="field-input" value={f.direccion} onChange={set("direccion")} /></Campo>
+          <Campo etiqueta={f.tipo === "Sede propia" ? "Dirección" : "Dirección (opcional)"} error={err.direccion} className="sm:col-span-2"><input className="field-input" maxLength={250} value={f.direccion} onChange={set("direccion")} /></Campo>
           {f.tipo === "Sede propia" && <>
-            <Campo etiqueta="Horario de atención"><input className="field-input" value={f.horario} onChange={set("horario")} /></Campo>
-            <Campo etiqueta="Nota de horario"><input className="field-input" value={f.horarioNota} onChange={set("horarioNota")} /></Campo>
+            <Campo etiqueta="Horario de atención" error={err.horario}><input className="field-input" maxLength={150} value={f.horario} onChange={set("horario")} /></Campo>
+            <Campo etiqueta="Nota de horario" error={err.horarioNota}><input className="field-input" maxLength={150} value={f.horarioNota} onChange={set("horarioNota")} /></Campo>
             <Campo etiqueta="Celular / WhatsApp" error={err.telefono}><input id="ub-telefono" className="field-input" inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" value={f.telefono} onChange={(e) => setF({ ...f, telefono: soloDigitos(e.target.value, 9) })} /></Campo>
             <Campo etiqueta="Correo" error={err.correo}><input type="email" className="field-input" value={f.correo} onChange={set("correo")} /></Campo>
             <div className="sm:col-span-2"><Aviso>Horario, teléfono y correo se publican en la página <b>Sedes y sucursales</b>. Se actualizan al instante.</Aviso></div>

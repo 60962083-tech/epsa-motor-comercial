@@ -1,21 +1,35 @@
-import { MODO_REAL, SUPABASE_URL, SUPABASE_ANON_KEY } from "./config";
-import { leerSesion } from "./api";
+import { MODO_REAL } from "./config";
+import { consultarPdfFacturaApi, subirPdfFacturaApi, urlPdfFacturaApi } from "./api";
 import { ApiError } from "./errores";
 
 /**
  * Archivos adjuntos (PDF de la factura de Crosland).
- * - Conectado: se suben al almacenamiento privado de Supabase (bucket «facturas-compra»).
- *   El bucket y sus permisos se crean con docs/supabase-storage-facturas.sql.
+ * - Conectado: se usan los endpoints del backend de Michelle (bucket privado «facturas-compra»):
+ *   POST /api/compras/:id/factura/archivo (campo «archivo», multipart), GET …/archivo y GET …/archivo/url.
+ *   Cada factura admite un solo PDF y se guarda como compras/{codcom}/factura.pdf.
  * - Demostración: se guardan en este navegador (IndexedDB) y, si no está disponible, en memoria.
  */
-const BUCKET = "facturas-compra";
 const memoria = new Map();
 export const MAX_PDF = 10 * 1024 * 1024;
 
+/** Revisión rápida (sin leer el archivo): tipo, extensión y tamaño. */
 export function validarPdf(archivo) {
   if (!archivo) return "Elige un archivo.";
-  if (archivo.type !== "application/pdf" && !/\.pdf$/i.test(archivo.name)) return "Solo se aceptan archivos PDF.";
+  const tipoOk = ["application/pdf", "application/x-pdf"].includes(archivo.type) || (!archivo.type && /\.pdf$/i.test(archivo.name || ""));
+  if (!tipoOk) return "Solo se aceptan archivos PDF.";
+  if (!archivo.size) return "El PDF está vacío.";
   if (archivo.size > MAX_PDF) return "El PDF supera los 10 MB.";
+  return "";
+}
+
+/** Revisión del contenido: un PDF real empieza con «%PDF» (evita fotos o documentos renombrados). */
+export async function validarPdfContenido(archivo) {
+  const rapido = validarPdf(archivo);
+  if (rapido) return rapido;
+  try {
+    const cabecera = await archivo.slice(0, 5).text();
+    if (!cabecera.startsWith("%PDF")) return "El archivo no es un PDF válido.";
+  } catch { /* si el navegador no puede leerlo, decide el servidor */ }
   return "";
 }
 
@@ -43,53 +57,45 @@ async function leerLocal(clave) {
   } catch { return null; }
 }
 
-const cabeceras = () => ({ apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${leerSesion()?.access_token || ""}` });
-
-/** Sube el PDF y devuelve los datos que se guardan en la factura. */
+/** Sube el PDF y devuelve los datos del adjunto. */
 export async function subirPdfFactura(codcom, archivo) {
-  const error = validarPdf(archivo);
+  const error = await validarPdfContenido(archivo);
   if (error) throw new ApiError(400, error);
+  const fecha = new Date().toLocaleDateString("en-CA");
+  if (MODO_REAL) {
+    await subirPdfFacturaApi(codcom, archivo);
+    return { codcom: String(codcom), api: true, nombre: archivo.name, tamano: archivo.size, fecha };
+  }
   const nombre = archivo.name.replace(/[^\w.-]+/g, "_");
   const ruta = `compra-${codcom}/${Date.now()}-${nombre}`;
-  if (MODO_REAL) {
-    let r;
-    try {
-      r = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${ruta}`, { method: "POST", headers: { ...cabeceras(), "Content-Type": "application/pdf", "x-upsert": "true" }, body: archivo });
-    } catch { throw new ApiError(0, "No se pudo subir el PDF: sin conexión con Supabase."); }
-    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new ApiError(r.status, j.message || j.error || "No se pudo subir el PDF de la factura."); }
-  } else {
-    await guardarLocal(ruta, archivo);
-  }
-  return { ruta, nombre: archivo.name, tamano: archivo.size, fecha: new Date().toISOString().slice(0, 10) };
+  await guardarLocal(ruta, archivo);
+  return { ruta, nombre: archivo.name, tamano: archivo.size, fecha };
 }
 
-/** Conectado: busca en el almacenamiento el último PDF de la compra (lo ve cualquier usuario del panel). */
+/** Conectado: pregunta al backend si la factura ya tiene su PDF (lo ve cualquier gerente o administradora). */
 export async function buscarPdfFactura(codcom) {
   if (!MODO_REAL) return null;
   try {
-    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`, { method: "POST", headers: { ...cabeceras(), "Content-Type": "application/json" }, body: JSON.stringify({ prefix: `compra-${codcom}/`, limit: 20, sortBy: { column: "created_at", order: "desc" } }) });
-    const lista = r.ok ? await r.json() : [];
-    const a = Array.isArray(lista) ? lista.find((x) => /\.pdf$/i.test(x.name)) : null;
-    return a ? { ruta: `compra-${codcom}/${a.name}`, nombre: a.name.replace(/^\d+-/, ""), tamano: a.metadata?.size || 0, fecha: String(a.created_at || "").slice(0, 10) } : null;
-  } catch { return null; }
+    const r = await consultarPdfFacturaApi(codcom);
+    return r.data?.archivo_adjuntado ? { codcom: String(codcom), api: true, nombre: "factura.pdf" } : null;
+  } catch { return null; } // sin factura registrada (404) o sin permiso: no hay PDF que mostrar
 }
 
 /** Devuelve una URL para abrir o descargar el PDF guardado. */
 export async function urlPdfFactura(adjunto) {
-  if (!adjunto?.ruta) throw new ApiError(404, "Esta factura no tiene PDF adjunto.");
   if (MODO_REAL) {
-    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${BUCKET}/${adjunto.ruta}`, { method: "POST", headers: { ...cabeceras(), "Content-Type": "application/json" }, body: JSON.stringify({ expiresIn: 600 }) }).catch(() => null);
-    const j = r ? await r.json().catch(() => ({})) : {};
-    if (!r?.ok || !j.signedURL) throw new ApiError(r?.status || 0, j.message || "No se pudo abrir el PDF.");
-    return `${SUPABASE_URL}/storage/v1${j.signedURL}`;
+    if (!adjunto?.codcom) throw new ApiError(404, "Esta factura no tiene PDF adjunto.");
+    const r = await urlPdfFacturaApi(adjunto.codcom);
+    if (!r.data?.url) throw new ApiError(500, "No se pudo abrir el PDF.");
+    return r.data.url; // enlace temporal (60 s) del bucket privado
   }
+  if (!adjunto?.ruta) throw new ApiError(404, "Esta factura no tiene PDF adjunto.");
   const blob = await leerLocal(adjunto.ruta);
   if (!blob) throw new ApiError(404, "El PDF se guardó en otro navegador; adjúntalo de nuevo para verlo aquí.");
   return URL.createObjectURL(blob);
 }
 
-// Con el backend conectado, la API de compras aún no devuelve la ruta del PDF:
-// se recuerda aquí (por compra) para poder volver a abrirlo desde este equipo.
+// Modo demostración: se recuerda el adjunto por compra para volver a abrirlo desde este equipo.
 const CLAVE_ADJ = "epsa-adjuntos-factura";
 export function adjuntoRecordado(codcom) {
   try { return JSON.parse(localStorage.getItem(CLAVE_ADJ) || "{}")[codcom] || null; } catch { return null; }

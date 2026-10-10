@@ -11,14 +11,14 @@ function ultimosMeses(n) {
   const h = new Date();
   return Array.from({ length: n }, (_, i) => {
     const d = new Date(h.getFullYear(), h.getMonth() - (n - 1 - i), 1);
-    return { clave: d.toISOString().slice(0, 7), etiqueta: MESES[d.getMonth()] };
+    return { clave: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, etiqueta: MESES[d.getMonth()] };
   });
 }
 
 /** Resumen operativo: KPIs, gráficos interactivos y puesta en marcha comercial. */
 export default function Resumen() {
   const { user } = useAuth();
-  const { ventas, leads, unidades, seguimientos, modelos, ubicaciones, equipo, metas, actividad } = useApp();
+  const { ventas, leads, unidades, seguimientos, modelos, ubicaciones, equipo, metas, actividad, publicos = [] } = useApp();
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [sede, setSede] = useState("Todas");
@@ -28,7 +28,7 @@ export default function Resumen() {
   const V = useMemo(() => ventas.filter((v) => en(v.fecha) && (sede === "Todas" || v.sede === sede)), [ventas, desde, hasta, sede]); // eslint-disable-line
   const L = useMemo(() => leads.filter((l) => en(l.fecha) && (sede === "Todas" || l.sede === sede)), [leads, desde, hasta, sede]); // eslint-disable-line
   const U = unidades.filter((u) => sede === "Todas" || u.ubicacion === sede);
-  const nombreModelo = (id) => modelos.find((m) => m.id === id)?.nombre || id;
+  const nombreModelo = (id) => (modelos.find((m) => m.id === id) || publicos.find((m) => m.id === id))?.nombre || id;
 
   const cerradas = V.filter((v) => ["Pedido registrado", "Entregado"].includes(v.etapa));
   const solicitudes = ventas.filter((v) => v.etapa === "Solicitud web").length;
@@ -37,7 +37,7 @@ export default function Resumen() {
   const adelantos = cerradas.reduce((s, v) => s + v.adelanto, 0);
   const ganados = L.filter((l) => l.estado === "Cerrado ganado").length;
   const conv = L.length ? Math.round((ganados / L.length) * 100) : 0;
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = new Date().toLocaleDateString("en-CA"); // fecha local
   const pendSeg = seguimientos.filter((s) => !s.hecho);
   const vencidos = pendSeg.filter((s) => s.fecha < hoy).length;
   const disp = U.filter((u) => u.disponibilidad === "Disponible").length;
@@ -56,7 +56,7 @@ export default function Resumen() {
   const consultados = cuenta(L, (l) => l.modelo).map((d) => ({ ...d, etiqueta: nombreModelo(d.id) })).slice(0, 6);
   const inventarioPorUbic = cuenta(unidades, (u) => u.ubicacion || "Sin recepción");
 
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = new Date().toLocaleDateString("en-CA").slice(0, 7);
   const lista = [
     ["Hay sedes activas", ubicaciones.some((u) => u.tipo === "Sede propia" && u.activo), "/admin/ubicaciones"],
     ["Hay modelos publicados", modelos.some((m) => m.estado === "Publicado"), "/admin/modelos"],

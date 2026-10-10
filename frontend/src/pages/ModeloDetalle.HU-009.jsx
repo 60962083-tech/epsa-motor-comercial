@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useApp } from "../store/appStore.jsx";
 import { useCotizar } from "../components/CotizarModal";
@@ -9,6 +9,8 @@ import WhatsAppButton from "../components/WhatsAppButton.HU-013";
 import { IconCheck, IconLlanta, IconMedidor, IconMotor, IconPiston, IconRayo } from "../components/Icons";
 import { ProductoNoDisponible, SinStockAviso } from "./Errores";
 import { TarjetaModelo } from "./Modelos.HU-008";
+import { MODO_REAL } from "../lib/config";
+import { modeloPublicadoApi } from "../lib/api";
 
 const TECHOS = [SIN_TECHO, ...OPCIONES_TECHO];
 const INCLUYE = [
@@ -41,13 +43,24 @@ function ModeloDetalle({ id }) {
   const [inicial, setInicial] = useState(30);
   const [plazo, setPlazo] = useState(24);
   const stock = useMemo(() => unidades.filter((u) => u.modelo === id && u.disponibilidad === "Disponible").length, [unidades, id]);
+  // HU-009 conectado: se consulta la ficha del modelo en el backend (GET /api/modelos/:id).
+  // Si Supabase lo despublicó, la web muestra «Producto no disponible» aunque el catálogo aún no se haya recargado.
+  const [ficha, setFicha] = useState(null); const [despublicado, setDespublicado] = useState(false);
+  useEffect(() => {
+    if (!MODO_REAL || !m?.codmodApi) return undefined;
+    let vivo = true;
+    modeloPublicadoApi(m.codmodApi).then((r) => vivo && setFicha(r.data || null)).catch((e) => { if (vivo && e.status === 404) setDespublicado(true); });
+    return () => { vivo = false; };
+  }, [m?.codmodApi]); // eslint-disable-line
 
-  if (!m) return <ProductoNoDisponible nombre={retirado?.nombre} />;
+  if (!m || despublicado) return <ProductoNoDisponible nombre={m?.nombre || retirado?.nombre} />;
 
-  const colores = m.colores?.length ? m.colores : ["Rojo"];
-  const colorSel = color || colores[0];
+  const desc = ficha?.desmod && !m.editadoEnPanel ? ficha.desmod : m.descripcion;
+  const conPrecio = Number(m.precioDesde) > 0; // un modelo que solo existe en Supabase aún no tiene precio
+  const colores = m.colores?.length ? m.colores : [];
+  const colorSel = color || colores[0] || "";
   const t = TECHOS.find((o) => o.id === techo);
-  const total = m.precioDesde + (t?.precio || 0);
+  const total = (Number(m.precioDesde) || 0) + (t?.precio || 0);
   const montoInicial = Math.round((total * inicial) / 100);
   const cuota = Math.round((total - montoInicial) / plazo);
   const relacionados = publicos.filter((x) => x.id !== m.id && x.familia === m.familia).concat(publicos.filter((x) => x.id !== m.id && x.familia !== m.familia)).slice(0, 4);
@@ -68,7 +81,7 @@ function ModeloDetalle({ id }) {
                 <div className="pointer-events-none absolute inset-x-[15%] bottom-[10%] h-[12%] rounded-[50%] bg-marino/10 blur-2xl dark:bg-black/40" aria-hidden="true" />
                 <ModeloImg modelo={m} color={colorSel} className="relative mx-auto aspect-[4/3] w-full object-contain" />
               </div>
-              <div className="mt-5 flex flex-wrap items-center gap-4">
+              {colores.length > 0 && <div className="mt-5 flex flex-wrap items-center gap-4">
                 <p className="text-[14px] text-slate-500">{colores.length > 1 ? "Color" : "Disponible en"} <span className="font-semibold text-marino dark:text-white">{colorSel}</span></p>
                 <div className="flex flex-wrap gap-2.5" role="radiogroup" aria-label="Colores disponibles">
                   {colores.map((c) => (
@@ -76,8 +89,8 @@ function ModeloDetalle({ id }) {
                       className={`h-9 w-9 rounded-full border-2 transition disabled:cursor-default ${colorSel === c ? "scale-110 border-white ring-2 ring-marino-700 dark:ring-white" : "border-white/70 ring-1 ring-slate-300 hover:scale-105 dark:ring-white/20"}`} style={{ background: COLOR_HEX[c] || "#94a3b8" }} />
                   ))}
                 </div>
-              </div>
-              <p className="mt-2 text-[12.5px] text-slate-400">Foto referencial{colores.length > 1 ? `. Disponible en ${colores.length} colores.` : "."}</p>
+              </div>}
+              <p className="mt-2 text-[12.5px] text-slate-400">Foto referencial{colores.length > 1 ? `. Disponible en ${colores.length} colores.` : colores.length ? "." : ". Consulta los colores disponibles con tu asesor."}</p>
             </div>
 
             <div className="min-w-0">
@@ -86,14 +99,14 @@ function ModeloDetalle({ id }) {
               </div>
               <p className="mt-4 text-[15px] font-medium text-slate-500">{m.familia}</p>
               <h1 className="font-display text-[3rem] font-bold uppercase leading-[0.9] tracking-tight text-marino sm:text-[4.25rem] dark:text-white">{m.nombre}</h1>
-              <p className="mt-5 max-w-xl text-[16px] leading-relaxed text-slate-600 dark:text-slate-300">{m.descripcion}</p>
+              <p className="mt-5 max-w-xl text-[16px] leading-relaxed text-slate-600 dark:text-slate-300">{desc}</p>
 
               <div className="mt-7 flex flex-wrap items-end gap-x-5 gap-y-2">
                 <div>
-                  <p className="text-[13px] font-medium text-slate-500">Desde</p>
+                  <p className="text-[13px] font-medium text-slate-500">{conPrecio ? "Desde" : "Precio"}</p>
                   <p className="cifra font-display text-[3.25rem] font-bold leading-none text-marino dark:text-white">{formatoSoles(m.precioDesde)}</p>
                 </div>
-                <p className="max-w-[16rem] pb-1 text-[12px] leading-snug text-slate-400">Precio de la moto sin techo. No incluye matrícula ni SOAT; puede variar por zona.</p>
+                <p className="max-w-[16rem] pb-1 text-[12px] leading-snug text-slate-400">{conPrecio ? "Precio de la moto sin techo. No incluye matrícula ni SOAT; puede variar por zona." : "Pide tu cotización y un asesor te confirma el precio."}</p>
               </div>
               <div className="mt-6 rounded-2xl border border-slate-200 p-4 dark:border-white/10">
                 <p className="text-[13.5px] font-semibold text-marino dark:text-white">Techo de fibra <span className="font-normal text-slate-500">· adicional, se suma al precio</span></p>
@@ -108,12 +121,12 @@ function ModeloDetalle({ id }) {
                 </div>
                 <p className="mt-3 flex items-baseline justify-between gap-3 border-t border-slate-200 pt-3 text-[14px] dark:border-white/10">
                   <span className="text-slate-500">Total {t?.precio ? `con techo ${t.nombre.toLowerCase()}` : "sin techo"}</span>
-                  <span className="cifra font-display text-[1.9rem] font-bold leading-none text-marino dark:text-white" data-total-ficha>{formatoSoles(total)}</span>
+                  <span className="cifra font-display text-[1.9rem] font-bold leading-none text-marino dark:text-white" data-total-ficha>{conPrecio ? formatoSoles(total) : "A consultar"}</span>
                 </p>
               </div>
               <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap">
                 <button onClick={pedir} className="btn btn-acento">Quiero que me contacten</button>
-                <WhatsAppButton mensaje={`Hola, quisiera información sobre el ${m.nombre} en color ${colorSel}${t?.precio ? ` con techo ${t.nombre}` : ""}.`} />
+                <WhatsAppButton mensaje={`Hola, quisiera información sobre el ${m.nombre}${colorSel ? ` en color ${colorSel}` : ""}${t?.precio ? ` con techo ${t.nombre}` : ""}.`} />
               </div>
               <p className="mt-4 text-[13.5px]">
                 {stock > 0
@@ -188,11 +201,11 @@ function ModeloDetalle({ id }) {
               <select id="calc-plazo" className="field-input" value={plazo} onChange={(e) => setPlazo(Number(e.target.value))}>{PLAZOS.map((p) => <option key={p} value={p}>{p} meses</option>)}</select>
             </div>
           </div>
-          <dl className="mt-6 space-y-2 border-t border-slate-200 pt-5 text-[14.5px] dark:border-white/10">
+          {conPrecio ? <dl className="mt-6 space-y-2 border-t border-slate-200 pt-5 text-[14.5px] dark:border-white/10">
             <div className="flex justify-between"><dt className="text-slate-500">Moto {formatoSoles(m.precioDesde)}{t?.precio ? ` + techo ${formatoSoles(t.precio)}` : ""}</dt><dd className="cifra font-semibold">{formatoSoles(total)}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-500">Inicial ({inicial}%)</dt><dd className="cifra font-semibold">{formatoSoles(montoInicial)}</dd></div>
             <div className="flex items-baseline justify-between pt-2"><dt className="font-semibold">Cuota mensual aprox.</dt><dd className="cifra font-display text-[2.2rem] font-bold leading-none text-acento">{formatoSoles(cuota)}</dd></div>
-          </dl>
+          </dl> : <p className="mt-6 border-t border-slate-200 pt-5 text-[14.5px] text-slate-500 dark:border-white/10">Este modelo aún no tiene precio publicado. Cotízalo y un asesor te envía el precio y la cuota.</p>}
           <p className="mt-2 text-[12px] text-slate-400">Cálculo referencial sin intereses ni gastos. La cuota real la confirma un asesor.</p>
           <button onClick={pedir} className="btn btn-primary mt-6 w-full">Cotizar con estos datos</button>
         </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { listarUsuariosSupabase } from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
-import { soloDigitos, soloLetras } from "../../lib/validar";
+import { esCorreo, esNombreCompleto, limpiarTexto, MSJ, soloDigitos, soloLetras } from "../../lib/validar";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { ROLES, SEDES_ATENCION } from "../../data/mockData";
@@ -33,24 +33,33 @@ export default function Equipo() {
   function abrir(p) { setErr({}); setF(p ? { ...VACIO, ...p, clave: "" } : VACIO); setModal({ p }); }
   function validar() {
     const x = {};
-    const nombre = f.nombre.trim();
-    if (nombre.length < 3) x.nombre = "Escribe el nombre completo.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.correo.trim())) x.correo = "Escribe un correo válido.";
-    else if (equipo.some((p) => p.correo.toLowerCase() === f.correo.trim().toLowerCase() && p.id !== modal?.p?.id)) x.correo = "Ese correo ya tiene una cuenta.";
-    if (equipo.some((p) => p.nombre.toLowerCase() === nombre.toLowerCase() && p.id !== modal?.p?.id)) x.nombre = "Ya hay una persona con ese nombre; agrega su apellido.";
+    const nombre = limpiarTexto(f.nombre);
+    const correo = f.correo.trim().toLowerCase();
+    if (!esNombreCompleto(nombre)) x.nombre = MSJ.nombreCompleto;
+    if (!esCorreo(correo)) x.correo = MSJ.correo;
+    else if (equipo.some((p) => p.correo.toLowerCase() === correo && p.id !== modal?.p?.id)) x.correo = "Ese correo ya tiene una cuenta.";
+    if (!x.nombre && equipo.some((p) => p.nombre.toLowerCase() === nombre.toLowerCase() && p.id !== modal?.p?.id)) x.nombre = "Ya hay una persona con ese nombre; agrega su segundo apellido.";
     if (f.celular && !/^9\d{8}$/.test(f.celular)) x.celular = "Celular de 9 dígitos que empiece con 9.";
-    if (f.usuario && !/^[a-z0-9._-]{3,30}$/.test(f.usuario)) x.usuario = "Usuario de 3 a 30 letras minúsculas o números, sin espacios.";
-    else if (f.usuario && equipo.some((p) => p.usuario?.toLowerCase() === f.usuario && p.id !== modal?.p?.id)) x.usuario = "Ese usuario ya existe.";
-    if (!modal?.p && f.clave.length < MIN_CLAVE) x.clave = `La contraseña temporal debe tener al menos ${MIN_CLAVE} caracteres.`;
-    if (modal?.p && f.clave && f.clave.length < MIN_CLAVE) x.clave = `Mínimo ${MIN_CLAVE} caracteres (o déjala vacía para no cambiarla).`;
-    if (modal?.p && !f.clave && modal.p.correo.toLowerCase() !== f.correo.trim().toLowerCase()) x.clave = "Cambiaste el correo: asigna una nueva contraseña temporal.";
+    // Si no se escribe usuario, se arma con el correo: también debe ser válido y único
+    const usuario = f.usuario || correo.split("@")[0];
+    if (!/^[a-z0-9._-]{3,30}$/.test(usuario)) x.usuario = f.usuario ? "Usuario de 3 a 30 letras minúsculas o números, sin espacios." : "Escribe un usuario (el que sale del correo no es válido).";
+    else if (equipo.some((p) => p.usuario?.toLowerCase() === usuario && p.id !== modal?.p?.id)) x.usuario = f.usuario ? "Ese usuario ya existe." : `El usuario «${usuario}» ya existe: escribe otro.`;
+    if (!modal?.p || f.clave) {
+      // Temporal: puede ser solo números (como los 8 dígitos del correo ISIL), pero sin espacios ni un mismo carácter repetido
+      const c = f.clave || "";
+      const malo = c.length < MIN_CLAVE ? `Mínimo ${MIN_CLAVE} caracteres.` : c.length > 72 ? "Máximo 72 caracteres." : /\s/.test(c) ? "Sin espacios." : /^(.)\1+$/.test(c) ? "No uses un mismo carácter repetido." : "";
+      if (malo) x.clave = modal?.p ? `${malo} O déjala vacía para no cambiarla.` : malo;
+    }
+    if (modal?.p && !f.clave && modal.p.correo.toLowerCase() !== correo) x.clave = "Cambiaste el correo: asigna una nueva contraseña temporal.";
     if (modal?.p?.rol === "gerente" && (f.rol !== "gerente" || !f.activo) && equipo.filter((p) => p.rol === "gerente" && p.activo).length === 1) x.rol = "Debe quedar al menos un gerente activo.";
+    if (modal?.p && (modal.p.id === user.idEquipo || modal.p.nombre === user.nombre) && (f.rol !== modal.p.rol || !f.activo)) x.rol = "No puedes cambiar tu propio rol ni quitarte el acceso.";
+    if (f.rol === "vendedor" && !SEDES_ATENCION.includes(f.sede)) x.sede = "Un vendedor necesita una sede para recibir leads por turnos.";
     setErr(x); return Object.keys(x).length === 0;
   }
   function guardar(e) {
     e.preventDefault();
     if (!validar()) return;
-    const datos = { nombre: f.nombre.trim(), usuario: f.usuario || f.correo.trim().toLowerCase().split("@")[0], correo: f.correo.trim().toLowerCase(), celular: f.celular, rol: f.rol, cargo: CARGOS[f.rol].includes(f.cargo) ? f.cargo : CARGOS[f.rol][0], sede: f.rol === "vendedor" ? f.sede : f.sede || "Todas", recibeLeads: f.rol === "vendedor" ? f.recibeLeads : false, activo: f.activo };
+    const datos = { nombre: limpiarTexto(f.nombre), usuario: f.usuario || f.correo.trim().toLowerCase().split("@")[0], correo: f.correo.trim().toLowerCase(), celular: f.celular, rol: f.rol, cargo: CARGOS[f.rol].includes(f.cargo) ? f.cargo : CARGOS[f.rol][0], sede: f.rol === "vendedor" ? f.sede : f.sede || "Todas", recibeLeads: f.rol === "vendedor" ? f.recibeLeads : false, activo: f.activo };
     if (modal.p) {
       if (modal.p.nombre !== datos.nombre) {
         // El nombre identifica al responsable en leads, seguimiento y ventas: se actualiza en todos
@@ -58,8 +67,12 @@ export default function Equipo() {
         seguimientos.filter((x) => x.responsable === modal.p.nombre).forEach((x) => actualizar("seguimientos", x.id, { responsable: datos.nombre }));
         ventas.filter((v) => v.vendedor === modal.p.nombre).forEach((v) => actualizar("ventas", v.id, { vendedor: datos.nombre }));
       }
+      // Si pierde el acceso o deja de ser vendedor, sus leads abiertos quedan «Sin asignar» (igual que con «Quitar acceso»)
+      const deja = (modal.p.activo && !datos.activo) || (modal.p.rol === "vendedor" && datos.rol !== "vendedor");
+      const suyos = deja ? leads.filter((l) => l.responsable === modal.p.nombre && !["Cerrado ganado", "Perdido"].includes(l.estado)) : [];
+      suyos.forEach((l) => actualizar("leads", l.id, { responsable: "Sin asignar" }));
       actualizar("equipo", modal.p.id, { ...datos, ...(f.clave ? { claveHash: resumenClave(datos.correo, f.clave), claveTemporal: true } : {}) }, `Usuario actualizado: ${datos.nombre}`);
-      toast(f.clave ? "Usuario actualizado. Deberá crear su contraseña al ingresar." : "Usuario actualizado");
+      toast(`${f.clave ? "Usuario actualizado. Deberá crear su contraseña al ingresar." : "Usuario actualizado"}${suyos.length ? ` ${suyos.length} lead(s) quedaron sin asignar.` : ""}`);
     } else {
       agregar("equipo", { ...datos, claveHash: resumenClave(datos.correo, f.clave), claveTemporal: true, ausente: false }, `Usuario creado: ${datos.nombre} (${datos.cargo})`);
       toast(`${datos.nombre} ya puede ingresar con su correo y la contraseña temporal`);
@@ -70,8 +83,11 @@ export default function Equipo() {
     if (p.id === user.idEquipo || p.nombre === user.nombre) return toast("No puedes quitarte tu propio acceso.", "error");
     if (p.activo && p.rol === "gerente" && equipo.filter((x) => x.rol === "gerente" && x.activo).length === 1) return toast("Debe quedar al menos un gerente activo.", "error");
     if (p.activo && !(await confirmar({ titulo: `Quitar acceso a ${p.nombre}`, texto: "No podrá ingresar al panel. Sus datos y su historial se conservan; puedes devolverle el acceso cuando quieras.", boton: "Quitar acceso" }))) return;
+    // Sin acceso no puede atender: sus leads abiertos quedan «Sin asignar» para repartirlos
+    const suyos = p.activo ? leads.filter((l) => l.responsable === p.nombre && !["Cerrado ganado", "Perdido"].includes(l.estado)) : [];
+    suyos.forEach((l) => actualizar("leads", l.id, { responsable: "Sin asignar" }));
     actualizar("equipo", p.id, { activo: !p.activo }, `Acceso ${p.activo ? "retirado" : "restituido"}: ${p.nombre}`);
-    toast(p.activo ? "Acceso retirado" : "Acceso restituido");
+    toast(p.activo ? `Acceso retirado${suyos.length ? `. ${suyos.length} lead(s) quedaron sin asignar.` : ""}` : "Acceso restituido");
   }
   async function borrar(p) {
     if (p.id === user.idEquipo || p.nombre === user.nombre) return toast("No puedes eliminar tu propio usuario.", "error");
@@ -147,13 +163,13 @@ export default function Equipo() {
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-eq" className="btn btn-primary !py-2">{modal?.p ? "Guardar" : "Crear usuario"}</button></>}>
         <form id="f-eq" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
           <Campo etiqueta="Nombre completo" error={err.nombre} className="sm:col-span-2"><input id="eq-nombre" className="field-input" value={f.nombre} maxLength={80} onChange={(e) => setF({ ...f, nombre: soloLetras(e.target.value) })} /></Campo>
-          <Campo etiqueta="Correo (para ingresar)" error={err.correo}><input id="eq-correo" type="email" className="field-input" value={f.correo} onChange={set("correo")} placeholder="nombre@epsamotor.com.pe" /></Campo>
+          <Campo etiqueta="Correo (para ingresar)" error={err.correo}><input id="eq-correo" type="email" maxLength={254} className="field-input" value={f.correo} onChange={set("correo")} placeholder="nombre@epsamotor.com.pe" /></Campo>
           <Campo etiqueta="Celular (opcional)" error={err.celular}><input id="eq-celular" inputMode="numeric" maxLength={9} className="field-input" value={f.celular || ""} placeholder="9XXXXXXXX" onChange={(e) => setF({ ...f, celular: soloDigitos(e.target.value, 9) })} /></Campo>
           <Campo etiqueta="Usuario (opcional)" error={err.usuario} ayuda="También sirve para ingresar. Si lo dejas vacío se usa el inicio del correo."><input id="eq-usuario" className="field-input" maxLength={30} value={f.usuario || ""} onChange={(e) => setF({ ...f, usuario: e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, "") })} placeholder="nombre" /></Campo>
           <Campo etiqueta="Rol" error={err.rol}><select id="eq-rol" className="field-input" value={f.rol} onChange={(e) => setF({ ...f, rol: e.target.value, cargo: CARGOS[e.target.value][0] })}>{Object.entries(ROLES).map(([k, r]) => <option key={k} value={k}>{r.nombre}</option>)}</select></Campo>
           {CARGOS[f.rol].length > 1 && <Campo etiqueta="Cómo se muestra el cargo"><select id="eq-cargo" className="field-input" value={CARGOS[f.rol].includes(f.cargo) ? f.cargo : CARGOS[f.rol][0]} onChange={set("cargo")}>{CARGOS[f.rol].map((c) => <option key={c}>{c}</option>)}</select></Campo>}
-          <Campo etiqueta="Sede"><select id="eq-sede" className="field-input" value={f.sede} onChange={set("sede")}><option>Todas</option>{SEDES_ATENCION.map((s) => <option key={s}>{s}</option>)}</select></Campo>
-          <Campo etiqueta={modal?.p ? "Nueva contraseña temporal (opcional)" : "Contraseña temporal"} error={err.clave} ayuda={`Mínimo ${MIN_CLAVE} caracteres. Al ingresar, la persona crea su propia contraseña.`}>
+          <Campo etiqueta="Sede" error={err.sede}><select id="eq-sede" className="field-input" value={f.sede} onChange={set("sede")}><option>Todas</option>{SEDES_ATENCION.map((s) => <option key={s}>{s}</option>)}</select></Campo>
+          <Campo etiqueta={modal?.p ? "Nueva contraseña temporal (opcional)" : "Contraseña temporal"} error={err.clave} ayuda={`Mínimo ${MIN_CLAVE} caracteres, sin espacios. Al ingresar, la persona crea su propia contraseña.`}>
             <input id="eq-clave" type="text" autoComplete="off" className="field-input" value={f.clave} onChange={set("clave")} />
           </Campo>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13.5px] sm:col-span-2">
