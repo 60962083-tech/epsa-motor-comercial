@@ -11,6 +11,7 @@ import type { FabricaClientePublico } from './types/modelo.types';
 import { crearRutasUnidad } from './routes/unidad.routes';
 import { crearRutasTecho } from './routes/techo.routes';
 import { crearRutasLead } from './routes/lead.routes';
+import { crearRutasSede } from './routes/sede.routes';
 
 export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClientePublico) {
   const app = express();
@@ -18,6 +19,7 @@ export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClien
   app.use(cors());
   app.use(express.json({ limit: '32kb' }));
   app.use('/api/modelos', crearRutasModelo(fabricaPublica));
+  app.use('/api/sedes', crearRutasSede(fabricaPublica));
   app.use('/api/leads', crearRutasLead(fabrica));
 
   app.get('/', (_req, res) => {
