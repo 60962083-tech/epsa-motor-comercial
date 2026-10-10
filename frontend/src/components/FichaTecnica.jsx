@@ -126,7 +126,7 @@ export default function FichaTecnica({ modelo, todos }) {
               <dt className="font-semibold text-marino dark:text-white">{k}</dt><dd className="text-slate-600 dark:text-slate-300">{v}</dd>
             </div>
           ))}
-          <p className="mt-3 text-[12px] text-slate-400">Fuente: ficha oficial de torito.pe.</p>
+          <p className="mt-3 text-[12px] text-slate-400">{modelo.soloBackend ? "Fuente: catálogo de EPSA Motor." : "Fuente: ficha oficial de torito.pe."}</p>
         </dl>
       </div>
     </div>

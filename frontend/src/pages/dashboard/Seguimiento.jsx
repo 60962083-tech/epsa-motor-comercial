@@ -3,10 +3,12 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { Campo, Card, Modal, PageHeader, Stat, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
+import { hoyLocal, limpiarTexto, sumarDias } from "../../lib/validar";
 
 const TIPOS = ["Llamada", "WhatsApp", "Visita", "Prueba de manejo", "Correo"];
-const hoyISO = () => new Date().toISOString().slice(0, 10);
-const masDias = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+const hoyISO = hoyLocal; // fecha local (no UTC)
+const masDias = (n) => sumarDias(n);
+const CERRADOS = ["Cerrado ganado", "Perdido"];
 
 /**
  * Seguimiento comercial de cada lead (tabla seguimientolead: tipsle, dessle, fecprosle).
@@ -14,7 +16,7 @@ const masDias = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0
  * Al cumplir una tarea se registra el resultado y, si hace falta, se agenda la siguiente.
  */
 export default function Seguimiento() {
-  const { seguimientos, leads, equipo, modelos, agregar, actualizar, eliminar } = useApp();
+  const { seguimientos, leads, equipo, modelos, agregar, actualizar, eliminar, publicos = [] } = useApp();
   const { puede, user } = useAuth();
   const { state } = useLocation();
   const nav = useNavigate();
@@ -24,14 +26,16 @@ export default function Seguimiento() {
   const [leadId, setLeadId] = useState(state?.leadId ? String(state.leadId) : "");
   const [modal, setModal] = useState(false);
   const [f, setF] = useState({});
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState({});
   const [cierre, setCierre] = useState(null); // seguimiento que se está cerrando
   const [c, setC] = useState({ resultado: "", proxima: "", tipo: "Llamada", estadoLead: "" });
-  const [errC, setErrC] = useState("");
+  const [errC, setErrC] = useState({});
   const hoy = hoyISO();
   const lead = (id) => leads.find((l) => l.id === id);
-  const nombreModelo = (id) => modelos.find((m) => m.id === id)?.nombre || "";
+  const nombreModelo = (id) => (modelos.find((m) => m.id === id) || publicos.find((m) => m.id === id))?.nombre || "";
   const vendedores = equipo.filter((p) => p.rol !== "gerente" && p.activo);
+  const abiertos = leads.filter((l) => !CERRADOS.includes(l.estado)); // a un lead cerrado ya no se le agendan tareas
+  const limite = masDias(365);
 
   const lista = useMemo(() => seguimientos.filter((s) => {
     if (leadId && s.leadId !== Number(leadId)) return false;
@@ -45,34 +49,48 @@ export default function Seguimiento() {
   const mios = seguimientos.filter((s) => !resp || s.responsable === resp);
   const conteo = (fn) => mios.filter(fn).length;
 
-  const abrir = () => { setErr(""); setF({ leadId: leadId || leads[0]?.id, tipo: "Llamada", fecha: hoy, detalle: "", responsable: user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre }); setModal(true); };
+  const abrir = () => { setErr({}); const elegido = abiertos.find((l) => String(l.id) === String(leadId)) || abiertos[0]; setF({ leadId: elegido?.id || "", tipo: "Llamada", fecha: hoy, detalle: "", responsable: user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre || "" }); setModal(true); };
   function validar() {
-    if (!f.leadId) { setErr("Elige el lead."); return false; }
-    if (f.detalle.trim().length < 3) { setErr("Describe qué hay que hacer."); return false; }
-    if (f.fecha < hoy) { setErr("La fecha no puede ser anterior a hoy."); return false; }
-    setErr(""); return true;
+    const x = {};
+    if (!f.leadId || !abiertos.some((l) => String(l.id) === String(f.leadId))) x.leadId = "Elige un lead abierto.";
+    if (!f.fecha) x.fecha = "Indica la fecha."; else if (f.fecha < hoy) x.fecha = "La fecha no puede ser anterior a hoy."; else if (f.fecha > limite) x.fecha = "Programa el seguimiento dentro del próximo año.";
+    if (!f.responsable || !vendedores.some((v) => v.nombre === f.responsable)) x.responsable = "Elige quién hará el seguimiento.";
+    const det = limpiarTexto(f.detalle);
+    if (det.length < 3 || (det.match(/[\p{L}\d]/gu) || []).length < 3) x.detalle = "Describe qué hay que hacer."; else if (det.length > 300) x.detalle = "Máximo 300 caracteres.";
+    setErr(x); return Object.keys(x).length === 0;
   }
   function guardar(e) {
     e.preventDefault();
     if (!validar()) return;
-    agregar("seguimientos", { ...f, detalle: f.detalle.trim(), leadId: Number(f.leadId), hecho: false }, `Seguimiento creado para ${lead(Number(f.leadId))?.contacto}`);
+    agregar("seguimientos", { ...f, detalle: limpiarTexto(f.detalle), leadId: Number(f.leadId), hecho: false }, `Seguimiento creado para ${lead(Number(f.leadId))?.contacto}`);
     const l = lead(Number(f.leadId)); if (l?.estado === "Nuevo") actualizar("leads", l.id, { estado: "En seguimiento" });
     toast("Seguimiento programado"); setModal(false);
   }
 
-  function abrirCierre(s) { setErrC(""); setC({ resultado: "", proxima: masDias(2), tipo: s.tipo, estadoLead: "" }); setCierre(s); }
+  // Si el lead ya está cerrado (ganado o perdido) no se propone otro contacto
+  function abrirCierre(s) { setErrC({}); setC({ resultado: "", proxima: CERRADOS.includes(lead(s.leadId)?.estado) ? "" : masDias(2), tipo: s.tipo, estadoLead: "" }); setCierre(s); }
   function cerrarTarea(e) {
     e.preventDefault();
-    if (c.resultado.trim().length < 5) return setErrC("Cuenta brevemente qué pasó (mínimo 5 caracteres).");
-    if (c.proxima && c.proxima < hoy) return toast("La próxima fecha no puede ser anterior a hoy.", "error");
+    const x = {}; const resultado = limpiarTexto(c.resultado);
+    const actual = lead(cierre.leadId)?.estado;
+    // El lead queda cerrado si se elige un estado de cierre o si ya lo estaba y se deja «Sin cambios»
+    const estadoFinal = c.estadoLead || actual;
+    const cierraLead = CERRADOS.includes(estadoFinal);
+    if (resultado.length < 5 || (resultado.match(/[\p{L}\d]/gu) || []).length < 5) x.resultado = "Cuenta brevemente qué pasó (mínimo 5 letras o números)."; else if (resultado.length > 500) x.resultado = "Máximo 500 caracteres.";
+    if (c.proxima && c.proxima < hoy) x.proxima = "La próxima fecha no puede ser anterior a hoy.";
+    else if (c.proxima && c.proxima > limite) x.proxima = "Elige una fecha dentro del próximo año.";
+    else if (c.proxima && cierraLead) x.proxima = `Si el lead queda «${estadoFinal}», no hace falta otro contacto: deja la fecha vacía.`;
+    setErrC(x); if (Object.keys(x).length) return;
     const l = lead(cierre.leadId);
-    actualizar("seguimientos", cierre.id, { hecho: true, resultado: c.resultado.trim(), cerrado: hoy }, `Seguimiento cumplido: ${l?.contacto}`);
-    if (c.proxima) agregar("seguimientos", { leadId: cierre.leadId, fecha: c.proxima, tipo: c.tipo, responsable: cierre.responsable, hecho: false, detalle: c.resultado.trim() ? `Continuar: ${c.resultado.trim()}` : "Nuevo contacto" });
+    actualizar("seguimientos", cierre.id, { hecho: true, resultado, cerrado: hoy }, `Seguimiento cumplido: ${l?.contacto}`);
+    if (c.proxima && !cierraLead) agregar("seguimientos", { leadId: cierre.leadId, fecha: c.proxima, tipo: c.tipo, responsable: cierre.responsable, hecho: false, detalle: `Continuar: ${resultado}` });
     if (l) actualizar("leads", l.id, { estado: c.estadoLead || (l.estado === "Nuevo" ? "En seguimiento" : l.estado) });
     toast(c.proxima ? `Cumplido. Próximo contacto el ${c.proxima}` : "Marcado como cumplido");
     setCierre(null);
   }
   async function reabrir(s) {
+    const l = lead(s.leadId);
+    if (l && CERRADOS.includes(l.estado)) return toast(`${l.contacto} está «${l.estado}». Si el cliente volvió, cambia su estado en Leads y programa un nuevo seguimiento.`, "error");
     if (!(await confirmar({ titulo: "Reabrir seguimiento", texto: "La tarea volverá a la lista de pendientes.", boton: "Reabrir" }))) return;
     actualizar("seguimientos", s.id, { hecho: false }, `Seguimiento reabierto: ${lead(s.leadId)?.contacto}`); toast("Reabierto");
   }
@@ -132,11 +150,11 @@ export default function Seguimiento() {
       <Modal abierto={modal} onClose={() => setModal(false)} titulo="Programar seguimiento" confirmarGuardar={{ titulo: "¿Programar este seguimiento?", texto: `${f.tipo || ""} con ${lead(Number(f.leadId))?.contacto || "el lead"} el ${f.fecha || ""}, a cargo de ${f.responsable || ""}.`, boton: "Programar", validar }}
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(false)}>Cancelar</button><button form="f-seg" className="btn btn-primary !py-2">Guardar</button></>}>
         <form id="f-seg" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
-          <Campo etiqueta="Lead" className="sm:col-span-2"><select className="field-input" value={f.leadId} onChange={(e) => setF({ ...f, leadId: e.target.value })}>{leads.map((l) => <option key={l.id} value={l.id}>{l.contacto} · {l.telefono}</option>)}</select></Campo>
+          <Campo etiqueta="Lead" className="sm:col-span-2" error={err.leadId}><select className="field-input" value={f.leadId} onChange={(e) => setF({ ...f, leadId: e.target.value })}>{abiertos.length === 0 && <option value="">No hay leads abiertos</option>}{abiertos.map((l) => <option key={l.id} value={l.id}>{l.contacto} · {l.telefono}</option>)}</select></Campo>
           <Campo etiqueta="Tipo"><select className="field-input" value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value })}>{TIPOS.map((t) => <option key={t}>{t}</option>)}</select></Campo>
-          <Campo etiqueta="Fecha"><input type="date" className="field-input" min={hoy} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} /></Campo>
-          <Campo etiqueta="Responsable" className="sm:col-span-2"><select className="field-input" value={f.responsable} onChange={(e) => setF({ ...f, responsable: e.target.value })}>{vendedores.map((v) => <option key={v.id}>{v.nombre}</option>)}</select></Campo>
-          <Campo etiqueta="Qué hay que hacer" className="sm:col-span-2" error={err}><textarea rows={3} className="field-input" value={f.detalle || ""} onChange={(e) => setF({ ...f, detalle: e.target.value })} placeholder="Ej: confirmar documentos para el crédito" /></Campo>
+          <Campo etiqueta="Fecha" error={err.fecha}><input type="date" className="field-input" min={hoy} max={limite} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} /></Campo>
+          <Campo etiqueta="Responsable" className="sm:col-span-2" error={err.responsable}><select className="field-input" value={f.responsable} onChange={(e) => setF({ ...f, responsable: e.target.value })}>{vendedores.map((v) => <option key={v.id}>{v.nombre}</option>)}</select></Campo>
+          <Campo etiqueta="Qué hay que hacer" className="sm:col-span-2" error={err.detalle}><textarea rows={3} maxLength={320} className="field-input" value={f.detalle || ""} onChange={(e) => setF({ ...f, detalle: e.target.value })} placeholder="Ej: confirmar documentos para el crédito" /></Campo>
         </form>
       </Modal>
 
@@ -144,10 +162,10 @@ export default function Seguimiento() {
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setCierre(null)}>Cancelar</button><button form="f-cierre" className="btn btn-primary !py-2">Guardar resultado</button></>}>
         <form id="f-cierre" onSubmit={cerrarTarea} className="grid gap-4" noValidate>
           <p className="text-[13.5px] text-slate-500">{cierre?.detalle}</p>
-          <Campo etiqueta="¿Qué pasó en el contacto?" error={errC}><textarea rows={3} className="field-input" value={c.resultado} onChange={(e) => setC({ ...c, resultado: e.target.value })} placeholder="Ej: le envié la cotización, decide el fin de semana" /></Campo>
-          <Campo etiqueta="Estado del lead"><select className="field-input" value={c.estadoLead} onChange={(e) => setC({ ...c, estadoLead: e.target.value })}><option value="">Sin cambios</option>{["En seguimiento", "Cotizado", "Cerrado ganado", "Perdido"].map((x) => <option key={x}>{x}</option>)}</select></Campo>
+          <Campo etiqueta="¿Qué pasó en el contacto?" error={errC.resultado}><textarea rows={3} maxLength={520} className="field-input" value={c.resultado} onChange={(e) => setC({ ...c, resultado: e.target.value })} placeholder="Ej: le envié la cotización, decide el fin de semana" /></Campo>
+          <Campo etiqueta="Estado del lead"><select className="field-input" value={c.estadoLead} onChange={(e) => setC({ ...c, estadoLead: e.target.value, proxima: CERRADOS.includes(e.target.value) ? "" : c.proxima })}><option value="">Sin cambios</option>{["En seguimiento", "Cotizado", "Cerrado ganado", "Perdido"].map((x) => <option key={x}>{x}</option>)}</select></Campo>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Campo etiqueta="Próximo contacto" ayuda="Déjalo vacío si no hace falta"><input type="date" min={hoy} className="field-input" value={c.proxima} onChange={(e) => setC({ ...c, proxima: e.target.value })} /></Campo>
+            <Campo etiqueta="Próximo contacto" error={errC.proxima} ayuda="Déjalo vacío si no hace falta"><input type="date" min={hoy} max={limite} className="field-input" value={c.proxima} onChange={(e) => setC({ ...c, proxima: e.target.value })} /></Campo>
             <Campo etiqueta="Tipo"><select className="field-input" value={c.tipo} onChange={(e) => setC({ ...c, tipo: e.target.value })}>{TIPOS.map((t) => <option key={t}>{t}</option>)}</select></Campo>
           </div>
         </form>

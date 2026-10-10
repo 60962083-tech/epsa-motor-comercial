@@ -9,7 +9,7 @@ import ModeloImg from "../../components/ModeloImg";
 import Badge from "../../components/Badge";
 import { MODO_REAL } from "../../lib/config";
 
-const slug = (t) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const slug = (t) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const TABS = [{ id: "motor", t: "Motor" }, { id: "chasis", t: "Chasis" }, { id: "consumo", t: "Consumo y rendimiento" }, { id: "dimensiones", t: "Dimensiones" }, { id: "electrico", t: "Sistema eléctrico" }];
 const NUEVO = { nombre: "", familia: FAMILIAS[0], tipoMotor: "4 tiempos", combustible: "Gasolina", uso: "Pasajeros", precioDesde: "", descripcion: "", imagen: "", colores: ["Rojo"], colorFoto: "Rojo", badges: "", destacadosTxt: "", cilindrada: "", potencia: "", torque: "", llantas: "", ...Object.fromEntries(TABS.map((t) => [`spec_${t.id}`, ""])) };
 const aTexto = (filas = []) => filas.map(([k, v]) => `${k}: ${v}`).join("\n");
@@ -37,6 +37,14 @@ function leerFoto(file) {
 }
 
 /** Modelos: crear, editar descripción/precio/colores/foto, publicar o retirar y eliminar (solo gerente). Todo se refleja en la web al instante. */
+/** Foto del modelo: subida (data:image), ruta del sitio (/images/…) o enlace http(s) con dominio real. */
+function imagenValida(v) {
+  const t = String(v || "").trim();
+  if (/^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,/i.test(t)) return true;
+  if (/^\/(?!\/)[\w./-]+\.(png|jpe?g|webp|svg|gif)$/i.test(t)) return true;
+  try { const u = new URL(t); return ["http:", "https:"].includes(u.protocol) && /\.[a-z]{2,}$/i.test(u.hostname); } catch { return false; }
+}
+
 export default function ModelosAdmin() {
   const { modelos, publicos, apiModelos, sinFicha = [], unidades, agregar, actualizar, eliminar } = useApp();
   const ocultosPorSupabase = MODO_REAL && apiModelos ? modelos.filter((m) => m.estado === "Publicado" && !publicos.some((p) => p.id === m.id)) : [];
@@ -71,13 +79,25 @@ export default function ModelosAdmin() {
   }
   function validarModelo() {
     const x = {};
-    if (f.nombre.trim().length < 3) x.nombre = "Ingresa el nombre del modelo.";
-    if (modelos.some((m) => m.nombre.toLowerCase() === f.nombre.trim().toLowerCase() && m.id !== modal.m?.id)) x.nombre = "Ya existe un modelo con ese nombre.";
-    if (!(Number(f.precioDesde) > 0)) x.precioDesde = "Ingresa un precio mayor a 0.";
-    if (f.descripcion.trim().length < 40) x.descripcion = "La descripción debe tener al menos 40 caracteres.";
-    if (f.imagen && !/^(https?:\/\/|\/|data:image\/)/.test(f.imagen)) x.imagen = "Usa un enlace https://, una ruta /images/... o sube una foto.";
+    const nombre = f.nombre.trim().replace(/\s+/g, " ");
+    const precio = Number(f.precioDesde);
+    if (nombre.length < 3 || !/\p{L}/u.test(nombre) || !slug(nombre)) x.nombre = "Ingresa el nombre del modelo (con letras, mínimo 3 caracteres).";
+    else if (nombre.length > 60) x.nombre = "Máximo 60 caracteres.";
+    else if (modelos.some((m) => m.nombre.toLowerCase() === nombre.toLowerCase() && m.id !== modal.m?.id)) x.nombre = "Ya existe un modelo con ese nombre.";
+    if (!f.precioDesde || !Number.isInteger(precio) || precio < 1000 || precio > 999999) x.precioDesde = "Ingresa un precio entre S/ 1,000 y S/ 999,999 (sin decimales).";
+    const desc = f.descripcion.trim();
+    if (desc.length < 40 || (desc.match(/\p{L}/gu) || []).length < 20) x.descripcion = "La descripción debe tener al menos 40 caracteres (con palabras, no solo signos)."; else if (desc.length > 1200) x.descripcion = "Máximo 1200 caracteres.";
+    if (f.badges.length > 120) x.badges = "Máximo 120 caracteres.";
+    if (["cilindrada", "potencia", "torque", "llantas"].some((k) => String(f[k] || "").trim().length > 30)) x.datos = "Cada dato técnico admite como máximo 30 caracteres.";
+    if (f.destacadosTxt.length > 600) x.destacados = "Máximo 600 caracteres.";
+    if (TABS.some((t) => String(f[`spec_${t.id}`] || "").length > 2000)) x.specs = "Cada pestaña de la ficha técnica admite como máximo 2000 caracteres.";
+    if (f.imagen && !imagenValida(f.imagen)) x.imagen = "Usa un enlace https:// completo (con dominio), una ruta /images/... o sube una foto.";
     if (!f.colores.length) x.colores = "Elige al menos un color.";
-    if (!modal.m && publicarYa && publica && !f.imagen) x.imagen = "Para publicarlo en la web sube o enlaza una foto.";
+    // Un modelo publicado siempre necesita foto (al crearlo para publicar y al editar uno ya publicado)
+    const quedaPublicado = modal.m ? modal.m.estado === "Publicado" : publicarYa && publica;
+    // Si se quitó o cambió la foto, la copia local anterior ya no cuenta (al guardar se borra)
+    const fotoCambio = f.fotoNueva || (modal.m && f.imagen !== modal.m.imagen);
+    if (quedaPublicado && !f.imagen && (fotoCambio || !f.local)) x.imagen = "Un modelo publicado en la web necesita foto: súbela o enlázala.";
     setErr(x); return Object.keys(x).length === 0;
   }
   function guardar(e) {
@@ -94,7 +114,7 @@ export default function ModelosAdmin() {
     if (fotoCambio) { limpio.fotosColor = {}; limpio.fotoPropia = true; limpio.local = ""; }
     if (modal.m) limpio.editadoEnPanel = true;
     const datos = {
-      ...limpio, nombre: f.nombre.trim(), precioDesde: Number(f.precioDesde), descripcion: f.descripcion.trim(),
+      ...limpio, nombre: f.nombre.trim().replace(/\s+/g, " "), precioDesde: Number(f.precioDesde), descripcion: f.descripcion.trim(),
       badges: f.badges.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean),
       destacados: f.destacadosTxt.split("\n").map((l) => l.trim()).filter(Boolean), resumen, specs,
     };
@@ -135,7 +155,7 @@ export default function ModelosAdmin() {
           {!apiModelos
             ? <Aviso tipo="error">No se pudo leer GET /api/modelos. Mientras tanto, la web muestra el catálogo guardado en este navegador.</Aviso>
             : <Aviso tipo="info">Conectado a Supabase: {apiModelos.length} modelo(s) publicados. La web muestra los que también tienen ficha aquí (precio, colores y datos técnicos).</Aviso>}
-          {sinFicha.length > 0 && <Aviso tipo="aviso">Publicados en Supabase sin ficha en la web: <b>{sinFicha.map((x) => x.nommod).join(", ")}</b>. Créalos aquí con el mismo nombre para que aparezcan en la web.</Aviso>}
+          {sinFicha.length > 0 && <Aviso tipo="aviso">Publicados en Supabase sin ficha en el panel: <b>{sinFicha.map((x) => x.nommod).join(", ")}</b>. Ya se ven en la web con los datos de Supabase (precio «A consultar» y sin colores). Para darles precio y colores, créalos aquí con el mismo nombre.</Aviso>}
           {ocultosPorSupabase.length > 0 && <Aviso tipo="aviso">No se ven en la web porque no están publicados en Supabase: <b>{ocultosPorSupabase.map((m) => m.nombre).join(", ")}</b>. Publícalos en Supabase o ejecuta docs/supabase-modelos-catalogo.sql.</Aviso>}
         </div>
       )}
@@ -179,7 +199,7 @@ export default function ModelosAdmin() {
           <Campo etiqueta="Tipo de motor"><select className="field-input" value={f.tipoMotor} onChange={set("tipoMotor")}>{FILTROS_CATALOGO.tipoMotor.map((x) => <option key={x}>{x}</option>)}</select></Campo>
           <Campo etiqueta="Combustible"><select className="field-input" value={f.combustible} onChange={set("combustible")}>{FILTROS_CATALOGO.combustible.map((x) => <option key={x}>{x}</option>)}</select></Campo>
           <Campo etiqueta="Uso"><select className="field-input" value={f.uso} onChange={set("uso")}>{FILTROS_CATALOGO.uso.map((x) => <option key={x}>{x}</option>)}</select></Campo>
-          <Campo etiqueta="Descripción (se muestra en la web)" error={err.descripcion} className="sm:col-span-2"><textarea id="mod-desc" rows={4} className="field-input" value={f.descripcion} onChange={set("descripcion")} /></Campo>
+          <Campo etiqueta="Descripción (se muestra en la web)" error={err.descripcion} className="sm:col-span-2"><textarea id="mod-desc" rows={4} maxLength={1220} className="field-input" value={f.descripcion} onChange={set("descripcion")} /></Campo>
           <Campo etiqueta="Foto del modelo" error={err.imagen} className="sm:col-span-2" ayuda="Sube la foto en el primer color marcado (ideal: rojo, fondo transparente). Para los demás colores la web ajusta el tono de la foto.">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="grid h-28 w-36 shrink-0 place-items-center overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50 dark:border-white/15 dark:bg-white/5">
@@ -194,20 +214,22 @@ export default function ModelosAdmin() {
               </div>
             </div>
           </Campo>
-          <Campo etiqueta="Etiquetas" ayuda="Separadas por coma. Ej: NUEVO MODELO, PRECIO DE LANZAMIENTO" className="sm:col-span-2"><input className="field-input" value={f.badges} onChange={set("badges")} /></Campo>
+          <Campo etiqueta="Etiquetas" error={err.badges} ayuda="Separadas por coma. Ej: NUEVO MODELO, PRECIO DE LANZAMIENTO" className="sm:col-span-2"><input className="field-input" maxLength={120} value={f.badges} onChange={set("badges")} /></Campo>
           <div className="grid gap-4 sm:col-span-2 sm:grid-cols-4">
-            <Campo etiqueta="Cilindrada"><input className="field-input" value={f.cilindrada} onChange={set("cilindrada")} placeholder="236.2 cc" /></Campo>
-            <Campo etiqueta="Potencia"><input className="field-input" value={f.potencia} onChange={set("potencia")} placeholder="10.73 HP" /></Campo>
-            <Campo etiqueta="Torque"><input className="field-input" value={f.torque} onChange={set("torque")} placeholder="20 Nm" /></Campo>
-            <Campo etiqueta="Llantas"><input className="field-input" value={f.llantas} onChange={set("llantas")} placeholder="4.00-8" /></Campo>
+            <Campo etiqueta="Cilindrada"><input className="field-input" maxLength={30} value={f.cilindrada} onChange={set("cilindrada")} placeholder="236.2 cc" /></Campo>
+            <Campo etiqueta="Potencia"><input className="field-input" maxLength={30} value={f.potencia} onChange={set("potencia")} placeholder="10.73 HP" /></Campo>
+            <Campo etiqueta="Torque"><input className="field-input" maxLength={30} value={f.torque} onChange={set("torque")} placeholder="20 Nm" /></Campo>
+            <Campo etiqueta="Llantas"><input className="field-input" maxLength={30} value={f.llantas} onChange={set("llantas")} placeholder="4.00-8" /></Campo>
+            {err.datos && <p className="text-[12px] font-medium text-acento sm:col-span-4">{err.datos}</p>}
           </div>
-          <Campo etiqueta="Puntos destacados" ayuda="Uno por línea. Se muestran en la ficha del modelo." className="sm:col-span-2"><textarea rows={3} className="field-input" value={f.destacadosTxt} onChange={set("destacadosTxt")} /></Campo>
+          <Campo etiqueta="Puntos destacados" error={err.destacados} ayuda="Uno por línea. Se muestran en la ficha del modelo." className="sm:col-span-2"><textarea rows={3} maxLength={600} className="field-input" value={f.destacadosTxt} onChange={set("destacadosTxt")} /></Campo>
           <details className="rounded-lg border border-slate-200 p-3 sm:col-span-2 dark:border-white/10">
             <summary className="cursor-pointer text-[13.5px] font-semibold text-marino dark:text-white">Ficha técnica (5 pestañas de la web)</summary>
             <p className="mt-1 text-[12px] text-slate-400">Una característica por línea con el formato <b>Nombre: valor</b>. Ej: Cilindrada: 236.2 cc</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {TABS.map((t) => <Campo key={t.id} etiqueta={t.t}><textarea rows={4} className="field-input font-mono text-[12.5px]" value={f[`spec_${t.id}`] || ""} onChange={set(`spec_${t.id}`)} /></Campo>)}
+              {TABS.map((t) => <Campo key={t.id} etiqueta={t.t}><textarea rows={4} maxLength={2000} className="field-input font-mono text-[12.5px]" value={f[`spec_${t.id}`] || ""} onChange={set(`spec_${t.id}`)} /></Campo>)}
             </div>
+            {err.specs && <p className="mt-2 text-[12px] font-medium text-acento">{err.specs}</p>}
           </details>
           <Campo etiqueta="Colores ofrecidos" error={err.colores} className="sm:col-span-2" ayuda="Solo los colores marcados se ven en la web, en Cotizar y en Compras.">
             <div className="flex flex-wrap gap-2">{COLORES.map((c) => (

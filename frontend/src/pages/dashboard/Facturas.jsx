@@ -13,14 +13,14 @@ const soles2 = (n) => `S/ ${Number(n || 0).toLocaleString("es-PE", { minimumFrac
  * ventas que aún falta facturar y la lista de clientes que ya compraron.
  */
 export default function Facturas() {
-  const { ventas, modelos } = useApp();
+  const { ventas, modelos, publicos = [] } = useApp();
   const { puede } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
   const [tab, setTab] = useState("emitidos");
   const [q, setQ] = useState("");
   const [ver, setVer] = useState(null);
-  const nombreModelo = (id) => modelos.find((m) => m.id === id)?.nombre || "—";
+  const nombreModelo = (id) => (modelos.find((m) => m.id === id) || publicos.find((m) => m.id === id))?.nombre || "—";
   const coincide = (v) => !q || `${v.cliente} ${v.documento} ${v.celular} ${v.comprobante ? numeroComprobante(v.comprobante) : ""}`.toLowerCase().includes(q.toLowerCase().trim());
 
   const emitidos = useMemo(() => ventas.filter((v) => v.comprobante).sort((a, b) => (b.comprobante.fecha || "").localeCompare(a.comprobante.fecha || "")), [ventas]);

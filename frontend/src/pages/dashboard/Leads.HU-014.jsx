@@ -5,12 +5,12 @@ import { useAuth } from "../../context/AuthContext";
 import { CANALES, ESTADOS_LEAD, FAMILIAS, FILTROS_CATALOGO, SEDES_ATENCION } from "../../data/mockData";
 import { Aviso, btnMini, btnMiniPeligro, Campo, Card, Modal, PageHeader, Stat, Tabla, useConfirm, useToast, Vacio } from "../../components/ui";
 import { RankingBarras } from "../../components/charts";
-import { esCelular, esNombre, MSJ, soloDigitos, soloLetras } from "../../lib/validar";
+import { esCelular, esNombre, hoyLocal, limpiarTexto, MSJ, soloDigitos, soloLetras } from "../../lib/validar";
 
 const TONO = { Nuevo: "bg-sky-100 text-sky-700", "En seguimiento": "bg-amber-100 text-amber-700", Cotizado: "bg-violet-100 text-violet-700", "Cerrado ganado": "bg-emerald-100 text-emerald-700", Perdido: "bg-slate-200 text-slate-600" };
 const VACIO = { contacto: "", telefono: "", canal: "", modelo: "", color: "", sede: "Comas", responsable: "", estado: "Nuevo", nota: "", primerContacto: true, otraOportunidad: false };
 const SIN = "Sin asignar";
-const hoyISO = () => new Date().toISOString().slice(0, 10);
+const hoyISO = hoyLocal; // fecha local (no UTC)
 
 /**
  * Leads: registrar manualmente un interesado.
@@ -19,7 +19,7 @@ const hoyISO = () => new Date().toISOString().slice(0, 10);
  * Modo ausencia: el lead queda «Sin asignar» y «Sin próximo contacto» hasta repartirlo.
  */
 export default function Leads() {
-  const { leads, modelos, equipo, seguimientos, config, agregar, actualizar, eliminar, configurar } = useApp();
+  const { leads, modelos, equipo, seguimientos, config, agregar, actualizar, eliminar, configurar, publicos = [] } = useApp();
   const { user, puede } = useAuth();
   const toast = useToast(); const confirmar = useConfirm(); const nav = useNavigate();
   const [f, setF] = useState({ q: "", estado: "", canal: "", sede: "", resp: "", modelo: "" });
@@ -29,7 +29,7 @@ export default function Leads() {
   const [err, setErr] = useState({});
   const [asignando, setAsignando] = useState(null); const [vendAsig, setVendAsig] = useState("");
   const vendedores = equipo.filter((p) => p.rol === "vendedor" && p.activo);
-  const nombreModelo = (id) => modelos.find((m) => m.id === id)?.nombre || "Sin modelo";
+  const nombreModelo = (id) => (modelos.find((m) => m.id === id) || publicos.find((m) => m.id === id))?.nombre || "Sin modelo";
   const ausencia = !!config?.modoAusencia;
   const hoy = hoyISO();
 
@@ -51,7 +51,9 @@ export default function Leads() {
 
   // Duplicado en vivo: apenas el celular tiene 9 dígitos se busca en los leads existentes
   // (se compara solo el celular: el mismo cliente puede consultar por otro modelo)
-  const duplicado = esCelular(form.telefono) ? leads.find((l) => l.telefono === form.telefono && l.id !== modal?.lead?.id) : null;
+  // Al editar sin cambiar el celular no se avisa: ese cliente puede tener otra oportunidad registrada con el mismo número
+  const celularSinCambio = Boolean(modal?.lead && modal.lead.telefono === form.telefono);
+  const duplicado = esCelular(form.telefono) && !celularSinCambio ? leads.find((l) => l.telefono === form.telefono && l.id !== modal?.lead?.id) : null;
   const modeloForm = modelos.find((m) => m.id === form.modelo);
 
   function abrir(l) {
@@ -65,14 +67,16 @@ export default function Leads() {
     if (!esCelular(form.telefono)) x.telefono = MSJ.celular;
     else if (duplicado && !form.otraOportunidad) x.telefono = "Este celular ya está registrado. Abre ese lead o márcalo como otra oportunidad.";
     if (!form.canal) x.canal = "Indica por dónde llegó la consulta.";
-    if (!form.modelo) x.modelo = "Elige el modelo que consultó.";
+    if (!form.modelo || ![...modelos, ...publicos].some((m) => m.id === form.modelo)) x.modelo = "Elige el modelo que consultó.";
+    if (limpiarTexto(form.nota).length > 500) x.nota = "Máximo 500 caracteres.";
     setErr(x); return Object.keys(x).length === 0;
   }
   function guardar(e) {
     e.preventDefault();
     if (!validar()) return;
     const { primerContacto, otraOportunidad, ...datos } = form;
-    datos.contacto = datos.contacto.trim();
+    datos.contacto = limpiarTexto(datos.contacto);
+    datos.nota = limpiarTexto(datos.nota);
     if (otraOportunidad && duplicado) datos.nota = [datos.nota, `Otra oportunidad del mismo cliente (lead #${duplicado.id}).`].filter(Boolean).join(" ");
     if (modal.lead) { actualizar("leads", modal.lead.id, datos, `Lead editado: ${datos.contacto}`); toast("Lead actualizado"); }
     else {
@@ -88,7 +92,7 @@ export default function Leads() {
   function abrirAsignar(l) { setVendAsig(vendedores.find((p) => p.sede === l.sede && !p.ausente)?.nombre || vendedores[0]?.nombre || ""); setAsignando(l); }
   function guardarAsignacion(e) {
     e.preventDefault();
-    if (!vendAsig) return;
+    if (!vendAsig) return toast("No hay vendedores activos para asignar. Revisa el Equipo.", "error");
     actualizar("leads", asignando.id, { responsable: vendAsig }, `Lead ${asignando.contacto} asignado a ${vendAsig}`);
     if (!proximo(asignando)) agregar("seguimientos", { leadId: asignando.id, fecha: hoy, tipo: "Llamada", responsable: vendAsig, hecho: false, detalle: "Primer contacto tras la asignación" });
     toast(`Asignado a ${vendAsig}. Primer contacto agendado para hoy.`); setAsignando(null);
@@ -96,7 +100,10 @@ export default function Leads() {
 
   async function cambiarEstado(l, estado) {
     if (["Cerrado ganado", "Perdido"].includes(estado) && !(await confirmar({ titulo: `Marcar como «${estado}»`, texto: `${l.contacto} saldrá de la lista de leads abiertos.`, boton: "Confirmar" }))) return;
-    actualizar("leads", l.id, { estado }, `Lead ${l.contacto}: ${estado}`); toast(`Estado: ${estado}`);
+    actualizar("leads", l.id, { estado }, `Lead ${l.contacto}: ${estado}`);
+    // Al cerrar el lead, sus contactos pendientes se dan por cerrados (no quedan tareas para un lead ganado o perdido)
+    if (["Cerrado ganado", "Perdido"].includes(estado)) seguimientos.filter((s) => s.leadId === l.id && !s.hecho).forEach((s) => actualizar("seguimientos", s.id, { hecho: true, resultado: `Lead marcado como «${estado}»`, cerrado: hoy }));
+    toast(`Estado: ${estado}`);
   }
   async function borrar(l) {
     const segs = seguimientos.filter((s) => s.leadId === l.id);
@@ -218,7 +225,7 @@ export default function Leads() {
           <Campo etiqueta="Responsable"><select id="lead-responsable" className="field-input" value={form.responsable} onChange={set("responsable")}><option>{SIN}</option>{vendedores.map((v) => <option key={v.id}>{v.nombre}</option>)}</select></Campo>
           {modal?.lead && <Campo etiqueta="Estado"><select className="field-input" value={form.estado} onChange={set("estado")}>{ESTADOS_LEAD.map((c) => <option key={c}>{c}</option>)}</select></Campo>}
           <Campo etiqueta="Color de interés"><select id="lead-color" className="field-input" value={form.color} onChange={set("color")} disabled={!modeloForm}><option value="">{modeloForm ? "Cualquiera" : "Elige primero el modelo"}</option>{(modeloForm?.colores || []).map((c) => <option key={c}>{c}</option>)}</select></Campo>
-          <Campo etiqueta="Notas" className="sm:col-span-2"><textarea className="field-input" rows={2} value={form.nota} onChange={set("nota")} placeholder="Qué preguntó, cuándo prefiere que lo llamen…" /></Campo>
+          <Campo etiqueta="Notas" error={err.nota} className="sm:col-span-2"><textarea className="field-input" rows={2} maxLength={520} value={form.nota} onChange={set("nota")} placeholder="Qué preguntó, cuándo prefiere que lo llamen…" /></Campo>
           {!modal?.lead && (
             form.responsable === SIN
               ? <p className="text-[13px] text-slate-500 sm:col-span-2">Sin responsable no se agenda contacto: el lead quedará «Sin asignar» y «Sin próximo contacto», no como atendido.</p>

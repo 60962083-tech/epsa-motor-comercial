@@ -4,7 +4,7 @@ import { IconMenu, IconClose, IconSun, IconMoon } from "../Icons";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../ThemeContext";
 import { ROLES } from "../../data/mockData";
-import { MODO_REAL } from "../../lib/config";
+import { API_URL, MODO_REAL } from "../../lib/config";
 import Login from "../../pages/dashboard/Login.HU-007";
 
 const IC = {
@@ -93,7 +93,7 @@ export default function DashboardLayout() {
                 </div>
               );
             })}
-            <p className="mt-auto flex items-center gap-2 px-3 pt-4 text-[12px] text-slate-400" title={MODO_REAL ? "Datos desde la API y Supabase" : "Los datos se guardan en este navegador"}>
+            <p className="mt-auto flex items-center gap-2 px-3 pt-4 text-[12px] text-slate-400" title={MODO_REAL ? `Datos desde la API (${API_URL}) y Supabase` : "Los datos se guardan en este navegador"}>
               <span className={`h-2 w-2 rounded-full ${MODO_REAL ? "bg-emerald-500" : "bg-amber-400"}`} />{MODO_REAL ? "Conectado a Supabase" : "Modo demostración"}
             </p>
           </nav>

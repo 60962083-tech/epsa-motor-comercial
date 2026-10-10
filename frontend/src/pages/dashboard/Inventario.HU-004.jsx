@@ -13,7 +13,7 @@ const POR_PAGINA = 15;
  * y sin ubicación. Aquí se registra la recepción, el techo/preparación, el traslado y la liberación para venta.
  */
 export default function Inventario() {
-  const { unidades, modelos, ubicaciones, actualizar, eliminar } = useApp();
+  const { unidades, modelos, ubicaciones, ventas = [], actualizar, eliminar } = useApp();
   const { state } = useLocation();
   const { puede, user } = useAuth();
   const toast = useToast(); const confirmar = useConfirm();
@@ -33,7 +33,8 @@ export default function Inventario() {
   const paginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
   const visibles = lista.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
   const setFiltro = (k, v) => { setF({ ...f, [k]: v }); setPag(1); };
-  const hoy = () => new Date().toISOString().slice(0, 10);
+  const hoy = () => new Date().toLocaleDateString("en-CA"); // fecha local (no UTC)
+  const texto = (t) => String(t || "").trim().replace(/\s+/g, " ");
   const log = (u, detalle) => [...u.historial, { fecha: hoy(), detalle: `${detalle} · ${user.nombre}` }];
 
   function abrir(tipo, u) {
@@ -47,16 +48,26 @@ export default function Inventario() {
     if (!d.destino) return setErr({ destino: "Elige la ubicación de destino." });
     if (d.destino === u.ubicacion) return setErr({ destino: "El destino debe ser distinto a la ubicación actual." });
     if (u.disponibilidad === "Vendida") return setErr({ destino: "Una unidad vendida ya no se traslada." });
-    actualizar("unidades", u.id, { ubicacion: d.destino, historial: log(u, `Traslado ${u.ubicacion} → ${d.destino}${d.motivo ? ` (${d.motivo})` : ""}`) }, `${u.id} trasladada a ${d.destino}`);
-    toast(`${u.id} trasladada a ${d.destino}`); setModal(null);
+    const motivo = texto(d.motivo);
+    if (motivo.length > 200) return setErr({ motivo: "Máximo 200 caracteres." });
+    // Una unidad disponible que va al proveedor de techo deja de estar a la venta hasta que vuelva y se libere otra vez
+    const aProveedor = ubicaciones.find((a) => a.nombre === d.destino)?.tipo === "Proveedor de techo";
+    const retirar = aProveedor && u.disponibilidad === "Disponible";
+    actualizar("unidades", u.id, { ubicacion: d.destino, ...(retirar ? { disponibilidad: "No disponible" } : {}), historial: log(u, `Traslado ${u.ubicacion || "sin ubicación"} → ${d.destino}${motivo ? ` (${motivo})` : ""}${retirar ? " · sale de la venta hasta volver a liberarla" : ""}`) }, `${u.id} trasladada a ${d.destino}`);
+    toast(retirar ? `${u.id} trasladada a ${d.destino}. Sale del stock de la web hasta que vuelva y la liberes.` : `${u.id} trasladada a ${d.destino}`); setModal(null);
   }
   function guardarRecepcion(e) {
     e.preventDefault(); const u = modal.u;
     if (!d.destino) return setErr({ destino: "Elige dónde se recibe la unidad." });
-    actualizar("unidades", u.id, { ubicacion: d.destino, historial: log(u, `Recepción física en ${d.destino}${d.detalle ? ` · ${d.detalle}` : ""}`) }, `${u.id} recibida en ${d.destino}`);
+    const detalle = texto(d.detalle);
+    if (detalle.length > 200) return setErr({ detalle: "Máximo 200 caracteres." });
+    actualizar("unidades", u.id, { ubicacion: d.destino, historial: log(u, `Recepción física en ${d.destino}${detalle ? ` · ${detalle}` : ""}`) }, `${u.id} recibida en ${d.destino}`);
     toast(`${u.id} recibida en ${d.destino}`); setModal(null);
   }
   async function liberar(u) {
+    if (!u.ubicacion) return toast(`${u.id} aún no tiene recepción física: recíbela en una sede o almacén antes de liberarla.`, "error");
+    if (ubicaciones.find((a) => a.nombre === u.ubicacion)?.tipo === "Proveedor de techo") return toast(`${u.id} está en el proveedor de techo (${u.ubicacion}). Trasládala a una sede antes de liberarla.`, "error");
+    if (u.estadoTecho === "Pendiente de instalación") return toast(`${u.id} tiene el techo pendiente de instalación. Confírmalo en «Ficha y techo» antes de liberarla.`, "error");
     if (u.preparacion !== "Lista para entrega" && !(await confirmar({ titulo: "Liberar sin preparación completa", texto: `${u.id} figura como «${u.preparacion}». ¿Igual quieres marcarla como disponible para la venta?`, boton: "Sí, liberar" }))) return;
     if (u.preparacion === "Lista para entrega" && !(await confirmar({ titulo: "Liberar para la venta", texto: `${u.id} quedará disponible y se contará en el stock de la web pública.`, boton: "Liberar" }))) return;
     actualizar("unidades", u.id, { disponibilidad: "Disponible", historial: log(u, "Liberada para la venta") }, `${u.id} liberada para la venta`);
@@ -64,6 +75,7 @@ export default function Inventario() {
   }
   async function borrar(u) {
     if (u.disponibilidad === "Vendida") return toast("Una unidad vendida no se elimina: forma parte del historial de ventas.", "error");
+    if (u.disponibilidad === "Separada" || ventas.some((v) => v.unidad === u.id && !["Anulada", "Cancelada"].includes(v.etapa))) return toast(`${u.id} está separada para un pedido: no se puede eliminar.`, "error");
     if (await confirmar({ titulo: "Eliminar unidad", texto: `¿Eliminar la unidad ${u.id} (motor ${u.motor})? Se perderá su historial. Esta acción no se puede deshacer.`, boton: "Eliminar", peligro: true })) { eliminar("unidades", u.id, `Unidad eliminada: ${u.id}`); toast("Unidad eliminada"); }
   }
 
@@ -149,7 +161,7 @@ export default function Inventario() {
         <form id="f-tr" onSubmit={guardarTraslado} className="grid gap-4">
           <p className="text-[13.5px] text-slate-500">Ubicación actual: <b>{modal?.u?.ubicacion}</b></p>
           <Campo etiqueta="Destino" error={err.destino}><select className="field-input" value={d.destino} onChange={(e) => setD({ ...d, destino: e.target.value })}>{activas.map((a) => <option key={a.id}>{a.nombre}</option>)}</select></Campo>
-          <Campo etiqueta="Motivo (opcional)"><input className="field-input" value={d.motivo} onChange={(e) => setD({ ...d, motivo: e.target.value })} /></Campo>
+          <Campo etiqueta="Motivo (opcional)" error={err.motivo}><input className="field-input" maxLength={220} value={d.motivo} onChange={(e) => setD({ ...d, motivo: e.target.value })} /></Campo>
           <Aviso tipo="aviso">Solo se muestran ubicaciones activas.</Aviso>
         </form>
       </Modal>
@@ -162,7 +174,7 @@ export default function Inventario() {
         <form id="f-rc" onSubmit={guardarRecepcion} className="grid gap-4" noValidate>
           <p className="text-[13.5px] text-slate-500">Motor <b>{modal?.u?.motor}</b> · chasis <b>{modal?.u?.chasis}</b></p>
           <Campo etiqueta="Ubicación donde llegó" error={err.destino}><select className="field-input" value={d.destino} onChange={(e) => setD({ ...d, destino: e.target.value })}>{activas.map((a) => <option key={a.id}>{a.nombre}</option>)}</select></Campo>
-          <Campo etiqueta="Observación (opcional)"><input className="field-input" value={d.detalle || ""} onChange={(e) => setD({ ...d, detalle: e.target.value })} placeholder="Llegó sin observaciones" /></Campo>
+          <Campo etiqueta="Observación (opcional)" error={err.detalle}><input className="field-input" maxLength={220} value={d.detalle || ""} onChange={(e) => setD({ ...d, detalle: e.target.value })} placeholder="Llegó sin observaciones" /></Campo>
           <Aviso>La unidad sigue «No disponible» hasta que la liberes para la venta.</Aviso>
         </form>
       </Modal>

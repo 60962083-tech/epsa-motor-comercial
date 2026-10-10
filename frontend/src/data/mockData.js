@@ -183,16 +183,15 @@ export const MODELOS = [
 // Colores que vende EPSA Motor (torito.pe). No existe el blanco.
 export const COLORES = ["Rojo", "Azul", "Amarillo", "Verde", "Negro"];
 export const COLOR_HEX = { Rojo: "#d3222c", Azul: "#1d6fd1", Amarillo: "#f2c200", Verde: "#1f9a3c", Negro: "#17191e" };
-// Si un color no tiene foto propia, se usa la foto del modelo y se cambia el tono de la pintura con un filtro.
-// Funciona desde cualquier color de foto (roja, azul, amarilla o verde) hacia cualquier otro color.
-const TONO = { Rojo: 0, Amarillo: 48, Verde: 112, Azul: 210 };
-const AJUSTE = { Rojo: " saturate(1.1)", Amarillo: " saturate(1.35) brightness(1.12)", Verde: " saturate(0.95)", Azul: " saturate(1.05)" };
+// Si un color no tiene foto propia, se usa la foto del modelo y se cambia el color de la pintura con un filtro SVG
+// (components/FiltrosColor.jsx): mezcla los canales para que el blanco, el negro y los grises no cambien
+// y la pintura quede del color real (por ejemplo, amarillo de verdad y no anaranjado).
+const CLAVE_COLOR = { Rojo: "rojo", Azul: "azul", Amarillo: "amarillo", Verde: "verde", Negro: "negro" };
 export function filtroEntre(desde, hacia) {
   if (!hacia || desde === hacia) return "";
-  if (hacia === "Negro") return "grayscale(1) contrast(1.55) brightness(0.78)";
-  if (!(desde in TONO) || !(hacia in TONO)) return "";
-  const giro = (TONO[hacia] - TONO[desde] + 360) % 360;
-  return `hue-rotate(${giro}deg)${AJUSTE[hacia]}`;
+  const a = CLAVE_COLOR[desde]; const b = CLAVE_COLOR[hacia];
+  if (!a || !b || a === "negro") return "";
+  return `url(#epsa-color-${a}-${b})`;
 }
 export const FILTRO_COLOR = Object.fromEntries(["Azul", "Amarillo", "Verde", "Negro"].map((c) => [c, filtroEntre("Rojo", c)]));
 
@@ -222,7 +221,8 @@ export const techoPorId = (id) => OPCIONES_TECHO.find((t) => t.id === id) || (id
 export const CUOTAS_INICIAL = [20, 30, 40, 50];
 export const PLAZOS = [6, 12, 18, 24, 30, 36];
 
-export const formatoSoles = (n) => `S/ ${Number(n).toLocaleString("es-PE")}`;
+// Sin precio (por ejemplo, un modelo que llegó de Supabase sin precio) se muestra «A consultar», nunca «S/ NaN»
+export const formatoSoles = (n) => (n === null || n === undefined || n === "" || !Number.isFinite(Number(n)) ? "A consultar" : `S/ ${Number(n).toLocaleString("es-PE")}`);
 
 const HORARIO_SEDE = "Lunes a Sábado de 9:00 AM a 5:00 PM";
 const HORARIO_NOTA = "Domingos: consultar por WhatsApp o en sede";
@@ -247,10 +247,19 @@ export function enlaceMapaEmbebido(direccion) {
   return `https://www.google.com/maps?q=${encodeURIComponent(direccion)}&output=embed`;
 }
 
-// HU-004: configuración del techo de cada unidad. Los techos de fibra los instala un proveedor externo.
-export const TIPOS_TECHO = ["Sin techo", "Lona", "Fibra Básico", "Fibra Superlujo", "Fibra Superlujo Deportivo"];
-export const TECHO_REQUIERE_PROVEEDOR = (t) => String(t || "").startsWith("Fibra");
+// HU-004: configuración del techo de cada unidad (mismos tipos que el backend, tabla tipotecho).
+// Solo el techo de fibra deportiva lo hace un proveedor externo (FIVESA, JAVICAR o FIBRAT); el clásico lo fabrica EPSA Motor.
+export const TIPOS_TECHO = ["Sin techo", "Lona", "Techo clásico de fibra", "Techo de fibra deportiva"];
+export const TECHO_REQUIERE_PROVEEDOR = (t) => t === "Techo de fibra deportiva";
 export const PROVEEDORES_TECHO = ["FIVESA", "JAVICAR", "FIBRAT"];
+export const MAX_DETALLE_TECHO = 250;
+/** Datos guardados con los nombres anteriores («Fibra Básico», «Fibra Superlujo»…) pasan a los tipos del backend. */
+export function normalizarTecho(techo, proveedor) {
+  const t = String(techo || "Sin techo");
+  if (TIPOS_TECHO.includes(t)) return t;
+  if (/fibra/i.test(t)) return proveedor ? "Techo de fibra deportiva" : "Techo clásico de fibra";
+  return /lona/i.test(t) ? "Lona" : "Sin techo";
+}
 export const ESTADOS_PREPARACION = ["Sin preparar", "Pendiente de techo", "En preparación", "Lista para entrega"];
 
 export const SEDES_ATENCION = ["Comas", "Ventanilla", "Puente Piedra"];
@@ -269,9 +278,18 @@ export const EQUIPO = [
   { id: 5, nombre: "Michelle Fuentes Villaorduña", usuario: "michelle", correo: "61106576@mail.isil.pe", claveHash: "314d6b7d5b779aaa120d1509f684c59a3be3e721dbdd262a89f78359f10cae10", claveTemporal: true, celular: "", rol: "vendedor", cargo: "Vendedora", sede: "Ventanilla", activo: true, ausente: false, recibeLeads: true },
 ];
 
+// Cuentas de prueba del backend de Michelle (Supabase Auth). Conectado, las valida Supabase;
+// sin conexión también se aceptan aquí, para que el equipo use los mismos accesos en ambos modos.
+// Las contraseñas terminan en coma: clave1234567, · clave12345678, · clave123456789,
+export const CUENTAS_DEMO = [
+  { correo: "gerente.demo@epsamotor.test", claveHash: "d65f3e153803f34fdd1ef6182495282a73e89f1b8f5c1657e880cf7342684dd9", nombre: "Gerente Demo", rol: "gerente", cargo: "Gerente" },
+  { correo: "admin.demo@epsamotor.test", claveHash: "b10fc3456f38c210d557cd0573ddd30e2de07c79f5056c9f9fe35b066563e15f", nombre: "Admin Demo", rol: "administradora", cargo: "Administradora" },
+  { correo: "vendedor.demo@epsamotor.test", claveHash: "22178c0656a5765c2aa0d96abf5b8dc1a5a2d461152d9d2979433cfa7b1e9b53", nombre: "Vendedor Demo", rol: "vendedor", cargo: "Vendedor" },
+];
+
 // ---- Datos de ejemplo (modo demostración): unos pocos registros por sección ----
 const hoy = new Date();
-const dia = (n) => new Date(hoy.getTime() - n * 86400000).toISOString().slice(0, 10);
+const dia = (n) => new Date(hoy.getTime() - n * 86400000).toLocaleDateString("en-CA"); // fecha local (no UTC)
 
 export const LEADS = [
   { id: 1, fecha: dia(0), contacto: "Carlos Ramírez", telefono: "987654321", canal: "Formulario web", modelo: "torito-4v-gsl", color: "Rojo", sede: "Comas", responsable: "Didier Leguía Sandoval", estado: "Nuevo", nota: "Techo: Básico · Pago: Financiamiento" },
@@ -299,9 +317,9 @@ export const VENTAS = [
 ];
 
 export const METAS = [
-  { id: 1, mes: hoy.toISOString().slice(0, 7), sede: "Comas", meta: 6, registradas: 2 },
-  { id: 2, mes: hoy.toISOString().slice(0, 7), sede: "Ventanilla", meta: 5, registradas: 2 },
-  { id: 3, mes: hoy.toISOString().slice(0, 7), sede: "Puente Piedra", meta: 4, registradas: 0 },
+  { id: 1, mes: hoy.toLocaleDateString("en-CA").slice(0, 7), sede: "Comas", meta: 6, registradas: 2 },
+  { id: 2, mes: hoy.toLocaleDateString("en-CA").slice(0, 7), sede: "Ventanilla", meta: 5, registradas: 2 },
+  { id: 3, mes: hoy.toLocaleDateString("en-CA").slice(0, 7), sede: "Puente Piedra", meta: 4, registradas: 0 },
 ];
 
 // ---- Inventario: pocas unidades de ejemplo (el Crom Plus GSL queda sin stock para ver ese aviso en la web) ----
@@ -312,9 +330,9 @@ const unidad = (n, modelo, color, ubicacion, disponibilidad, techo = "Sin techo"
 });
 export const UNIDADES = [
   unidad(1, "torito-4v-gsl", "Rojo", "Comas", "Disponible"),
-  unidad(2, "torito-4v-glp", "Rojo", "Ventanilla", "Disponible", "Fibra Básico", "FIVESA"),
+  unidad(2, "torito-4v-glp", "Rojo", "Ventanilla", "Disponible", "Techo de fibra deportiva", "FIVESA"),
   unidad(3, "torito-crom-plus-gnv", "Rojo", "Ventanilla", "Separada", "Lona"),
-  unidad(4, "torito-250-4v-glp", "Rojo", "Comas", "Vendida", "Fibra Superlujo", "JAVICAR"),
+  unidad(4, "torito-250-4v-glp", "Rojo", "Comas", "Vendida", "Techo de fibra deportiva", "JAVICAR"),
   unidad(5, "torito-2t-ug-gsl", "Azul", "Ventanilla", "Vendida"),
   unidad(6, "torito-2t-ug-glp", "Verde", "Puente Piedra", "Disponible"),
   unidad(7, "torito-4v-gnv", "Rojo", "Puente Piedra", "Disponible", "Sin techo", "", "Pendiente de techo"),
@@ -334,7 +352,7 @@ UNIDADES.push(...IDENT_C2.map((u, i) => ({
 // Más unidades disponibles para que la web muestre stock (el Crom Plus GSL sigue sin stock a propósito)
 UNIDADES.push(
   unidad(13, "torito-2t-ug-gsl", "Azul", "Comas", "Disponible"),
-  unidad(14, "torito-crom-plus-gnv", "Rojo", "Comas", "Disponible", "Fibra Básico", "FIBRAT"),
+  unidad(14, "torito-crom-plus-gnv", "Rojo", "Comas", "Disponible", "Techo clásico de fibra"),
   unidad(15, "torito-2t-ug-glp", "Rojo", "Ventanilla", "Disponible"),
   unidad(16, "torito-4v-gsl", "Rojo", "Puente Piedra", "Disponible", "Lona"),
 );

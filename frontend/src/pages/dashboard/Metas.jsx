@@ -4,16 +4,21 @@ import { useAuth } from "../../context/AuthContext";
 import { SEDES_ATENCION } from "../../data/mockData";
 import { Campo, Card, Modal, PageHeader, Stat, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
 import { Progreso } from "../../components/charts";
+import { mesLocal } from "../../lib/validar";
+
+const MES_VALIDO = /^\d{4}-(0[1-9]|1[0-2])$/;
+// Mes a «n» meses de hoy (formato AAAA-MM): las metas se registran desde un año atrás hasta un año adelante
+const mesDesde = (n) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 
 /** Metas mensuales por sede, comparadas con las ventas realmente registradas en EPSA. */
 export default function Metas() {
   const { metas, ventas, agregar, actualizar, eliminar } = useApp();
   const { puede } = useAuth();
   const toast = useToast(); const confirmar = useConfirm();
-  const [mes, setMes] = useState(new Date().toISOString().slice(0, 7));
+  const [mes, setMes] = useState(mesLocal());
   const [modal, setModal] = useState(null);
   const [f, setF] = useState({ sede: SEDES_ATENCION[0], meta: "" });
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState({});
 
   const delMes = metas.filter((m) => m.mes === mes);
   const reg = (sede) => ventas.filter((v) => v.sede === sede && v.fecha.startsWith(mes) && v.etapa !== "Cotización").length;
@@ -21,12 +26,16 @@ export default function Metas() {
   const totalReg = delMes.reduce((s, m) => s + reg(m.sede), 0);
   const puedeEditar = puede("metas.gestionar");
 
-  function abrir(m) { setErr(""); setF(m ? { sede: m.sede, meta: String(m.meta) } : { sede: SEDES_ATENCION.find((s) => !delMes.some((x) => x.sede === s)) || SEDES_ATENCION[0], meta: "" }); setModal({ m }); }
+  function abrir(m) { setErr({}); setF(m ? { sede: m.sede, meta: String(m.meta) } : { sede: SEDES_ATENCION.find((s) => !delMes.some((x) => x.sede === s)) || SEDES_ATENCION[0], meta: "" }); setModal({ m }); }
   function guardar(e) {
     e.preventDefault();
-    const n = Number(f.meta);
-    if (!Number.isInteger(n) || n < 1 || n > 500) return setErr("La meta debe ser un número entero entre 1 y 500.");
-    if (!modal.m && delMes.some((x) => x.sede === f.sede)) return setErr("Esa sede ya tiene meta en este mes. Edítala.");
+    const n = Number(f.meta); const x = {};
+    if (!MES_VALIDO.test(mes)) x.mes = "Elige el mes de la meta (arriba, junto al título).";
+    else if (mes < mesDesde(-12) || mes > mesDesde(12)) x.mes = `Elige un mes entre ${mesDesde(-12)} y ${mesDesde(12)} (arriba, junto al título).`;
+    if (!SEDES_ATENCION.includes(f.sede)) x.sede = "Elige la sede.";
+    else if (!modal.m && delMes.some((m) => m.sede === f.sede)) x.sede = "Esa sede ya tiene meta en este mes. Edítala.";
+    if (!f.meta || !Number.isInteger(n) || n < 1 || n > 500) x.meta = "La meta debe ser un número entero entre 1 y 500.";
+    setErr(x); if (Object.keys(x).length) return;
     if (modal.m) actualizar("metas", modal.m.id, { meta: n }, `Meta de ${f.sede} (${mes}): ${n}`);
     else agregar("metas", { mes, sede: f.sede, meta: n, registradas: 0 }, `Meta registrada: ${f.sede} ${mes} = ${n}`);
     toast("Meta guardada"); setModal(null);
@@ -35,7 +44,7 @@ export default function Metas() {
   return (
     <div>
       <PageHeader titulo="Metas mensuales" subtitulo="Meta informada por sede frente a las ventas registradas en EPSA.">
-        <input type="month" className="field-input !w-auto" value={mes} onChange={(e) => setMes(e.target.value)} aria-label="Mes" />
+        <input type="month" className="field-input !w-auto" value={mes} onChange={(e) => setMes(e.target.value || mesLocal())} aria-label="Mes" />
         {puedeEditar && <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Registrar meta</button>}
       </PageHeader>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
@@ -57,8 +66,9 @@ export default function Metas() {
       )}
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.m ? "Editar meta" : "Registrar meta"} ancho="max-w-md" pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-meta" className="btn btn-primary !py-2">Guardar</button></>}>
         <form id="f-meta" onSubmit={guardar} className="grid gap-4">
-          <Campo etiqueta="Sede"><select className="field-input" disabled={!!modal?.m} value={f.sede} onChange={(e) => setF({ ...f, sede: e.target.value })}>{SEDES_ATENCION.map((s) => <option key={s}>{s}</option>)}</select></Campo>
-          <Campo etiqueta={`Meta de ventas (${mes})`} error={err}><input className="field-input" inputMode="numeric" maxLength={3} value={f.meta} onChange={(e) => setF({ ...f, meta: e.target.value.replace(/\D/g, "").slice(0, 3).replace(/^0+/, "") })} /></Campo>
+          {err.mes && <p className="text-[12.5px] font-medium text-acento">{err.mes}</p>}
+          <Campo etiqueta="Sede" error={err.sede}><select className="field-input" disabled={!!modal?.m} value={f.sede} onChange={(e) => setF({ ...f, sede: e.target.value })}>{SEDES_ATENCION.map((s) => <option key={s}>{s}</option>)}</select></Campo>
+          <Campo etiqueta={`Meta de ventas (${mes})`} error={err.meta}><input className="field-input" inputMode="numeric" maxLength={3} value={f.meta} onChange={(e) => setF({ ...f, meta: e.target.value.replace(/\D/g, "").slice(0, 3).replace(/^0+/, "") })} /></Campo>
         </form>
       </Modal>
     </div>

@@ -5,7 +5,7 @@ import { WHATSAPP_NUMERO } from "../lib/config";
 import { IconWhatsapp } from "./Icons";
 import ModeloImg from "./ModeloImg";
 import { OPCIONES_TECHO, SIN_TECHO, formatoSoles } from "../data/mockData";
-import { soloDigitos, soloLetras, esNombre, esCelular, MSJ } from "../lib/validar";
+import { soloDigitos, soloLetras, esNombre, esCelular, hoyLocal, limpiarTexto, MSJ } from "../lib/validar";
 
 /**
  * Cotizar: el botón «Cotizar» de la web abre este formulario.
@@ -39,7 +39,8 @@ export function CotizarProvider({ children }) {
 
   const modelo = publicos.find((m) => m.id === f.modelo);
   const techo = TECHOS.find((t) => t.id === f.techo);
-  const total = (modelo?.precioDesde || 0) + (techo?.precio || 0);
+  const conPrecio = Number(modelo?.precioDesde) > 0; // un modelo que solo existe en Supabase aún no tiene precio
+  const total = (Number(modelo?.precioDesde) || 0) + (techo?.precio || 0);
   const set = (k, v) => setF((p) => {
     const n = { ...p, [k]: v };
     if (k === "modelo") { const m = publicos.find((x) => x.id === v); n.color = m?.colores?.[0] || ""; }
@@ -71,17 +72,19 @@ export function CotizarProvider({ children }) {
     e.preventDefault();
     if (enviando.current || !validar()) return;
     enviando.current = true;
-    const hoy = new Date().toISOString().slice(0, 10);
-    const nombre = f.nombre.trim().replace(/\s+/g, " ");
+    const hoy = hoyLocal(); // fecha local (no UTC)
+    const nombre = limpiarTexto(f.nombre);
     const tel = f.telefono;
     const techoTxt = techo.precio ? techo.nombre : "";
-    const detalle = `${modelo.nombre}${f.color ? ` (${f.color})` : ""}${techoTxt ? ` · techo ${techoTxt}` : " · sin techo"} · ${f.pago} · total ${formatoSoles(total)}`;
-    const solicitud = { cliente: nombre, celular: tel, modelo: modelo.id, color: f.color, techo: techoTxt, techoPrecio: techo.precio, pago: f.pago, sede: f.sede, total };
+    const detalle = `${modelo.nombre}${f.color ? ` (${f.color})` : ""}${techoTxt ? ` · techo ${techoTxt}` : " · sin techo"} · ${f.pago} · total ${conPrecio ? formatoSoles(total) : "a consultar"}`;
+    const solicitud = { cliente: nombre, celular: tel, modelo: modelo.id, color: f.color, techo: techoTxt, techoPrecio: techo.precio, pago: f.pago, sede: f.sede, total: conPrecio ? total : 0 };
 
     // Mismo celular con un lead abierto: es el mismo cliente, no se crea otro.
     const existente = leads.find((l) => l.telefono === tel && ABIERTO(l));
     if (existente) {
-      actualizar("leads", existente.id, { modelo: modelo.id, color: f.color, fecha: hoy, nota: `${existente.nota ? `${existente.nota} · ` : ""}Volvió a consultar por la web: ${detalle}` }, `Cliente conocido volvió a cotizar: ${existente.contacto}`);
+      // Se conserva la fecha de registro del lead; la nueva consulta queda en la nota (y el nombre, si lo escribió distinto)
+      const otroNombre = nombre.toLowerCase() !== limpiarTexto(existente.contacto).toLowerCase() ? ` (esta vez se registró como ${nombre})` : "";
+      actualizar("leads", existente.id, { modelo: modelo.id, color: f.color, ultimaConsulta: hoy, nota: `${existente.nota ? `${existente.nota} · ` : ""}Volvió a consultar por la web el ${hoy}${otroNombre}: ${detalle}` }, `Cliente conocido volvió a cotizar: ${existente.contacto}`);
       const pendiente = ventas.find((v) => v.leadId === existente.id && v.etapa === "Solicitud web");
       if (pendiente) actualizar("ventas", pendiente.id, { ...solicitud, fecha: hoy }, `Solicitud web actualizada: ${nombre} · ${modelo.nombre}`);
       else agregar("ventas", { id: ventas.reduce((m, v) => Math.max(m, Number(v.id) || 0), 0) + 1, fecha: hoy, documento: "", etapa: "Solicitud web", vendedor: existente.responsable, adelanto: 0, unidad: null, canal: "Formulario web", origen: "Web de EPSA", leadId: existente.id, ...solicitud }, `Solicitud de compra web: ${nombre} · ${modelo.nombre}`);
@@ -93,7 +96,7 @@ export function CotizarProvider({ children }) {
       if (responsable !== "Sin asignar") agregar("seguimientos", { leadId: idLead, fecha: hoy, tipo: "Llamada", responsable, hecho: false, detalle: `Primer contacto: cotización web del ${detalle}` }, `Seguimiento automático creado para ${nombre}`);
       agregar("ventas", { id: ventas.reduce((m, v) => Math.max(m, Number(v.id) || 0), 0) + 1, fecha: hoy, documento: "", etapa: "Solicitud web", vendedor: responsable, adelanto: 0, unidad: null, canal: "Formulario web", origen: "Web de EPSA", leadId: idLead, ...solicitud }, `Solicitud de compra web: ${nombre} · ${modelo.nombre}`);
     }
-    const msg = `Hola, soy ${nombre}. Quisiera cotizar el ${modelo.nombre}${f.color ? ` en color ${f.color}` : ""}${techoTxt ? ` con techo ${techoTxt} (+${formatoSoles(techo.precio)})` : " sin techo"}, total referencial ${formatoSoles(total)} (${f.pago.toLowerCase()}). Sede ${f.sede}. Mi celular: ${tel}.`;
+    const msg = `Hola, soy ${nombre}. Quisiera cotizar el ${modelo.nombre}${f.color ? ` en color ${f.color}` : ""}${techoTxt ? ` con techo ${techoTxt} (+${formatoSoles(techo.precio)})` : " sin techo"}, ${conPrecio ? `total referencial ${formatoSoles(total)}` : "precio por confirmar"} (${f.pago.toLowerCase()}). Sede ${f.sede}. Mi celular: ${tel}.`;
     setPausaClic(true); setTimeout(() => setPausaClic(false), 700);
     setHecho({ repetido: !!existente, modelo: modelo.nombre, url: `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(msg)}` });
   }
@@ -127,7 +130,7 @@ export function CotizarProvider({ children }) {
                 <div className="min-w-0">
                   <p className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">Estás cotizando</p>
                   <p className="truncate font-display text-[1.45rem] font-bold uppercase leading-tight text-marino dark:text-white" data-cotizando>{modelo.nombre}</p>
-                  <p className="text-[13px] text-slate-500">{f.color && `Color ${f.color} · `}moto desde {formatoSoles(modelo.precioDesde)}</p>
+                  <p className="text-[13px] text-slate-500">{f.color && `Color ${f.color} · `}{conPrecio ? `moto desde ${formatoSoles(modelo.precioDesde)}` : "precio a consultar"}</p>
                 </div>
               </div>
             )}
@@ -171,9 +174,9 @@ export function CotizarProvider({ children }) {
               </select>
             </Campo>
             <dl className="grid content-end gap-1 rounded-xl bg-marino-50 px-4 py-3 text-[13px] dark:bg-white/5" data-presupuesto>
-              <div className="flex justify-between"><dt className="text-slate-500">Moto</dt><dd className="cifra">{formatoSoles(modelo?.precioDesde || 0)}</dd></div>
+              <div className="flex justify-between"><dt className="text-slate-500">Moto</dt><dd className="cifra">{conPrecio ? formatoSoles(modelo.precioDesde) : "A consultar"}</dd></div>
               <div className="flex justify-between"><dt className="text-slate-500">Techo</dt><dd className="cifra">{techo ? formatoSoles(techo.precio) : "—"}</dd></div>
-              <div className="flex justify-between border-t border-slate-200 pt-1 text-[15px] font-bold text-marino dark:border-white/10 dark:text-white"><dt>Total referencial</dt><dd className="cifra">{formatoSoles(total)}</dd></div>
+              <div className="flex justify-between border-t border-slate-200 pt-1 text-[15px] font-bold text-marino dark:border-white/10 dark:text-white"><dt>Total referencial</dt><dd className="cifra">{conPrecio ? formatoSoles(total) : "A consultar"}</dd></div>
             </dl>
             <label className="flex items-start gap-2 text-[13px] text-slate-600 dark:text-slate-300 sm:col-span-2">
               <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[#0e2c52]" checked={f.acepta} onChange={(e) => set("acepta", e.target.checked)} />

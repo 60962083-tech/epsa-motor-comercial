@@ -7,6 +7,7 @@ import { resumenClave, validarClaveNueva, MIN_CLAVE } from "../../lib/clave";
 import { mensajeError } from "../../lib/errores";
 import { MODO_REAL } from "../../lib/config";
 import { IconOjo, IconOjoTachado, IconVolver } from "../../components/Icons";
+import { CUENTAS_DEMO } from "../../data/mockData";
 
 /**
  * Login: acceder con permisos por rol. Ruta: /admin
@@ -51,7 +52,12 @@ export default function Login() {
 
     const k = u.toLowerCase();
     const p = equipo.find((x) => (x.correo?.toLowerCase() === k || x.usuario?.toLowerCase() === k) && x.claveHash === resumenClave(x.correo, clave));
-    if (!p) return setError("Correo o contraseña incorrectos.");
+    if (!p) {
+      // Cuentas de prueba de Michelle (las mismas de Supabase): también entran sin conexión
+      const d = CUENTAS_DEMO.find((x) => x.correo === k && x.claveHash === resumenClave(x.correo, clave));
+      if (d) { login(d.nombre, d.rol, { correo: d.correo, cargo: d.cargo, sede: "Todas" }); navigate("/admin"); return; }
+      return setError("Correo o contraseña incorrectos.");
+    }
     if (!p.activo) return setError("Tu acceso está desactivado. Consulta con la gerencia.");
     if (p.claveTemporal) { setCambio({ persona: p, temporal: clave }); setNueva({ clave: "", confirmar: "" }); return; }
     entrar(p);
