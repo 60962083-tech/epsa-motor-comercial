@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+// HU-014 · Leads: registrar interesado
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
@@ -6,25 +7,39 @@ import { CANALES, ESTADOS_LEAD, FAMILIAS, FILTROS_CATALOGO, SEDES_ATENCION } fro
 import { Aviso, btnMini, btnMiniPeligro, Campo, Card, Modal, PageHeader, Stat, Tabla, useConfirm, useToast, Vacio } from "../../components/ui";
 import { RankingBarras } from "../../components/charts";
 import { esCelular, esNombre, hoyLocal, limpiarTexto, MSJ, soloDigitos, soloLetras } from "../../lib/validar";
+import { MODO_REAL, WHATSAPP_NUMERO } from "../../lib/config";
+import { listarCanalesWhatsapp, listarUsuariosSupabase, registrarLeadApi } from "../../lib/api";
+import { mensajeError } from "../../lib/errores";
 
 const TONO = { Nuevo: "bg-sky-100 text-sky-700", "En seguimiento": "bg-amber-100 text-amber-700", Cotizado: "bg-violet-100 text-violet-700", "Cerrado ganado": "bg-emerald-100 text-emerald-700", Perdido: "bg-slate-200 text-slate-600" };
-const VACIO = { contacto: "", telefono: "", canal: "", modelo: "", color: "", sede: "Comas", responsable: "", estado: "Nuevo", nota: "", primerContacto: true, otraOportunidad: false };
+const VACIO = { contacto: "", telefono: "", canal: "", modelo: "", color: "", sede: "Comas", responsable: "", codusu: "", proximo: "", estado: "Nuevo", nota: "", primerContacto: true, otraOportunidad: false };
 const SIN = "Sin asignar";
-const hoyISO = hoyLocal; // fecha local (no UTC)
+const hoyISO = hoyLocal;
 
-/**
- * Leads: registrar manualmente un interesado.
- * Datos obligatorios: nombre, celular, canal y modelo. Si el celular ya existe (aunque sea por otro modelo)
- * se avisa y se elige: abrir el lead existente o registrarlo como otra oportunidad del mismo cliente.
- * Modo ausencia: el lead queda «Sin asignar» y «Sin próximo contacto» hasta repartirlo.
- */
+// Datos que acepta la API de leads
+const COLORES_LEAD = ["Rojo", "Azul", "Amarillo", "Verde", "Negro"];
+const ROLES_LEAD = ["Gerente", "Administradora", "Vendedor"];
+function canalApi(canal) {
+  if (canal === "Visita a sede") return { canlea: "Presencial", orilea: null };
+  if (canal === "Formulario web") return { canlea: canal, orilea: "Web" };
+  if (["Facebook", "TikTok", "Referido"].includes(canal)) return { canlea: canal, orilea: canal };
+  return { canlea: canal, orilea: null };
+}
+// Fecha del primer contacto
+function instanteContacto(dia) {
+  if (dia === hoyLocal()) return new Date(Date.now() + 30 * 60000).toISOString();
+  const [a, m, d] = dia.split("-").map(Number);
+  return new Date(a, m - 1, d, 9, 0, 0).toISOString();
+}
+
+// Página de leads
 export default function Leads() {
-  const { leads, modelos, equipo, seguimientos, config, agregar, actualizar, eliminar, configurar, publicos = [] } = useApp();
+  const { leads, modelos, equipo, seguimientos, config, agregar, actualizar, eliminar, configurar, publicos = [], sedes = [] } = useApp();
   const { user, puede } = useAuth();
   const toast = useToast(); const confirmar = useConfirm(); const nav = useNavigate();
   const [f, setF] = useState({ q: "", estado: "", canal: "", sede: "", resp: "", modelo: "" });
   const [fm, setFm] = useState({ tipoMotor: "", combustible: "", familia: "" });
-  const [modal, setModal] = useState(null); // { lead | null }
+  const [modal, setModal] = useState(null);
   const [form, setForm] = useState(VACIO);
   const [err, setErr] = useState({});
   const [asignando, setAsignando] = useState(null); const [vendAsig, setVendAsig] = useState("");
@@ -33,9 +48,33 @@ export default function Leads() {
   const ausencia = !!config?.modoAusencia;
   const hoy = hoyISO();
 
+  // Responsables, sedes y WhatsApp
+  const [cuentas, setCuentas] = useState(null);
+  const [canalWa, setCanalWa] = useState(undefined);
+  const [dupApi, setDupApi] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+  useEffect(() => {
+    if (!MODO_REAL) return;
+    listarUsuariosSupabase()
+      .then((l) => setCuentas(l.filter((u) => u.estusu !== false && ROLES_LEAD.includes(u.rol?.nomrol))
+        .map((u) => ({ codusu: String(u.codusu), nombre: [u.nomusu, u.apepatusu, u.apematusu].filter(Boolean).join(" "), rol: u.rol.nomrol }))))
+      .catch(() => setCuentas([]));
+    const num = (x) => String(x || "").replace(/\D/g, "").slice(-9);
+    listarCanalesWhatsapp()
+      .then((l) => { const act = l.filter((c) => c.estcwa !== false); const c = act.find((x) => num(x.numcwa) === num(WHATSAPP_NUMERO)) || act[0]; setCanalWa(c ? String(c.codcwa) : null); })
+      .catch(() => setCanalWa(null));
+  }, []);
+  const yo = MODO_REAL && user?.codusu ? { codusu: String(user.codusu), nombre: user.nombre, rol: "" } : null;
+  const responsablesApi = !MODO_REAL ? [] : cuentas?.length ? [...cuentas].sort((a, b) => (b.rol === "Vendedor") - (a.rol === "Vendedor")) : yo ? [yo] : [];
+  const modelosLead = MODO_REAL ? publicos.filter((m) => m.codmodApi) : modelos;
+  const sedesLead = MODO_REAL && sedes.some((s) => s.codsed) ? sedes.map((s) => s.nombre) : SEDES_ATENCION;
+  const codsedDe = (nombre) => sedes.find((s) => s.nombre === nombre)?.codsed || null;
+  const nuevoReal = MODO_REAL && !modal?.lead;
+
   const proximo = (l) => seguimientos.filter((s) => s.leadId === l.id && !s.hecho).sort((a, b) => a.fecha.localeCompare(b.fecha))[0];
   const cerrado = (l) => ["Cerrado ganado", "Perdido"].includes(l.estado);
 
+  // Filtros y ranking
   const filtrados = useMemo(() => leads.filter((l) => {
     const q = f.q.toLowerCase();
     if (q && !`${l.contacto} ${l.telefono}`.toLowerCase().includes(q)) return false;
@@ -49,37 +88,54 @@ export default function Leads() {
     return Object.entries(c).map(([id, v]) => ({ id, v, etiqueta: nombreModelo(id) })).sort((a, b) => b.v - a.v);
   }, [leads, modelos, fm]); // eslint-disable-line
 
-  // Duplicado en vivo: apenas el celular tiene 9 dígitos se busca en los leads existentes
-  // (se compara solo el celular: el mismo cliente puede consultar por otro modelo)
-  // Al editar sin cambiar el celular no se avisa: ese cliente puede tener otra oportunidad registrada con el mismo número
+  // Celular repetido
   const celularSinCambio = Boolean(modal?.lead && modal.lead.telefono === form.telefono);
   const duplicado = esCelular(form.telefono) && !celularSinCambio ? leads.find((l) => l.telefono === form.telefono && l.id !== modal?.lead?.id) : null;
-  const modeloForm = modelos.find((m) => m.id === form.modelo);
+  const modeloForm = (nuevoReal ? modelosLead : modelos).find((m) => m.id === form.modelo);
 
+  // Abrir formulario
   function abrir(l) {
-    setErr({});
-    setForm(l ? { ...VACIO, ...l, primerContacto: false } : { ...VACIO, responsable: ausencia ? SIN : user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre || SIN });
+    setErr({}); setDupApi(null);
+    if (l) setForm({ ...VACIO, ...l, primerContacto: false });
+    else if (MODO_REAL) {
+      const propio = responsablesApi.find((r) => r.codusu === String(user?.codusu));
+      const resp = (user.rol === "vendedor" && propio) || responsablesApi.find((r) => r.rol === "Vendedor") || propio || responsablesApi[0];
+      setForm({ ...VACIO, sede: sedesLead.includes(VACIO.sede) ? VACIO.sede : sedesLead[0] || "", codusu: resp?.codusu || "", responsable: resp?.nombre || "", proximo: hoy });
+    } else setForm({ ...VACIO, responsable: ausencia ? SIN : user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre || SIN });
     setModal({ lead: l });
   }
+  // Validación
   function validar() {
     const x = {};
     if (!esNombre(form.contacto)) x.contacto = MSJ.nombre;
     if (!esCelular(form.telefono)) x.telefono = MSJ.celular;
     else if (duplicado && !form.otraOportunidad) x.telefono = "Este celular ya está registrado. Abre ese lead o márcalo como otra oportunidad.";
+    else if (dupApi && !form.otraOportunidad) x.telefono = "Este celular ya tiene una oportunidad activa. Márcalo como otra oportunidad para registrarlo.";
     if (!form.canal) x.canal = "Indica por dónde llegó la consulta.";
     if (!form.modelo || ![...modelos, ...publicos].some((m) => m.id === form.modelo)) x.modelo = "Elige el modelo que consultó.";
     if (limpiarTexto(form.nota).length > 500) x.nota = "Máximo 500 caracteres.";
+    if (nuevoReal) {
+      if (!modelosLead.length) x.modelo = "Aún no cargan los modelos. Espera un momento y vuelve a intentar.";
+      else if (!x.modelo && !modelosLead.some((m) => m.id === form.modelo)) x.modelo = "Ese modelo no está publicado. Elige otro.";
+      if (form.canal === "WhatsApp" && !canalWa) x.canal = canalWa === undefined ? "Cargando el WhatsApp de la empresa… vuelve a intentar en un momento." : "El WhatsApp de la empresa aún no está registrado. Elige otro canal.";
+      if (form.canal === "Visita a sede" && !codsedDe(form.sede)) x.sede = "Esta sede aún no está registrada. Elige otra sede u otro canal.";
+      if (!form.codusu) x.responsable = "Elige quién atenderá a este interesado.";
+      if (!form.proximo || form.proximo < hoy) x.proximo = "Elige hoy o una fecha futura.";
+    }
     setErr(x); return Object.keys(x).length === 0;
   }
-  function guardar(e) {
+  // Guardar
+  async function guardar(e) {
     e.preventDefault();
-    if (!validar()) return;
-    const { primerContacto, otraOportunidad, ...datos } = form;
+    if (enviando || !validar()) return;
+    const { primerContacto, otraOportunidad, proximo, ...datos } = form;
     datos.contacto = limpiarTexto(datos.contacto);
     datos.nota = limpiarTexto(datos.nota);
-    if (otraOportunidad && duplicado) datos.nota = [datos.nota, `Otra oportunidad del mismo cliente (lead #${duplicado.id}).`].filter(Boolean).join(" ");
+    if (!datos.codusu) delete datos.codusu;
     if (modal.lead) { actualizar("leads", modal.lead.id, datos, `Lead editado: ${datos.contacto}`); toast("Lead actualizado"); }
+    else if (MODO_REAL) return registrarEnSupabase(datos, otraOportunidad, proximo);
     else {
+      if (otraOportunidad && duplicado) datos.nota = [datos.nota, `Otra oportunidad del mismo cliente (lead #${duplicado.id}).`].filter(Boolean).join(" ");
       const id = leads.reduce((m, l) => Math.max(m, Number(l.id) || 0), 0) + 1;
       agregar("leads", { id, ...datos, estado: "Nuevo", fecha: hoy }, `Lead registrado: ${datos.contacto}`);
       const agenda = primerContacto && datos.responsable !== SIN;
@@ -89,6 +145,42 @@ export default function Leads() {
     setModal(null);
   }
 
+  // Registrar en la API (POST /api/leads)
+  async function registrarEnSupabase(datos, otra, proximo) {
+    const modelo = modelosLead.find((m) => m.id === datos.modelo);
+    const resp = responsablesApi.find((r) => r.codusu === datos.codusu);
+    const { canlea, orilea } = canalApi(datos.canal);
+    const collea = COLORES_LEAD.find((c) => c.toLowerCase() === String(datos.color || "").toLowerCase()) || null;
+    const previo = dupApi?.codlea || duplicado?.codlea;
+    const nota = [datos.nota, datos.color && !collea ? `Color de interés: ${datos.color}.` : "",
+      otra && (dupApi || duplicado) ? `Otra oportunidad del mismo cliente${previo ? ` (lead #${previo})` : ""}.` : ""].filter(Boolean).join(" ");
+    const codsed = codsedDe(datos.sede);
+    setEnviando(true);
+    try {
+      const r = await registrarLeadApi({
+        nomlea: datos.contacto, tellea: datos.telefono, codmod: modelo.codmodApi, canlea, orilea,
+        ...(codsed ? { codsed } : {}), ...(canlea === "WhatsApp" ? { codcwa: canalWa } : {}),
+        collea, codusu: datos.codusu, estlea: "Nuevo", fecprosle: instanteContacto(proximo), obslea: nota || null, nueva_oportunidad: otra,
+      });
+      const codlea = r.data?.codlea;
+      const nombre = resp?.nombre || datos.responsable;
+      const id = leads.reduce((m, l) => Math.max(m, Number(l.id) || 0), 0) + 1;
+      agregar("leads", { id, ...datos, nota, responsable: nombre, codlea, estado: "Nuevo", fecha: hoy }, `Lead #${codlea} registrado: ${datos.contacto}`);
+      agregar("seguimientos", { leadId: id, fecha: proximo, tipo: canlea === "WhatsApp" ? "WhatsApp" : "Llamada", responsable: nombre, hecho: false, detalle: `Primer contacto: consulta por el ${nombreModelo(datos.modelo)}` }, `Seguimiento creado para ${datos.contacto}`);
+      toast(`Lead #${codlea} registrado. Primer contacto: ${proximo === hoy ? "hoy" : proximo}`);
+      setModal(null);
+    } catch (e) {
+      const msg = mensajeError(e);
+      if (e.status === 409) { setDupApi({ codlea: "", codmod: "", estlea: "", ...e.detalle?.coincidencia }); setForm((p) => ({ ...p, otraOportunidad: false })); setErr({}); }
+      else if (/modelo/i.test(msg)) setErr({ modelo: msg });
+      else if (/responsable/i.test(msg)) setErr({ responsable: msg });
+      else if (/sede/i.test(msg)) setErr({ sede: msg });
+      else if (/whatsapp/i.test(msg)) setErr({ canal: msg });
+      else setErr({ general: msg });
+    } finally { setEnviando(false); }
+  }
+
+  // Asignar, cambiar estado y eliminar
   function abrirAsignar(l) { setVendAsig(vendedores.find((p) => p.sede === l.sede && !p.ausente)?.nombre || vendedores[0]?.nombre || ""); setAsignando(l); }
   function guardarAsignacion(e) {
     e.preventDefault();
@@ -101,7 +193,6 @@ export default function Leads() {
   async function cambiarEstado(l, estado) {
     if (["Cerrado ganado", "Perdido"].includes(estado) && !(await confirmar({ titulo: `Marcar como «${estado}»`, texto: `${l.contacto} saldrá de la lista de leads abiertos.`, boton: "Confirmar" }))) return;
     actualizar("leads", l.id, { estado }, `Lead ${l.contacto}: ${estado}`);
-    // Al cerrar el lead, sus contactos pendientes se dan por cerrados (no quedan tareas para un lead ganado o perdido)
     if (["Cerrado ganado", "Perdido"].includes(estado)) seguimientos.filter((s) => s.leadId === l.id && !s.hecho).forEach((s) => actualizar("seguimientos", s.id, { hecho: true, resultado: `Lead marcado como «${estado}»`, cerrado: hoy }));
     toast(`Estado: ${estado}`);
   }
@@ -111,8 +202,9 @@ export default function Leads() {
     segs.forEach((s) => eliminar("seguimientos", s.id));
     eliminar("leads", l.id, `Lead eliminado: ${l.contacto}`); toast("Lead eliminado");
   }
+  // Modo ausencia
   async function alternarAusencia() {
-    if (!ausencia && !(await confirmar({ titulo: "Activar modo ausencia", texto: "Los leads nuevos (web y manuales) quedarán «Sin asignar» y sin próximo contacto hasta que alguien los reparta.", boton: "Activar" }))) return;
+    if (!ausencia && !(await confirmar({ titulo: "Activar modo ausencia", texto: MODO_REAL ? "Los leads nuevos de la web quedarán «Sin asignar» y sin próximo contacto hasta que alguien los reparta. Los que se registran en el panel siempre llevan responsable." : "Los leads nuevos (web y manuales) quedarán «Sin asignar» y sin próximo contacto hasta que alguien los reparta.", boton: "Activar" }))) return;
     configurar({ modoAusencia: !ausencia }, `Modo ausencia ${ausencia ? "desactivado" : "activado"} por ${user.nombre}`);
     toast(ausencia ? "Modo ausencia desactivado: vuelve el reparto por turnos" : "Modo ausencia activo");
   }
@@ -135,8 +227,9 @@ export default function Leads() {
         )}
         <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Registrar interesado</button>
       </PageHeader>
-      {ausencia && <div className="mb-5"><Aviso tipo="aviso">Modo ausencia activo: los leads nuevos quedan «Sin asignar» y «Sin próximo contacto». Repártelos con el botón «Asignar».</Aviso></div>}
+      {ausencia && <div className="mb-5"><Aviso tipo="aviso">Modo ausencia activo: los leads nuevos{MODO_REAL ? " de la web" : ""} quedan «Sin asignar» y «Sin próximo contacto». Repártelos con el botón «Asignar».</Aviso></div>}
 
+      {/* Indicadores */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat etiqueta="Nuevos hoy" valor={leads.filter((l) => l.fecha === hoy).length} />
         <Stat etiqueta="Sin asignar" valor={abiertos.filter((l) => l.responsable === SIN).length} tono="ambar" />
@@ -144,6 +237,7 @@ export default function Leads() {
         <Stat etiqueta="Cotizados" valor={leads.filter((l) => l.estado === "Cotizado").length} tono="verde" />
       </div>
 
+      {/* Modelos consultados y filtros */}
       <div className="grid gap-6 xl:grid-cols-[1fr_1.6fr]">
         <Card>
           <h2 className="font-bold text-marino dark:text-white">Modelos consultados</h2>
@@ -162,7 +256,7 @@ export default function Leads() {
             {sel("estado", "Estado", ESTADOS_LEAD)}
             {sel("canal", "Canal", CANALES)}
             {sel("sede", "Sede", SEDES_ATENCION)}
-            {sel("resp", "Responsable", [SIN, ...vendedores.map((v) => v.nombre)])}
+            {sel("resp", "Responsable", [...new Set([SIN, ...vendedores.map((v) => v.nombre), ...(MODO_REAL ? leads.map((l) => l.responsable).filter(Boolean) : [])])])}
             {sel("modelo", "Modelo", modelos.map((m) => ({ v: m.id, t: m.nombre })))}
             <div className="flex items-end"><button className="pb-3 text-[13px] font-semibold text-acento hover:underline" onClick={() => setF({ q: "", estado: "", canal: "", sede: "", resp: "", modelo: "" })}>Limpiar filtros</button></div>
           </div>
@@ -170,6 +264,7 @@ export default function Leads() {
         </Card>
       </div>
 
+      {/* Tabla de leads */}
       <div className="mt-6">
         {filtrados.length === 0 ? <Vacio titulo="No hay leads con esos filtros" texto="Limpia los filtros o registra un interesado nuevo." /> : (
           <Tabla columnas={["Fecha", "Interesado", "Modelo consultado", "Canal", "Responsable", "Próximo contacto", "Estado", "Acciones"]}>
@@ -203,30 +298,44 @@ export default function Leads() {
         )}
       </div>
 
+      {/* Formulario: registrar / editar interesado */}
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.lead ? `Editar lead de ${modal.lead.contacto}` : "Registrar interesado"} ancho="max-w-2xl"
         confirmarGuardar={modal?.lead ? { titulo: "¿Guardar los cambios?", texto: `Se actualizará el lead de ${form.contacto || "este interesado"}.`, boton: "Guardar cambios", validar } : false}
-        pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-lead" className="btn btn-primary !py-2" type="submit" disabled={!!duplicado && !form.otraOportunidad}>{modal?.lead ? "Guardar" : "Registrar"}</button></>}>
+        pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-lead" className="btn btn-primary !py-2" type="submit" disabled={enviando || ((!!duplicado || !!dupApi) && !form.otraOportunidad)}>{modal?.lead ? "Guardar" : enviando ? "Registrando…" : "Registrar"}</button></>}>
         <form id="f-lead" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
+          {err.general && <div className="sm:col-span-2"><Aviso tipo="error">{err.general}</Aviso></div>}
           <Campo etiqueta="Nombre del interesado" error={err.contacto}><input id="lead-nombre" className="field-input" value={form.contacto} onChange={(e) => setForm({ ...form, contacto: soloLetras(e.target.value) })} autoComplete="off" /></Campo>
-          <Campo etiqueta="Celular" error={err.telefono}><input id="lead-celular" className="field-input" inputMode="numeric" maxLength={9} value={form.telefono} onChange={(e) => setForm({ ...form, telefono: soloDigitos(e.target.value, 9), otraOportunidad: false })} placeholder="9XXXXXXXX" /></Campo>
-          {duplicado && (
+          <Campo etiqueta="Celular" error={err.telefono}><input id="lead-celular" className="field-input" inputMode="numeric" maxLength={9} value={form.telefono} onChange={(e) => { setForm({ ...form, telefono: soloDigitos(e.target.value, 9), otraOportunidad: false }); setDupApi(null); }} placeholder="9XXXXXXXX" /></Campo>
+          {/* Aviso de celular repetido */}
+          {(duplicado || dupApi) && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-[13.5px] text-amber-900 sm:col-span-2 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
-              <p className="font-semibold">Este celular ya está registrado{duplicado.modelo !== form.modelo && form.modelo ? " (por otro modelo)" : ""}</p>
-              <p className="mt-1">{duplicado.contacto} · {nombreModelo(duplicado.modelo)} · {duplicado.estado} · {duplicado.responsable || SIN} · desde el {duplicado.fecha}</p>
+              {duplicado ? <>
+                <p className="font-semibold">Este celular ya está registrado{duplicado.modelo !== form.modelo && form.modelo ? " (por otro modelo)" : ""}</p>
+                <p className="mt-1">{duplicado.contacto} · {nombreModelo(duplicado.modelo)} · {duplicado.estado} · {duplicado.responsable || SIN} · desde el {duplicado.fecha}</p>
+              </> : <>
+                <p className="font-semibold">Este celular ya está registrado{dupApi.codmod && modeloForm?.codmodApi && String(dupApi.codmod) !== modeloForm.codmodApi ? " (por otro modelo)" : ""}</p>
+                <p className="mt-1">Lead #{dupApi.codlea} · {publicos.find((m) => m.codmodApi === String(dupApi.codmod))?.nombre || "otro modelo"} · {dupApi.estlea} · con actividad en los últimos 14 días</p>
+              </>}
               <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" data-dup="vincular" className="rounded-lg bg-white px-3 py-1.5 text-[13px] font-semibold text-amber-900 shadow-sm hover:bg-amber-100 dark:bg-white/10 dark:text-amber-100" onClick={() => abrir(duplicado)}>Es el mismo cliente: abrir su lead</button>
+                {duplicado && <button type="button" data-dup="vincular" className="rounded-lg bg-white px-3 py-1.5 text-[13px] font-semibold text-amber-900 shadow-sm hover:bg-amber-100 dark:bg-white/10 dark:text-amber-100" onClick={() => abrir(duplicado)}>Es el mismo cliente: abrir su lead</button>}
                 {!modal?.lead && <button type="button" data-dup="otra" aria-pressed={form.otraOportunidad} className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold shadow-sm ${form.otraOportunidad ? "bg-amber-600 text-white" : "bg-white text-amber-900 hover:bg-amber-100 dark:bg-white/10 dark:text-amber-100"}`} onClick={() => setForm({ ...form, otraOportunidad: !form.otraOportunidad })}>{form.otraOportunidad ? "✓ Se registrará como otra oportunidad" : "Registrar como otra oportunidad"}</button>}
               </div>
             </div>
           )}
           <Campo etiqueta="Canal de la consulta" error={err.canal}><select id="lead-canal" className="field-input" value={form.canal} onChange={set("canal")}><option value="">Elige el canal</option>{CANALES.map((c) => <option key={c}>{c}</option>)}</select></Campo>
-          <Campo etiqueta="Modelo consultado" error={err.modelo}><select id="lead-modelo" className="field-input" value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value, color: "" })}><option value="">Elige el modelo</option>{modelos.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}</select></Campo>
-          <Campo etiqueta="Sede de interés"><select id="lead-sede" className="field-input" value={form.sede} onChange={set("sede")}>{SEDES_ATENCION.map((c) => <option key={c}>{c}</option>)}</select></Campo>
-          <Campo etiqueta="Responsable"><select id="lead-responsable" className="field-input" value={form.responsable} onChange={set("responsable")}><option>{SIN}</option>{vendedores.map((v) => <option key={v.id}>{v.nombre}</option>)}</select></Campo>
+          <Campo etiqueta="Modelo consultado" error={err.modelo}><select id="lead-modelo" className="field-input" value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value, color: "" })}><option value="">{nuevoReal && !modelosLead.length ? "Cargando modelos…" : "Elige el modelo"}</option>{(nuevoReal ? modelosLead : modelos).map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}</select></Campo>
+          <Campo etiqueta="Sede de interés" error={err.sede}><select id="lead-sede" className="field-input" value={form.sede} onChange={set("sede")}>{[...new Set([...(nuevoReal ? sedesLead : SEDES_ATENCION), ...(form.sede ? [form.sede] : [])])].map((c) => <option key={c}>{c}</option>)}</select></Campo>
+          <Campo etiqueta="Responsable" error={err.responsable}>{nuevoReal
+            ? <select id="lead-responsable" className="field-input" value={form.codusu} onChange={(e) => setForm({ ...form, codusu: e.target.value, responsable: responsablesApi.find((r) => r.codusu === e.target.value)?.nombre || "" })}>
+                {!responsablesApi.length && <option value="">Sin responsables disponibles</option>}
+                {responsablesApi.map((r) => <option key={r.codusu} value={r.codusu}>{r.nombre}{r.rol && r.rol !== "Vendedor" ? ` (${r.rol})` : ""}</option>)}
+              </select>
+            : <select id="lead-responsable" className="field-input" value={form.responsable} onChange={set("responsable")}>{[...new Set([SIN, ...vendedores.map((v) => v.nombre), ...(form.responsable ? [form.responsable] : [])])].map((n) => <option key={n}>{n}</option>)}</select>}</Campo>
           {modal?.lead && <Campo etiqueta="Estado"><select className="field-input" value={form.estado} onChange={set("estado")}>{ESTADOS_LEAD.map((c) => <option key={c}>{c}</option>)}</select></Campo>}
           <Campo etiqueta="Color de interés"><select id="lead-color" className="field-input" value={form.color} onChange={set("color")} disabled={!modeloForm}><option value="">{modeloForm ? "Cualquiera" : "Elige primero el modelo"}</option>{(modeloForm?.colores || []).map((c) => <option key={c}>{c}</option>)}</select></Campo>
+          {nuevoReal && <Campo etiqueta="Primer contacto" error={err.proximo}><input id="lead-proximo" type="date" className="field-input" min={hoy} value={form.proximo} onChange={set("proximo")} /></Campo>}
           <Campo etiqueta="Notas" error={err.nota} className="sm:col-span-2"><textarea className="field-input" rows={2} maxLength={520} value={form.nota} onChange={set("nota")} placeholder="Qué preguntó, cuándo prefiere que lo llamen…" /></Campo>
-          {!modal?.lead && (
+          {!modal?.lead && !MODO_REAL && (
             form.responsable === SIN
               ? <p className="text-[13px] text-slate-500 sm:col-span-2">Sin responsable no se agenda contacto: el lead quedará «Sin asignar» y «Sin próximo contacto», no como atendido.</p>
               : <label className="flex items-center gap-2 text-[13.5px] font-medium sm:col-span-2"><input type="checkbox" className="h-4 w-4 accent-[#0e2c52]" checked={form.primerContacto} onChange={(e) => setForm({ ...form, primerContacto: e.target.checked })} />Agendar el primer contacto en Seguimiento para hoy</label>
@@ -234,6 +343,7 @@ export default function Leads() {
         </form>
       </Modal>
 
+      {/* Asignar vendedor */}
       <Modal abierto={!!asignando} onClose={() => setAsignando(null)} titulo={`Asignar a ${asignando?.contacto || ""}`} ancho="max-w-md"
         confirmarGuardar={{ titulo: "¿Asignar este lead?", texto: `Quedará a cargo de ${vendAsig || "—"} con el primer contacto para hoy.`, boton: "Asignar" }}
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setAsignando(null)}>Cancelar</button><button form="f-asig" className="btn btn-primary !py-2">Asignar</button></>}>

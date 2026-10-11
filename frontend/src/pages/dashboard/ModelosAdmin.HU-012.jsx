@@ -1,3 +1,4 @@
+// HU-012 · Modelos (panel)
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -15,7 +16,7 @@ const NUEVO = { nombre: "", familia: FAMILIAS[0], tipoMotor: "4 tiempos", combus
 const aTexto = (filas = []) => filas.map(([k, v]) => `${k}: ${v}`).join("\n");
 const aFilas = (txt) => txt.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const i = l.indexOf(":"); return i > 0 ? [l.slice(0, i).trim(), l.slice(i + 1).trim()] : [l, ""]; });
 
-/** Reduce la foto subida (máx. 1000 px) para guardarla sin pesar demasiado. */
+// Foto del modelo
 function leerFoto(file) {
   return new Promise((res, rej) => {
     if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) return rej(new Error("Usa una imagen PNG, JPG o WEBP."));
@@ -36,8 +37,6 @@ function leerFoto(file) {
   });
 }
 
-/** Modelos: crear, editar descripción/precio/colores/foto, publicar o retirar y eliminar (solo gerente). Todo se refleja en la web al instante. */
-/** Foto del modelo: subida (data:image), ruta del sitio (/images/…) o enlace http(s) con dominio real. */
 function imagenValida(v) {
   const t = String(v || "").trim();
   if (/^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,/i.test(t)) return true;
@@ -45,6 +44,7 @@ function imagenValida(v) {
   try { const u = new URL(t); return ["http:", "https:"].includes(u.protocol) && /\.[a-z]{2,}$/i.test(u.hostname); } catch { return false; }
 }
 
+// Página de modelos
 export default function ModelosAdmin() {
   const { modelos, publicos, apiModelos, sinFicha = [], unidades, agregar, actualizar, eliminar } = useApp();
   const ocultosPorSupabase = MODO_REAL && apiModelos ? modelos.filter((m) => m.estado === "Publicado" && !publicos.some((p) => p.id === m.id)) : [];
@@ -77,6 +77,7 @@ export default function ModelosAdmin() {
     catch (er) { setErr((p) => ({ ...p, imagen: er.message })); }
     e.target.value = "";
   }
+  // Validación
   function validarModelo() {
     const x = {};
     const nombre = f.nombre.trim().replace(/\s+/g, " ");
@@ -93,13 +94,12 @@ export default function ModelosAdmin() {
     if (TABS.some((t) => String(f[`spec_${t.id}`] || "").length > 2000)) x.specs = "Cada pestaña de la ficha técnica admite como máximo 2000 caracteres.";
     if (f.imagen && !imagenValida(f.imagen)) x.imagen = "Usa un enlace https:// completo (con dominio), una ruta /images/... o sube una foto.";
     if (!f.colores.length) x.colores = "Elige al menos un color.";
-    // Un modelo publicado siempre necesita foto (al crearlo para publicar y al editar uno ya publicado)
     const quedaPublicado = modal.m ? modal.m.estado === "Publicado" : publicarYa && publica;
-    // Si se quitó o cambió la foto, la copia local anterior ya no cuenta (al guardar se borra)
     const fotoCambio = f.fotoNueva || (modal.m && f.imagen !== modal.m.imagen);
     if (quedaPublicado && !f.imagen && (fotoCambio || !f.local)) x.imagen = "Un modelo publicado en la web necesita foto: súbela o enlázala.";
     setErr(x); return Object.keys(x).length === 0;
   }
+  // Guardar, publicar y eliminar
   function guardar(e) {
     e.preventDefault();
     if (!validarModelo()) return;
@@ -107,7 +107,6 @@ export default function ModelosAdmin() {
     const specs = Object.fromEntries(TABS.map((t) => [t.id, aFilas(f[`spec_${t.id}`] || "")]));
     if (!specs.motor.length) specs.motor = [["Tipo de motor", f.tipoMotor], ["Combustible", f.combustible]];
     const limpio = Object.fromEntries(Object.entries(f).filter(([k]) => !k.startsWith("spec_") && !["destacadosTxt", "cilindrada", "potencia", "torque", "llantas", "fotoNueva", "imagenApi"].includes(k)));
-    // Colores ordenados como en la web y portada válida (si quitas un color, deja de verse en la web)
     limpio.colores = COLORES.filter((c) => f.colores.includes(c));
     if (!limpio.colores.includes(limpio.colorPortada)) limpio.colorPortada = limpio.colores[0];
     const fotoCambio = f.fotoNueva || (modal.m && f.imagen !== modal.m.imagen);
@@ -150,13 +149,12 @@ export default function ModelosAdmin() {
       <PageHeader titulo="Modelos" subtitulo="Lo que publiques, edites o elimines aquí cambia al instante en la web de clientes.">
         {editar && <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Nuevo modelo</button>}
       </PageHeader>
+      {/* Estado del catálogo */}
       {MODO_REAL && (
         <div className="mb-4 space-y-2" data-diagnostico-modelos>
-          {!apiModelos
-            ? <Aviso tipo="error">No se pudo leer GET /api/modelos. Mientras tanto, la web muestra el catálogo guardado en este navegador.</Aviso>
-            : <Aviso tipo="info">Conectado a Supabase: {apiModelos.length} modelo(s) publicados. La web muestra los que también tienen ficha aquí (precio, colores y datos técnicos).</Aviso>}
-          {sinFicha.length > 0 && <Aviso tipo="aviso">Publicados en Supabase sin ficha en el panel: <b>{sinFicha.map((x) => x.nommod).join(", ")}</b>. Ya se ven en la web con los datos de Supabase (precio «A consultar» y sin colores). Para darles precio y colores, créalos aquí con el mismo nombre.</Aviso>}
-          {ocultosPorSupabase.length > 0 && <Aviso tipo="aviso">No se ven en la web porque no están publicados en Supabase: <b>{ocultosPorSupabase.map((m) => m.nombre).join(", ")}</b>. Publícalos en Supabase o ejecuta docs/supabase-modelos-catalogo.sql.</Aviso>}
+          {!apiModelos && <Aviso tipo="error">No se pudo cargar el catálogo publicado. Intenta de nuevo en un momento.</Aviso>}
+          {sinFicha.length > 0 && <Aviso tipo="aviso">Publicados sin ficha en el panel: <b>{sinFicha.map((x) => x.nommod).join(", ")}</b>. Ya se ven en la web con precio «A consultar» y sin colores. Para darles precio y colores, créalos aquí con el mismo nombre.</Aviso>}
+          {ocultosPorSupabase.length > 0 && <Aviso tipo="aviso">No se ven en la web porque aún no están publicados en el catálogo: <b>{ocultosPorSupabase.map((m) => m.nombre).join(", ")}</b>.</Aviso>}
         </div>
       )}
       <div className="mb-5 grid gap-3 rounded-xl2 border border-slate-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#121a2b] sm:grid-cols-3">
@@ -164,6 +162,7 @@ export default function ModelosAdmin() {
         <div><label className="field-label">Estado</label><select className="field-input" value={est} onChange={(e) => setEst(e.target.value)}><option value="">Todos</option><option>Publicado</option><option>Borrador</option></select></div>
         <div><label className="field-label">Familia</label><select className="field-input" value={fam} onChange={(e) => setFam(e.target.value)}><option value="">Todas</option>{FAMILIAS.map((x) => <option key={x}>{x}</option>)}</select></div>
       </div>
+      {/* Tabla de modelos */}
       {lista.length === 0 ? <Vacio titulo="No hay modelos" texto="Crea un modelo nuevo o cambia los filtros." /> : (
         <Tabla columnas={["Modelo", "Familia", "Motor", "Desde", "Unidades", "Estado", "Acciones"]}>
           {lista.map((m) => (
@@ -187,6 +186,7 @@ export default function ModelosAdmin() {
       {!editar && <p className="mt-3 text-[12.5px] text-slate-400">Tu rol puede consultar el catálogo, pero no modificarlo.</p>}
       {editar && !puede("eliminar") && <p className="mt-3 text-[12.5px] text-slate-400">Eliminar modelos es una acción exclusiva de la gerencia.</p>}
 
+      {/* Nuevo / editar modelo */}
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.m ? `Editar ${modal.m.nombre}` : "Nuevo modelo"} ancho="max-w-3xl"
         confirmarGuardar={modal?.m
           ? { titulo: "¿Guardar los cambios?", texto: modal.m.estado === "Publicado" ? `${modal.m.nombre} está publicado: los cambios se verán al instante en la web de clientes.` : "Los cambios se guardarán en el catálogo. El modelo sigue como borrador hasta que lo publiques.", boton: "Guardar cambios", validar: validarModelo }

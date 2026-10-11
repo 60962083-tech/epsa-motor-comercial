@@ -1,3 +1,4 @@
+// HU-026 · Ubicaciones
 import { useEffect, useMemo, useState } from "react";
 import { esCorreo, soloDigitos } from "../../lib/validar";
 import { useNavigate } from "react-router-dom";
@@ -12,11 +13,6 @@ import { Aviso, Campo, Modal, PageHeader, Tabla, Vacio, btnMini, btnMiniPeligro,
 const norm = (t) => String(t).trim().replace(/\s+/g, " ").toLowerCase();
 const VACIO = { nombre: "", tipo: "Sede propia", direccion: "", horario: "Lunes a Sábado de 9:00 AM a 5:00 PM", horarioNota: "Domingos: consultar por WhatsApp o en sede", telefono: "907721481", correo: "inversionesepsamotor@gmail.com" };
 
-/**
- * Ubicaciones — HU-026. Con backend: GET/POST/PUT/PATCH /api/ubicaciones (baja lógica, sin DELETE).
- * Sin backend (demostración): mismas reglas en local. Los datos de contacto y horario de las
- * sedes (no existen en la tabla `ubicacion`) viven en la web y se publican en /sedes.
- */
 export default function Ubicaciones() {
   const { ubicaciones, unidades, agregar, actualizar, eliminar, reemplazar } = useApp();
   const limpio = (t) => String(t || "").trim().replace(/\s+/g, " ");
@@ -29,7 +25,7 @@ export default function Ubicaciones() {
   const gestiona = puede("ubicaciones.gestionar");
   const navigate = useNavigate();
 
-  // Modo real: cargar catálogo desde la API y mezclarlo con los datos de contacto locales
+  // Cargar desde la API
   async function cargar() {
     if (!MODO_REAL) return;
     setCargando(true); setErrorApi("");
@@ -49,6 +45,7 @@ export default function Ubicaciones() {
 
   function abrir(u) { setErr({}); setF(u ? { ...VACIO, ...u, telefono: soloDigitos(String(u.telefono || "").replace(/^51(?=9\d{8}$)/, ""), 9) } : VACIO); setModal({ u }); }
 
+  // Guardar
   async function guardar(e) {
     e.preventDefault(); const x = {};
     const nombre = f.nombre.trim().replace(/\s+/g, " ");
@@ -75,7 +72,6 @@ export default function Ubicaciones() {
       }
       if (modal.u) {
         actualizar("ubicaciones", modal.u.id, { ...datos, id }, `Ubicación editada: ${nombre}`);
-        // Las unidades guardan la ubicación por nombre: al renombrarla se actualizan para no perderlas
         if (modal.u.nombre !== nombre) unidades.filter((u) => u.ubicacion === modal.u.nombre).forEach((u) => actualizar("unidades", u.id, { ubicacion: nombre }));
       }
       else agregar("ubicaciones", { ...datos, id: id ?? undefined, activo: true }, `Ubicación creada: ${nombre}`);
@@ -84,11 +80,11 @@ export default function Ubicaciones() {
     } catch (e2) { toast(mensajeError(e2), "error"); } finally { setGuardando(false); }
   }
 
+  // Activar / desactivar y eliminar
   async function alternar(u) {
     const nuevo = !u.activo;
     if (!nuevo) {
-      // Con backend, la regla la valida la base de datos (PT409) y se muestra su mensaje
-      const n = MODO_REAL ? 0 : unidades.filter((x) => x.ubicacion === u.nombre).length; // igual que el backend: cuenta todas
+      const n = MODO_REAL ? 0 : unidades.filter((x) => x.ubicacion === u.nombre).length;
       if (n) {
         if (await confirmar({ titulo: `No se puede desactivar ${u.nombre}`, texto: `Tiene ${n} unidad(es) asignadas. Trasládalas a otra ubicación activa y luego vuelve a intentarlo.`, boton: "Ver esas unidades" })) navigate("/admin/inventario", { state: { ubic: u.nombre } });
         return;
@@ -126,6 +122,7 @@ export default function Ubicaciones() {
         <div><label className="field-label">Tipo</label><select className="field-input" value={tipo} onChange={(e) => setTipo(e.target.value)}><option value="">Todos</option>{TIPOS_UBICACION.map((t) => <option key={t}>{t}</option>)}</select></div>
         <div><label className="field-label">Estado</label><select className="field-input" value={est} onChange={(e) => setEst(e.target.value)}><option value="">Todos</option><option value="activa">Activas</option><option value="inactiva">Inactivas</option></select></div>
       </div>
+      {/* Tabla de ubicaciones */}
       {cargando ? <p className="py-10 text-center text-slate-400">Cargando ubicaciones…</p> : lista.length === 0 ? <Vacio titulo="No hay ubicaciones" texto="Cambia los filtros o crea una nueva." /> : (
         <Tabla columnas={["Nombre", "Tipo", "Dirección / horario", "Unidades", "Estado", "Acciones"]}>
           {lista.map((u) => (
@@ -145,8 +142,9 @@ export default function Ubicaciones() {
         </Tabla>
       )}
       {!gestiona && <p className="mt-3 text-[12.5px] text-slate-400">Solo gerencia y administración crean, editan o desactivan ubicaciones. Tu rol puede consultarlas.</p>}
-      {MODO_REAL && <p className="mt-3 text-[12.5px] text-slate-400">En el backend la baja es lógica: las ubicaciones no se eliminan, se desactivan.</p>}
+      {MODO_REAL && <p className="mt-3 text-[12.5px] text-slate-400">Las ubicaciones no se eliminan: se desactivan.</p>}
 
+      {/* Nueva / editar ubicación */}
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.u ? `Editar ${modal.u.nombre}` : "Nueva ubicación"} ancho="max-w-2xl"
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-ub" className="btn btn-primary !py-2" disabled={guardando}>{guardando ? "Guardando…" : "Guardar"}</button></>}>
         <form id="f-ub" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>

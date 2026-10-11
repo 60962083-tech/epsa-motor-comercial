@@ -1,11 +1,11 @@
+// Gráficos del panel
 import { useState } from "react";
 
-/* Gráficos SVG propios (sin librerías): se adaptan al ancho y muestran detalle al pasar el mouse o tocar. */
 const PAL = ["#0e2c52", "#c62828", "#2f6db5", "#e0a100", "#13a07a", "#7a4fc9", "#64748b", "#d97706"];
 export const paleta = (i) => PAL[i % PAL.length];
 
+// Barras
 export function BarChart({ datos, alto = 220, ancho = 600, formato = (v) => v, series = [{ clave: "v", nombre: "Valor" }] }) {
-  // datos: [{ etiqueta, v, v2... }]
   const [h, setH] = useState(null);
   const max = Math.max(1, ...datos.flatMap((d) => series.map((s) => d[s.clave] || 0)));
   const W = ancho, H = alto, pb = 28, pt = 12, pl = 4;
@@ -44,6 +44,7 @@ export function BarChart({ datos, alto = 220, ancho = 600, formato = (v) => v, s
   );
 }
 
+// Línea
 export function LineChart({ datos, alto = 200, ancho = 600, formato = (v) => v, color = "#c62828" }) {
   const [h, setH] = useState(null);
   const W = ancho, H = alto, p = 24;
@@ -69,8 +70,8 @@ export function LineChart({ datos, alto = 200, ancho = 600, formato = (v) => v, 
   );
 }
 
+// Dona
 export function Donut({ datos, tam = 180, centro }) {
-  // datos: [{ etiqueta, v }]
   const [h, setH] = useState(null);
   const total = datos.reduce((s, d) => s + d.v, 0) || 1;
   const R = 70, C = 2 * Math.PI * R;
@@ -100,7 +101,7 @@ export function Donut({ datos, tam = 180, centro }) {
   );
 }
 
-/** Barras horizontales clicables (ranking de modelos consultados). */
+// Ranking
 export function RankingBarras({ datos, onElegir, elegido }) {
   const max = Math.max(1, ...datos.map((d) => d.v));
   return (
@@ -119,6 +120,7 @@ export function RankingBarras({ datos, onElegir, elegido }) {
   );
 }
 
+// Barra de progreso
 export function Progreso({ valor, max, tono }) {
   const pct = Math.min(100, Math.round((valor / Math.max(1, max)) * 100));
   const c = tono || (pct >= 100 ? "#13a07a" : pct >= 50 ? "#e0a100" : "#c62828");

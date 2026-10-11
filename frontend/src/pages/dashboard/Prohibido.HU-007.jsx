@@ -1,11 +1,7 @@
+// HU-007 · Sin acceso (403)
 import { Link } from "react-router-dom";
 import { IconLock } from "../../components/Icons";
 
-/**
- * Prohibido.jsx — HU-007, vista 403
- * A esta pantalla llega cualquiera cuyo rol no tenga permiso para
- * la sección que intentó abrir (lo decide ProtectedRoute.jsx).
- */
 export default function Prohibido() {
   return (
     <div className="fade-in mx-auto max-w-md py-16 text-center">

@@ -1,3 +1,4 @@
+// HU-004 · Ficha de la unidad y configuración de techo
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -16,9 +17,9 @@ const DESCRIPCION_TECHO = {
 };
 const limpiar = (t) => String(t || "").trim().replace(/\s+/g, " ");
 const DISP = { "No disponible": "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-white/70", Disponible: "bg-emerald-100 text-emerald-700", Separada: "bg-amber-100 text-amber-700", Vendida: "bg-slate-200 text-slate-600" };
-const hoy = () => new Date().toLocaleDateString("en-CA"); // fecha local (no UTC)
+const hoy = () => new Date().toLocaleDateString("en-CA");
 
-/** Ícono simple de techo para las opciones (perfil lateral de la cabina). */
+// Dibujo del techo
 function SiluetaTecho({ tipo }) {
   const fibra = TECHO_REQUIERE_PROVEEDOR(tipo);
   return (
@@ -33,17 +34,12 @@ function SiluetaTecho({ tipo }) {
   );
 }
 
-/**
- * Ficha de la unidad — HU-004 "Actualizar la configuración del techo".
- * Escenario 3: fibra externa → se guarda el tipo y el proveedor (FIVESA, JAVICAR o FIBRAT), sin precios no confirmados.
- * Escenario 4: el techo queda «Pendiente de instalación» hasta que un usuario autorizado confirma la instalación.
- * Escenario 5: el vendedor solo consulta y puede dejar una observación comercial sin alterar la configuración técnica.
- */
 export default function FichaUnidadRuta() {
   const { id } = useParams();
   return <FichaUnidad key={id} id={id} />;
 }
 
+// Ficha de la unidad
 function FichaUnidad({ id }) {
   const { unidades, modelos, compras, actualizar } = useApp();
   const { puede, user } = useAuth();
@@ -54,7 +50,6 @@ function FichaUnidad({ id }) {
   const [f, setF] = useState(() => ({ techo: normalizarTecho(u?.techo, u?.proveedorTecho), proveedor: u?.proveedorTecho || "", detalle: u?.detalleTecho || "", preparacion: u?.preparacion || "Sin preparar" }));
   const [err, setErr] = useState({});
   const [obs, setObs] = useState(""); const [obsErr, setObsErr] = useState("");
-  // Conectado: si la unidad existe en Supabase (coduni), el techo se lee y guarda con los endpoints de HU-004
   const conectada = Boolean(MODO_REAL && u?.coduni);
   const [cat, setCat] = useState(null);
   const [cargandoApi, setCargandoApi] = useState(conectada);
@@ -70,13 +65,12 @@ function FichaUnidad({ id }) {
         const conf = c.data || {};
         const techo = conf.tipoTecho?.nombre || "Sin techo", proveedor = conf.proveedor?.nombre || "", detalle = conf.detalle || "";
         setF((prev) => ({ ...prev, techo, proveedor, detalle }));
-        // Si en Supabase la configuración es otra (la cambiaron desde otra computadora), el inventario del panel se pone al día
         const antes = normalizarTecho(u.techo, u.proveedorTecho);
         if (antes !== techo || (u.proveedorTecho || "") !== proveedor || (u.detalleTecho || "") !== detalle) {
           const estadoTecho = techo === "Sin techo" ? "" : antes === techo && (u.proveedorTecho || "") === proveedor ? u.estadoTecho : "Pendiente de instalación";
           const retirar = estadoTecho === "Pendiente de instalación" && u.disponibilidad === "Disponible";
           actualizar("unidades", u.id, { techo, proveedorTecho: proveedor, detalleTecho: detalle, estadoTecho, ...(retirar ? { disponibilidad: "No disponible" } : {}),
-            historial: [...(u.historial || []), { fecha: hoy(), detalle: `Techo actualizado desde Supabase: ${techo}${proveedor ? ` (${proveedor})` : ""}${retirar ? " · sale de la venta hasta instalarlo" : ""}` }] });
+            historial: [...(u.historial || []), { fecha: hoy(), detalle: `Techo actualizado: ${techo}${proveedor ? ` (${proveedor})` : ""}${retirar ? " · sale de la venta hasta instalarlo" : ""}` }] });
         }
       })
       .catch((e) => vivo && setErrApi(mensajeError(e)))
@@ -96,6 +90,7 @@ function FichaUnidad({ id }) {
   const log = (detalle) => [...(u.historial || []), { fecha: hoy(), detalle: `${detalle} · ${user.nombre}` }];
   const cambio = f.techo !== techoActual || (requiere && f.proveedor !== (u.proveedorTecho || "")) || limpiar(f.detalle) !== limpiar(u.detalleTecho) || f.preparacion !== u.preparacion;
 
+  // Guardar el techo (PUT /api/unidades/:id/techo)
   async function guardar(e) {
     e.preventDefault();
     if (guardando) return;
@@ -107,7 +102,7 @@ function FichaUnidad({ id }) {
     if (detalle.length > MAX_DETALLE_TECHO) x.detalle = `Máximo ${MAX_DETALLE_TECHO} caracteres.`;
     if (f.preparacion === "Lista para entrega" && !u.ubicacion) x.preparacion = "Primero registra la recepción de la unidad en una sede o almacén.";
     if (u.disponibilidad === "Vendida") x.general = "La unidad ya se vendió: su configuración no se modifica.";
-    if (conectada && !cat) x.general = errApi || "Espera a que cargue la configuración guardada en Supabase.";
+    if (conectada && !cat) x.general = errApi || "Espera a que cargue la configuración del techo.";
     setErr(x); if (Object.keys(x).length) return;
     const techoCambia = f.techo !== techoActual || (requiere && f.proveedor !== u.proveedorTecho);
     const estado = f.techo === "Sin techo" ? "" : techoCambia ? "Pendiente de instalación" : u.estadoTecho;
@@ -125,13 +120,13 @@ function FichaUnidad({ id }) {
       } catch (er) { setErr({ general: mensajeError(er) }); toast(mensajeError(er), "error"); return; }
       finally { setGuardando(false); }
     }
-    // Si una unidad disponible queda con techo pendiente de instalación, sale de la venta hasta que se instale y se libere
     const retirar = estado === "Pendiente de instalación" && u.disponibilidad === "Disponible";
     actualizar("unidades", u.id, { techo: f.techo, proveedorTecho: requiere ? f.proveedor : "", detalleTecho: detalle, estadoTecho: estado, preparacion: prep, ...(retirar ? { disponibilidad: "No disponible" } : {}), historial: log(`${texto}${retirar ? " · sale de la venta hasta instalar el techo y liberarla" : ""}`) }, `Techo actualizado en ${u.id}`);
     setF((p) => ({ ...p, detalle, preparacion: prep }));
-    toast(conectada ? "Configuración de techo guardada en Supabase" : "Configuración de techo guardada");
+    toast("Configuración de techo guardada");
   }
 
+  // Instalación y observaciones
   async function confirmarInstalacion() {
     if (!(await confirmar({ titulo: "Confirmar instalación", texto: `¿${u.proveedorTecho || "El proveedor"} ya instaló el techo ${u.techo} en ${u.id}? Se mostrará como instalado en la consulta de stock.`, boton: "Confirmar instalación" }))) return;
     const prep = u.preparacion === "Pendiente de techo" ? "En preparación" : u.preparacion;
@@ -174,11 +169,12 @@ function FichaUnidad({ id }) {
               {u.estadoTecho === "Pendiente de instalación" && gestiona && <button className="btn btn-primary !py-2" onClick={confirmarInstalacion}>Confirmar instalación</button>}
             </div>
 
-            {conectada && cargandoApi && <p className="mt-4 text-[13px] text-slate-500" data-techo-cargando>Cargando la configuración guardada en Supabase…</p>}
-            {conectada && errApi && <div className="mt-4"><Aviso tipo="error">No se pudo leer el techo desde Supabase: {errApi}</Aviso></div>}
+            {conectada && cargandoApi && <p className="mt-4 text-[13px] text-slate-500" data-techo-cargando>Cargando la configuración del techo…</p>}
+            {conectada && errApi && <div className="mt-4"><Aviso tipo="error">No se pudo cargar el techo: {errApi}</Aviso></div>}
             {u.estadoTecho === "Pendiente de instalación" && <div className="mt-4"><Aviso tipo="aviso">El techo {u.techo}{u.proveedorTecho ? ` de ${u.proveedorTecho}` : ""} figura pendiente de instalación.</Aviso></div>}
             {u.estadoTecho === "Instalado" && <div className="mt-4"><Aviso tipo="ok">Techo {u.techo}{u.proveedorTecho ? ` de ${u.proveedorTecho}` : ""} instalado{u.fechaInstalacion ? ` el ${u.fechaInstalacion}` : ""}.</Aviso></div>}
 
+            {/* Formulario del techo */}
             {gestiona ? (
               <form onSubmit={guardar} className="mt-5 space-y-5" noValidate>
                 <fieldset>
@@ -230,6 +226,7 @@ function FichaUnidad({ id }) {
             {(u.observaciones || []).length === 0 ? <p className="mt-4 text-[13.5px] text-slate-400">Aún no hay observaciones.</p> : (
               <ul className="mt-4 space-y-2">{[...u.observaciones].reverse().map((o, i) => <li key={i} className="rounded-lg bg-slate-50 px-4 py-3 text-[14px] dark:bg-white/5"><p>{o.texto}</p><p className="mt-1 text-[12px] text-slate-400">{o.autor} · {o.fecha}</p></li>)}</ul>
             )}
+            {/* Observaciones */}
             {observa && (
               <form onSubmit={agregarObservacion} className="mt-4 flex flex-col gap-2 sm:flex-row" noValidate>
                 <div className="min-w-0 flex-1">

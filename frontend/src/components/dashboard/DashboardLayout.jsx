@@ -1,12 +1,13 @@
+// Diseño del panel: barra superior y menú lateral
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, Link } from "react-router-dom";
 import { IconMenu, IconClose, IconSun, IconMoon } from "../Icons";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../ThemeContext";
 import { ROLES } from "../../data/mockData";
-import { API_URL, MODO_REAL } from "../../lib/config";
 import Login from "../../pages/dashboard/Login.HU-007";
 
+// Íconos del menú
 const IC = {
   resumen: "M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z",
   leads: "M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0ZM4 20a8 8 0 0 1 16 0",
@@ -25,6 +26,7 @@ const Ico = ({ n }) => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={IC[n]} /></svg>
 );
 
+// Secciones del menú
 const GRUPOS = [
   { titulo: "Inicio", items: [{ to: "/admin", label: "Resumen", seccion: "resumen", end: true }] },
   { titulo: "Comercial", items: [
@@ -44,7 +46,6 @@ const GRUPOS = [
   { titulo: "Administración", items: [{ to: "/admin/equipo", label: "Equipo", seccion: "equipo" }] },
 ];
 
-/** Estructura del panel: barra superior, menú lateral por grupos (según rol) y contenido. */
 export default function DashboardLayout() {
   const { user, logout, puedeVer } = useAuth();
   const { dark, toggle } = useTheme();
@@ -57,6 +58,7 @@ export default function DashboardLayout() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-[#0b1220]">
+      {/* Barra superior */}
       <header className="sticky top-0 z-40 flex h-16 items-center justify-between bg-marino px-4 text-white sm:px-6">
         <div className="flex items-center gap-3">
           <button className="grid h-9 w-9 place-items-center rounded-md hover:bg-white/10 lg:hidden" onClick={() => setOpen((o) => !o)} aria-label="Abrir menú">{open ? <IconClose /> : <IconMenu />}</button>
@@ -76,6 +78,7 @@ export default function DashboardLayout() {
 
       <div className="flex flex-1">
         {open && <div className="fixed inset-0 top-16 z-20 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />}
+        {/* Menú lateral */}
         <aside className={`${open ? "translate-x-0" : "-translate-x-full"} fixed bottom-0 top-16 z-30 w-64 overflow-y-auto border-r border-slate-200 bg-white transition-transform dark:border-white/10 dark:bg-[#0f1830] lg:static lg:translate-x-0`}>
           <nav className="flex min-h-full flex-col px-3 py-4">
             {GRUPOS.map((g) => {
@@ -93,11 +96,9 @@ export default function DashboardLayout() {
                 </div>
               );
             })}
-            <p className="mt-auto flex items-center gap-2 px-3 pt-4 text-[12px] text-slate-400" title={MODO_REAL ? `Datos desde la API (${API_URL}) y Supabase` : "Los datos se guardan en este navegador"}>
-              <span className={`h-2 w-2 rounded-full ${MODO_REAL ? "bg-emerald-500" : "bg-amber-400"}`} />{MODO_REAL ? "Conectado a Supabase" : "Modo demostración"}
-            </p>
           </nav>
         </aside>
+        {/* Contenido */}
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8"><div className="fade-in mx-auto max-w-[1500px]"><Outlet /></div></main>
       </div>
     </div>

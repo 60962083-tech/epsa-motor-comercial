@@ -1,3 +1,4 @@
+// Pantalla de error si algo falla
 import { Component } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { PantallaError } from "../pages/Errores";
@@ -16,7 +17,6 @@ class Interno extends Component {
   }
 }
 
-/** Si una pantalla falla, mostramos un aviso claro; al cambiar de página el error se limpia solo (key = ruta). */
 export default function ErrorBoundary({ children }) {
   const { pathname } = useLocation();
   return <Interno key={pathname}>{children}</Interno>;

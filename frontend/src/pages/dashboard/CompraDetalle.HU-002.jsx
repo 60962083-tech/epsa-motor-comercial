@@ -1,3 +1,4 @@
+// HU-002 · Factura e identificación de unidades
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -13,21 +14,11 @@ import { soloDigitos } from "../../lib/validar";
 import { claveModelo } from "../../lib/modelos";
 
 const FILA = () => ({ nummotuni: "", chauni: "" });
-// Misma normalización que el backend (unidad.validacion.ts): agrupa espacios, quita bordes y pasa a mayúsculas.
 const norm = (t) => String(t || "").trim().replace(/\s+/g, " ");
 const serie = (t) => norm(t).toUpperCase();
-// Fecha local (Lima), no UTC: después de las 7 p. m. el UTC ya es el día siguiente
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-// La factura no puede ser de más de un año antes de la compra registrada (evita fechas como 1900)
 const fechaMinimaFactura = (feccom) => { const d = new Date(`${String(feccom || hoyISO()).slice(0, 10)}T12:00:00`); d.setFullYear(d.getFullYear() - 1); return d.toLocaleDateString("en-CA"); };
 
-/**
- * Detalle de la compra: factura (con PDF adjunto) e identificación de motos.
- * 1) PUT  /api/compras/:id/factura   → metadatos de la factura recibida (emisor, número, fecha, cantidad).
- * 2) POST /api/compras/:id/unidades  → lote de 1 a 100 motos (motor y chasis únicos).
- * 3) GET  /api/compras/:id/unidades  → factura, fichas identificadas y cantidad pendiente.
- * Identificar NO recibe, prepara ni libera motos: las unidades nacen "No disponible".
- */
 export default function CompraDetalle() {
   const { id } = useParams();
   const { compras, modelos, publicos, unidades: inv, actualizar, agregar } = useApp();
@@ -45,6 +36,7 @@ export default function CompraDetalle() {
   const inputPdf = useRef(null); const inputPdf2 = useRef(null);
   const [adjReal, setAdjReal] = useState(null);
 
+  // Cargar la compra
   async function cargar() {
     setCargando(true); setErrorCarga("");
     try {
@@ -76,20 +68,17 @@ export default function CompraDetalle() {
   const tieneFactura = compra.estcom !== "Pendiente de factura";
   const completa = compra.estcom === "Identificada";
   const bloqueada = det.requiere_revision;
-  // Modelo del catálogo de la web: por nombre (los códigos de Supabase pueden ser otros) y, si no, por código
   const modeloLocal = modelos.find((m) => claveModelo(m.nombre) === claveModelo(compra.nommod))
     || (MODO_REAL ? publicos.find((m) => m.codmodApi === String(compra.codmod)) : modelos.find((m) => m.codmod === compra.codmod)) || null;
-  // Conectado: las unidades identificadas en Supabase se pasan al inventario del panel para recibirlas y liberarlas
   const faltanEnInventario = MODO_REAL ? det.unidades.filter((u) => !inv.some((v) => serie(v.motor) === serie(u.nummotuni))) : [];
   function pasarAlInventario(lista) {
     const base = inv.reduce((m, u) => Math.max(m, Number(String(u.id).replace(/\D/g, "")) || 0), 0);
     lista.forEach((r, i) => agregar("unidades", { id: `MC-${String(base + i + 1).padStart(3, "0")}`, coduni: r.coduni, codcom: String(compra.codcom), modelo: modeloLocal?.id || "", nombreModelo: compra.nommod, color: r.coluni || compra.colcom, ubicacion: "", preparacion: "Sin preparar", techo: "Sin techo", disponibilidad: "No disponible", motor: r.nummotuni, chasis: r.chauni, observaciones: [], historial: [{ fecha: hoyISO(), detalle: `Identificada en compra #${compra.codcom} · ${user.nombre}` }] }));
   }
 
-  // Conectado: el estado del PDF lo da el backend (GET /api/compras/:id/factura/archivo); en demostración, este navegador
   const adjunto = MODO_REAL ? adjReal : (det.factura?.adjunto || adjuntoRecordado(compra.codcom));
 
-  // Se revisa el contenido al elegirlo (un PDF real empieza con «%PDF»): así el aviso sale antes de registrar la factura
+  // PDF de la factura
   async function elegirPdf(e) {
     const a = e.target.files?.[0]; e.target.value = "";
     if (!a) return null;
@@ -102,7 +91,7 @@ export default function CompraDetalle() {
     if (MODO_REAL) { setAdjReal(adj); return adj; }
     recordarAdjunto(compra.codcom, adj);
     const actual = compras.find((x) => x.codcom === compra.codcom);
-    actualizar("compras", compra.id, { factura: { ...(actual?.factura || {}), archivo_adjuntado: true, adjunto: adj } }, `PDF de factura adjuntado (compra #${compra.codcom})`);
+    actualizar("compras", compra.id, { factura: { ...actual?.factura, archivo_adjuntado: true, adjunto: adj } }, `PDF de factura adjuntado (compra #${compra.codcom})`);
     return adj;
   }
   async function adjuntarDespues(e) {
@@ -117,13 +106,13 @@ export default function CompraDetalle() {
     try {
       const nombre = `factura-compra-${compra.codcom}.pdf`;
       let url = await urlPdfFactura(adjunto);
-      // Enlace firmado de Supabase: «download» hace que el navegador lo descargue en vez de abrirlo
       if (descargar && /^https?:/i.test(url)) url += `${url.includes("?") ? "&" : "?"}download=${encodeURIComponent(nombre)}`;
       if (descargar) { const a = document.createElement("a"); a.href = url; a.download = nombre; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
       else if (ventana) ventana.location.href = url; else window.open(url, "_blank");
     } catch (er) { ventana?.close(); toast(mensajeError(er), "error"); }
   }
 
+  // Registrar la factura (PUT /api/compras/:id/factura)
   async function guardarFactura(e) {
     e.preventDefault(); const x = {};
     const cuerpo = { emisor: norm(fac.emisor), numero: norm(fac.numero), fecha_emision: fac.fecha_emision, cantidad_motos: Number(fac.cantidad_motos) };
@@ -159,9 +148,9 @@ export default function CompraDetalle() {
   }
 
   const setFila = (i, k, v) => setFilas((p) => p.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  // Identificar motor y chasis (POST /api/compras/:id/unidades)
   function cargarLote() {
     const todas = lote.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const [a, b] = l.split(/[,;\t]+/); return { nummotuni: (a || "").trim(), chauni: (b || "").trim() }; });
-    // Una línea sin números es un encabezado copiado de Excel (MOTOR, CHASIS): no es una moto
     const rows = todas.filter((r) => /\d/.test(`${r.nummotuni}${r.chauni}`));
     if (!rows.length) return toast("Pega una línea por moto: MOTOR, CHASIS", "error");
     const max = Math.min(100, compra.cantidad_pendiente);
@@ -174,7 +163,6 @@ export default function CompraDetalle() {
     e.preventDefault(); setConflicto(null); const x = {};
     const rows = filas.map((r) => ({ nummotuni: serie(r.nummotuni), chauni: serie(r.chauni) }));
     if (rows.length > compra.cantidad_pendiente) x.general = `Solo faltan ${compra.cantidad_pendiente} unidades por identificar.`;
-    // Motor y chasis: letras y números como en la placa del fabricante (mínimo 5, con al menos un número)
     const formato = (v) => v.length >= 5 && /\d/.test(v) && /^[A-Z0-9][A-Z0-9 ./-]*$/.test(v);
     rows.forEach((r, i) => {
       if (!r.nummotuni) x[`m${i}`] = "Ingresa el número de motor."; else if (r.nummotuni.length > 100) x[`m${i}`] = "Máximo 100 caracteres.";
@@ -222,7 +210,6 @@ export default function CompraDetalle() {
         {hechas > 0 && <Link to="/admin/inventario" className="btn btn-secondary !py-2.5">Ver en inventario</Link>}
       </PageHeader>
 
-      {/* Línea de tiempo del proceso */}
       <ol className="mb-6 grid gap-3 sm:grid-cols-3">
         {[["Compra registrada", `${compra.feccom}`, true], ["Factura recibida", tieneFactura ? (adjunto ? "Con PDF adjunto" : "Falta adjuntar el PDF") : "Pendiente", tieneFactura], ["Unidades identificadas", `${hechas} de ${compra.cancom}`, completa]].map(([t, hu, ok], i) => (
           <li key={t} className={`flex items-center gap-3 rounded-xl2 border p-4 ${ok ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-[#121a2b]"}`}>
@@ -232,6 +219,7 @@ export default function CompraDetalle() {
         ))}
       </ol>
 
+      {/* Avance y factura */}
       <div className="grid gap-6 xl:grid-cols-3">
         <Card>
           <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${ESTADO_COMPRA[compra.estcom] || "bg-slate-200"}`}>{compra.estcom}</span>
@@ -302,6 +290,7 @@ export default function CompraDetalle() {
         </Card>
       </div>
 
+      {/* Identificación de unidades */}
       <Card className="mt-6">
         <h2 className="font-bold text-marino dark:text-white">2 · Identificar unidades (motor y chasis)</h2>
         {completa ? <p className="mt-2 text-[14px] text-emerald-700">✓ Todas las unidades de esta compra están identificadas. Continúa en Inventario: recíbelas y libéralas para que la web muestre stock.</p>

@@ -1,8 +1,8 @@
+// Pantallas de error (404, 403, producto no disponible)
 import { Link, useParams, useNavigate } from "react-router-dom";
 import MotoIllustration from "../components/MotoIllustration";
 import { WHATSAPP_NUMERO } from "../lib/config";
 
-/** Pantallas de error de la web (HU-009: 404, producto no disponible, sin stock · HU-007: 401/403/500). */
 export function PantallaError({ codigo, titulo, texto, children }) {
   return (
     <div className="fade-in mx-auto flex max-w-2xl flex-col items-center px-6 py-20 text-center">
@@ -49,7 +49,6 @@ export function ErrorPorCodigo() {
   );
 }
 
-/** Aviso dentro de la ficha cuando el modelo no tiene unidades disponibles. */
 export function SinStockAviso({ nombre, onAvisar }) {
   return (
     <div className="rounded-xl2 border border-amber-200 bg-amber-50 p-5 dark:border-amber-500/30 dark:bg-amber-500/10">

@@ -1,3 +1,4 @@
+// Inicio de la web
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../store/appStore.jsx";
@@ -9,7 +10,7 @@ import { FAMILIAS, COLOR_HEX, formatoSoles } from "../data/mockData";
 import ModeloImg from "../components/ModeloImg";
 import Opiniones from "../components/Opiniones";
 
-// Una diapositiva por modelo: la foto es la oficial de torito.pe
+// Carrusel
 const SLIDES = [
   { modeloId: "torito-250-4v-glp", etiqueta: "Nuevo modelo", texto: "Llantas aro 10, suspensión delantera doble y el ahorro del GLP para rendir más y gastar menos." },
   { modeloId: "torito-4v-gnv", etiqueta: "Nueva generación", texto: "Gas natural con encendido instantáneo, retroceso en el manubrio y triple filtrado de aceite." },
@@ -17,6 +18,7 @@ const SLIDES = [
   { modeloId: "torito-2t-ug-gsl", etiqueta: "Para empezar a trabajar", texto: "El Torito más accesible de la línea, con mantenimiento sencillo." },
 ];
 
+// Cómo comprar
 const PASOS = [
   ["Elige tu modelo", "Compara motores, combustible y precios en el catálogo."],
   ["Cotiza en línea", "Déjanos tus datos o escríbenos por WhatsApp; un asesor te llama el mismo día."],
@@ -24,6 +26,7 @@ const PASOS = [
   ["Llévatelo", "Te acompañamos con la placa y la tarjeta de propiedad hasta la entrega."],
 ];
 
+// Ventajas
 const VENTAJAS = [
   { Icono: IconShield, t: "Distribuidor oficial", d: "Autorizados por Bajaj y Crosland Perú S.A.C." },
   { Icono: IconCreditCard, t: "Crédito directo", d: "Financiamos tu Torito con cuotas a tu medida." },
@@ -31,7 +34,6 @@ const VENTAJAS = [
   { Icono: IconMapArea, t: "Cerca de ti", d: "Sedes en Comas, Ventanilla y Puente Piedra." },
 ];
 
-/** Inicio: modelos destacados, ventajas, catálogo por familia, cómo comprar y sedes. */
 export default function Home() {
   const { publicos, unidades } = useApp();
   const multicolor = publicos.find((m) => (m.colores || []).length > 1);
@@ -42,12 +44,12 @@ export default function Home() {
   const slides = SLIDES.map((x) => ({ ...x, modelo: publicos.find((m) => m.id === x.modeloId) })).filter((x) => x.modelo);
   const lista = publicos.filter((m) => familia === "Todas" || m.familia === familia).slice(0, 8);
 
-
   return (
     <div className="fade-in">
+      {/* Carrusel */}
       {slides.length > 0 && <Carousel slides={slides} onCotizar={(modeloId) => cotizar({ modeloId })} />}
 
-      {/* Ventajas: por qué comprar en EPSA Motor */}
+      {/* Ventajas */}
       <section aria-label="Por qué comprar en EPSA Motor" className="border-b border-slate-200 dark:border-white/10">
         <ul className="wrap grid gap-x-10 gap-y-6 py-8 sm:grid-cols-2 lg:grid-cols-4 lg:py-10">
           {VENTAJAS.map(({ Icono, t, d }) => (
@@ -62,7 +64,7 @@ export default function Home() {
         </ul>
       </section>
 
-      {/* Catálogo */}
+      {/* Catálogo por familia */}
       <section className="wrap py-16 lg:py-20">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -88,7 +90,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* Vitrina de colores: el modelo que viene en varios colores */}
+      {/* Vitrina de colores */}
       {multicolor && (() => { const c = colorVitrina || multicolor.colores[0]; return (
         <section className="relative overflow-hidden bg-marino text-white">
           <div className="pointer-events-none absolute -right-32 top-1/2 h-[560px] w-[560px] -translate-y-1/2 rounded-full opacity-25 blur-3xl transition-colors duration-700" style={{ background: COLOR_HEX[c] }} aria-hidden="true" />
@@ -147,7 +149,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Historias de éxito: opiniones de clientes (se administran en el panel) */}
+      {/* Opiniones de clientes */}
       <Opiniones />
     </div>
   );

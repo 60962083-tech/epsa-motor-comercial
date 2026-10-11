@@ -1,20 +1,17 @@
+// Comprobante de venta en PDF
 import { jsPDF } from "jspdf";
 
-/**
- * Comprobante de venta en PDF (voucher): logo de EPSA Motor, datos de la empresa y del cliente,
- * detalle de la moto y del techo adicional, IGV desglosado y total. Se descarga en el navegador.
- */
 const EMPRESA = { razon: "INVERSIONES EPSA MOTOR S.A.C.", ruc: "20555595469", direccion: "Av. 22 de Agosto 852, Comas, Lima", telefono: "+51 907 721 481", correo: "inversionesepsamotor@gmail.com" };
 const MARINO = [7, 30, 61]; const ROJO = [198, 40, 40]; const GRIS = [100, 116, 139];
 const soles = (n) => `S/ ${Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const numeroComprobante = (c) => `${c.serie}-${String(c.numero).padStart(8, "0")}`;
 
+// Logo
 function logoPng() {
   return new Promise((ok) => {
     const img = new Image();
     img.onload = () => {
       try {
-        // Fondo del color de la cabecera y JPEG: el PDF queda nítido y liviano
         const c = document.createElement("canvas"); c.width = 900; c.height = Math.round(900 * (img.naturalHeight || 600) / (img.naturalWidth || 1975));
         const g = c.getContext("2d"); g.fillStyle = `rgb(${MARINO.join(",")})`; g.fillRect(0, 0, c.width, c.height);
         g.drawImage(img, 0, 0, c.width, c.height);
@@ -26,6 +23,7 @@ function logoPng() {
   });
 }
 
+// Armar y descargar el PDF
 export async function descargarComprobante({ comprobante: c, venta, modelo }) {
   const doc = new jsPDF({ unit: "mm", format: "a5" });
   const W = doc.internal.pageSize.getWidth(); const M = 10;

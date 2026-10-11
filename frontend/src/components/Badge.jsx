@@ -1,5 +1,4 @@
-// Mapa de estado → color. Un estado nunca se distingue solo por color,
-// siempre lleva su nombre escrito al lado (accesibilidad).
+// Etiqueta de estado
 const ESTILOS = {
   "Disponible": "bg-emerald-100 text-emerald-700",
   "Separada": "bg-amber-100 text-amber-700",

@@ -1,3 +1,4 @@
+// Rutas de la web pública y del panel
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import Navbar from "./components/Navbar";
@@ -31,17 +32,14 @@ import CompraDetalle from "./pages/dashboard/CompraDetalle.HU-002";
 import Equipo from "./pages/dashboard/Equipo";
 import OpinionesAdmin from "./pages/dashboard/Opiniones";
 
-/**
- * Rutas.
- *  - Web pública: /, /modelos, /modelos/:id, /nosotros, /sedes  (+ /error/:codigo y 404)
- *  - Panel interno: /admin  (el login vive en la misma dirección; no hay botón público para entrar)
- */
+// Al cambiar de página, vuelve arriba
 function SubirArriba() {
   const { pathname } = useLocation();
-  useEffect(() => { try { window.scrollTo(0, 0); } catch { /* */ } }, [pathname]);
+  useEffect(() => { try { window.scrollTo(0, 0); } catch {} }, [pathname]);
   return null;
 }
 
+// Web pública: menú, páginas y pie de página
 function SitioPublico() {
   return (
     <CotizarProvider>
@@ -64,8 +62,10 @@ function SitioPublico() {
   );
 }
 
+// Ruta del panel protegida por rol
 const P = ({ s, children }) => <ProtectedRoute seccion={s}>{children}</ProtectedRoute>;
 
+// Rutas
 export default function App() {
   return (
     <ErrorBoundary>

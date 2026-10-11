@@ -1,3 +1,4 @@
+// Opiniones de clientes (panel)
 import { useState } from "react";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
@@ -7,10 +8,6 @@ import { esNombre, limpiarTexto, soloLetras } from "../../lib/validar";
 
 const VACIO = { nombre: "", sede: SEDES_ATENCION[0], modelo: "", etiqueta: ETIQUETAS_OPINION[0], estrellas: 5, texto: "", publicado: true, autoriza: false };
 
-/**
- * Opiniones de clientes que se muestran en el inicio de la web («Historias de éxito comercial»).
- * Solo se publican opiniones reales con autorización del cliente. Las de demostración dicen «Ejemplo».
- */
 export default function Opiniones() {
   const { opiniones = [], modelos, agregar, actualizar, eliminar } = useApp();
   const { puede } = useAuth();
@@ -20,6 +17,7 @@ export default function Opiniones() {
   const ejemplos = opiniones.filter((o) => o.ejemplo).length;
 
   function abrir(o) { setErr({}); setF(o ? { ...VACIO, ...o, autoriza: !o.ejemplo } : { ...VACIO, modelo: modelos[0]?.id || "" }); setModal({ o }); }
+  // Validación y guardado
   function validar() {
     const x = {};
     if (!esNombre(f.nombre)) x.nombre = "Escribe el nombre como se mostrará (por ejemplo: Rosa P.).";
@@ -34,7 +32,7 @@ export default function Opiniones() {
   }
   function guardar(e) {
     e.preventDefault(); if (!validar()) return;
-    const { autoriza, ...datos } = f;
+    const datos = { ...f }; delete datos.autoriza;
     datos.nombre = limpiarTexto(datos.nombre); datos.texto = limpiarTexto(datos.texto); datos.estrellas = Number(datos.estrellas); datos.ejemplo = false;
     if (modal.o) { actualizar("opiniones", modal.o.id, datos, `Opinión editada: ${datos.nombre}`); toast("Opinión actualizada"); }
     else { agregar("opiniones", { ...datos, id: opiniones.reduce((m, o) => Math.max(m, o.id), 0) + 1 }, `Opinión agregada: ${datos.nombre}`); toast(datos.publicado ? "Opinión publicada en el inicio de la web" : "Opinión guardada sin publicar"); }
@@ -58,6 +56,7 @@ export default function Opiniones() {
         {puede("editar") && <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Agregar opinión</button>}
       </PageHeader>
       {ejemplos > 0 && <div className="mb-5"><Aviso tipo="aviso">Hay {ejemplos} opiniones de ejemplo: en la web se ven con la etiqueta «Ejemplo». Reemplázalas por opiniones reales de tus clientes.</Aviso></div>}
+      {/* Indicadores */}
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Stat etiqueta="Publicadas" valor={opiniones.filter((o) => o.publicado).length} tono="verde" />
         <Stat etiqueta="Ocultas" valor={opiniones.filter((o) => !o.publicado).length} />
@@ -82,6 +81,7 @@ export default function Opiniones() {
         </Tabla>
       )}
 
+      {/* Agregar / editar opinión */}
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.o ? "Editar opinión" : "Agregar opinión"} ancho="max-w-xl"
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-op" className="btn btn-primary !py-2">Guardar</button></>}>
         <form id="f-op" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>

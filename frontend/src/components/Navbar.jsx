@@ -1,3 +1,4 @@
+// Menú de la web
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { IconSun, IconMoon, IconMenu, IconClose } from "./Icons";
@@ -24,17 +25,20 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-marino">
       <div className="wrap flex h-16 items-center gap-3 sm:h-[72px] sm:gap-4">
+        {/* Logo */}
         <NavLink to="/" className="shrink-0" aria-label="EPSA Motor, inicio">
           <img src="/images/logo-epsa.svg" alt="EPSA Motor" className="h-10 w-auto min-[370px]:hidden" />
           <img src="/images/logo-epsa-marcas.svg" alt="EPSA Motor · Torito · Bajaj" className="hidden h-[34px] w-auto min-[370px]:block sm:h-11 lg:h-10 xl:h-12" />
         </NavLink>
 
+        {/* Enlaces (escritorio) */}
         <nav className="ml-auto hidden items-center gap-1 lg:flex" aria-label="Principal">
           {LINKS.map((l) => (
             <NavLink key={l.to} to={l.to} className={linkClass} end={l.to === "/"}>{l.label}</NavLink>
           ))}
         </nav>
 
+        {/* Tema, cotizar y menú móvil */}
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2 lg:ml-3">
           <button onClick={toggle} aria-label={dark ? "Usar tema claro" : "Usar tema oscuro"}
             className="grid h-10 w-10 place-items-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white">
@@ -48,6 +52,7 @@ export default function Navbar() {
         </div>
       </div>
 
+      {/* Menú móvil */}
       <nav className={`overflow-hidden border-t border-white/10 bg-marino transition-[max-height] duration-200 lg:hidden ${open ? "max-h-96" : "max-h-0 border-t-0"}`} aria-label="Menú móvil">
         <div className="wrap flex flex-col gap-1 py-3">
           {LINKS.map((l) => (

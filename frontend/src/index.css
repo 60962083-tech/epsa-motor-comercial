@@ -2,12 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
- * Sistema visual EPSA Motor
- * Concepto: señalética de carretera y taller limpio. Blanco amplio, azul marino de marca,
- * rojo solo para la acción principal, fotos de producto sobre un "escenario" gris azulado,
- * Barlow Condensed para nombres de modelos y cifras, Barlow para lectura.
- */
+/* Estilos generales */
 @layer base {
   html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
   body { @apply bg-white font-sans text-[#0d1b2e] antialiased dark:bg-[#0a1426] dark:text-[#e6ecf4]; }
@@ -18,11 +13,7 @@
   }
 }
 
-/*
- * Componentes en @layer components: así cualquier utilidad (hidden, sm:inline-flex, max-w-4xl…)
- * puede ajustarlos. Antes estaban fuera de la capa y ganaban a las utilidades; por eso el botón
- * «Cotizar» se veía en celular y empujaba el menú fuera de la pantalla.
- */
+/* Botones y campos */
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-5 py-3 text-[15px] font-semibold
@@ -53,21 +44,24 @@
   .bajada { @apply max-w-2xl text-[16px] leading-relaxed text-slate-600 dark:text-slate-300; }
 }
 
+/* Utilidades */
 .cifra { font-variant-numeric: tabular-nums; }
 
-/* "backwards": al terminar, la animación deja de aplicar transform; así los modales fijos se ubican respecto a la ventana */
+/* Animación de entrada */
 .fade-in { animation: fadeIn .35s ease backwards; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Sin barra de desplazamiento */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 
-/* Animaciones del banner (respetan «reducir movimiento» por la regla general de arriba) */
+/* Animaciones del carrusel */
 @keyframes subir { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @keyframes entrar { from { opacity: 0; transform: translateX(40px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes progreso { from { width: 0; } to { width: 100%; } }
 @keyframes flotar { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 
-/* Opiniones: dos filas que avanzan solas en sentidos opuestos */
+/* Opiniones en movimiento */
 @keyframes marquesina { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .marquesina { animation: marquesina var(--dur, 60s) linear infinite; }
 .marquesina.reversa { animation-direction: reverse; }

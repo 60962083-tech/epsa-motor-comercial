@@ -1,7 +1,4 @@
-/**
- * Video de fondo en bucle (pista de noche con luces). Es liviano (~100 KB), va sin sonido
- * y, si la persona pidió menos movimiento en su sistema, se muestra solo la imagen fija.
- */
+// Video de fondo
 export default function VideoFondo({ className = "", opacidad = "opacity-70" }) {
   const quieto = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   return (

@@ -1,3 +1,4 @@
+// Seguimiento de leads
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -6,15 +7,10 @@ import { Campo, Card, Modal, PageHeader, Stat, Vacio, btnMini, btnMiniPeligro, u
 import { hoyLocal, limpiarTexto, sumarDias } from "../../lib/validar";
 
 const TIPOS = ["Llamada", "WhatsApp", "Visita", "Prueba de manejo", "Correo"];
-const hoyISO = hoyLocal; // fecha local (no UTC)
+const hoyISO = hoyLocal;
 const masDias = (n) => sumarDias(n);
 const CERRADOS = ["Cerrado ganado", "Perdido"];
 
-/**
- * Seguimiento comercial de cada lead (tabla seguimientolead: tipsle, dessle, fecprosle).
- * Se alimenta solo: cada cotización de la web y cada lead manual crean su primer contacto.
- * Al cumplir una tarea se registra el resultado y, si hace falta, se agenda la siguiente.
- */
 export default function Seguimiento() {
   const { seguimientos, leads, equipo, modelos, agregar, actualizar, eliminar, publicos = [] } = useApp();
   const { puede, user } = useAuth();
@@ -27,14 +23,14 @@ export default function Seguimiento() {
   const [modal, setModal] = useState(false);
   const [f, setF] = useState({});
   const [err, setErr] = useState({});
-  const [cierre, setCierre] = useState(null); // seguimiento que se está cerrando
+  const [cierre, setCierre] = useState(null);
   const [c, setC] = useState({ resultado: "", proxima: "", tipo: "Llamada", estadoLead: "" });
   const [errC, setErrC] = useState({});
   const hoy = hoyISO();
   const lead = (id) => leads.find((l) => l.id === id);
   const nombreModelo = (id) => (modelos.find((m) => m.id === id) || publicos.find((m) => m.id === id))?.nombre || "";
   const vendedores = equipo.filter((p) => p.rol !== "gerente" && p.activo);
-  const abiertos = leads.filter((l) => !CERRADOS.includes(l.estado)); // a un lead cerrado ya no se le agendan tareas
+  const abiertos = leads.filter((l) => !CERRADOS.includes(l.estado));
   const limite = masDias(365);
 
   const lista = useMemo(() => seguimientos.filter((s) => {
@@ -50,6 +46,7 @@ export default function Seguimiento() {
   const conteo = (fn) => mios.filter(fn).length;
 
   const abrir = () => { setErr({}); const elegido = abiertos.find((l) => String(l.id) === String(leadId)) || abiertos[0]; setF({ leadId: elegido?.id || "", tipo: "Llamada", fecha: hoy, detalle: "", responsable: user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre || "" }); setModal(true); };
+  // Programar seguimiento
   function validar() {
     const x = {};
     if (!f.leadId || !abiertos.some((l) => String(l.id) === String(f.leadId))) x.leadId = "Elige un lead abierto.";
@@ -67,13 +64,12 @@ export default function Seguimiento() {
     toast("Seguimiento programado"); setModal(false);
   }
 
-  // Si el lead ya está cerrado (ganado o perdido) no se propone otro contacto
+  // Cerrar y reabrir tareas
   function abrirCierre(s) { setErrC({}); setC({ resultado: "", proxima: CERRADOS.includes(lead(s.leadId)?.estado) ? "" : masDias(2), tipo: s.tipo, estadoLead: "" }); setCierre(s); }
   function cerrarTarea(e) {
     e.preventDefault();
     const x = {}; const resultado = limpiarTexto(c.resultado);
     const actual = lead(cierre.leadId)?.estado;
-    // El lead queda cerrado si se elige un estado de cierre o si ya lo estaba y se deja «Sin cambios»
     const estadoFinal = c.estadoLead || actual;
     const cierraLead = CERRADOS.includes(estadoFinal);
     if (resultado.length < 5 || (resultado.match(/[\p{L}\d]/gu) || []).length < 5) x.resultado = "Cuenta brevemente qué pasó (mínimo 5 letras o números)."; else if (resultado.length > 500) x.resultado = "Máximo 500 caracteres.";
@@ -101,6 +97,7 @@ export default function Seguimiento() {
         <button className="btn btn-primary !py-2.5" onClick={abrir}>+ Programar seguimiento</button>
       </PageHeader>
 
+      {/* Indicadores */}
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat etiqueta="Para hoy" valor={conteo((s) => !s.hecho && s.fecha === hoy)} tono="marino" />
         <Stat etiqueta="Vencidos" valor={conteo((s) => !s.hecho && s.fecha < hoy)} tono="rojo" />
@@ -108,6 +105,7 @@ export default function Seguimiento() {
         <Stat etiqueta="Cumplidos" valor={conteo((s) => s.hecho)} tono="verde" />
       </div>
 
+      {/* Filtros */}
       <Card className="mb-5 flex flex-wrap items-end gap-3">
         <div className="no-scrollbar flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-0.5 text-[13px] dark:bg-white/10">
           {[["hoy", `Hoy (${conteo((s) => !s.hecho && s.fecha === hoy)})`], ["pendientes", `Pendientes (${conteo((s) => !s.hecho)})`], ["vencidos", `Vencidos (${conteo((s) => !s.hecho && s.fecha < hoy)})`], ["hechos", `Cumplidos (${conteo((s) => s.hecho)})`]].map(([k, l]) => (
@@ -147,6 +145,7 @@ export default function Seguimiento() {
         </div>
       )}
 
+      {/* Programar seguimiento */}
       <Modal abierto={modal} onClose={() => setModal(false)} titulo="Programar seguimiento" confirmarGuardar={{ titulo: "¿Programar este seguimiento?", texto: `${f.tipo || ""} con ${lead(Number(f.leadId))?.contacto || "el lead"} el ${f.fecha || ""}, a cargo de ${f.responsable || ""}.`, boton: "Programar", validar }}
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(false)}>Cancelar</button><button form="f-seg" className="btn btn-primary !py-2">Guardar</button></>}>
         <form id="f-seg" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
@@ -158,6 +157,7 @@ export default function Seguimiento() {
         </form>
       </Modal>
 
+      {/* Cerrar tarea */}
       <Modal abierto={!!cierre} onClose={() => setCierre(null)} titulo={`Cerrar tarea · ${lead(cierre?.leadId)?.contacto || ""}`} ancho="max-w-md"
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setCierre(null)}>Cancelar</button><button form="f-cierre" className="btn btn-primary !py-2">Guardar resultado</button></>}>
         <form id="f-cierre" onSubmit={cerrarTarea} className="grid gap-4" noValidate>

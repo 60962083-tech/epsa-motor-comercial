@@ -1,3 +1,4 @@
+// Equipo del panel
 import { useEffect, useState } from "react";
 import { listarUsuariosSupabase } from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
@@ -14,23 +15,19 @@ const CARGOS = { gerente: ["Gerente"], administradora: ["Administradora", "Admin
 const cargoDe = (p) => p.cargo || ROLES[p.rol]?.nombre;
 const TONO_ROL = { gerente: "bg-marino text-white", administradora: "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200", vendedor: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200" };
 
-/**
- * Equipo: usuarios del panel, su rol y sede, y el orden de turnos para repartir leads.
- * Solo el gerente agrega, edita, da o quita acceso y elimina personas.
- */
 export default function Equipo() {
   const { equipo, agregar, actualizar, eliminar, leads, ventas, seguimientos } = useApp();
   const { puede, user } = useAuth();
   const toast = useToast(); const confirmar = useConfirm();
   const gestiona = puede("accesos");
   const [modal, setModal] = useState(null); const [f, setF] = useState(VACIO); const [err, setErr] = useState({});
-  // Conectado: también se muestran las cuentas guardadas en Supabase (tabla «usuario» del backend)
   const [cuentas, setCuentas] = useState(null); const [errCuentas, setErrCuentas] = useState("");
   useEffect(() => { if (MODO_REAL) listarUsuariosSupabase().then(setCuentas).catch((e) => setErrCuentas(mensajeError(e))); }, []);
   const turnos = equipo.filter((p) => p.rol === "vendedor" && p.activo && !p.ausente && p.recibeLeads !== false);
   const abiertos = (p) => leads.filter((l) => l.responsable === p.nombre && !["Cerrado ganado", "Perdido"].includes(l.estado)).length;
 
   function abrir(p) { setErr({}); setF(p ? { ...VACIO, ...p, clave: "" } : VACIO); setModal({ p }); }
+  // Validación y guardado
   function validar() {
     const x = {};
     const nombre = limpiarTexto(f.nombre);
@@ -40,12 +37,10 @@ export default function Equipo() {
     else if (equipo.some((p) => p.correo.toLowerCase() === correo && p.id !== modal?.p?.id)) x.correo = "Ese correo ya tiene una cuenta.";
     if (!x.nombre && equipo.some((p) => p.nombre.toLowerCase() === nombre.toLowerCase() && p.id !== modal?.p?.id)) x.nombre = "Ya hay una persona con ese nombre; agrega su segundo apellido.";
     if (f.celular && !/^9\d{8}$/.test(f.celular)) x.celular = "Celular de 9 dígitos que empiece con 9.";
-    // Si no se escribe usuario, se arma con el correo: también debe ser válido y único
     const usuario = f.usuario || correo.split("@")[0];
     if (!/^[a-z0-9._-]{3,30}$/.test(usuario)) x.usuario = f.usuario ? "Usuario de 3 a 30 letras minúsculas o números, sin espacios." : "Escribe un usuario (el que sale del correo no es válido).";
     else if (equipo.some((p) => p.usuario?.toLowerCase() === usuario && p.id !== modal?.p?.id)) x.usuario = f.usuario ? "Ese usuario ya existe." : `El usuario «${usuario}» ya existe: escribe otro.`;
     if (!modal?.p || f.clave) {
-      // Temporal: puede ser solo números (como los 8 dígitos del correo ISIL), pero sin espacios ni un mismo carácter repetido
       const c = f.clave || "";
       const malo = c.length < MIN_CLAVE ? `Mínimo ${MIN_CLAVE} caracteres.` : c.length > 72 ? "Máximo 72 caracteres." : /\s/.test(c) ? "Sin espacios." : /^(.)\1+$/.test(c) ? "No uses un mismo carácter repetido." : "";
       if (malo) x.clave = modal?.p ? `${malo} O déjala vacía para no cambiarla.` : malo;
@@ -62,12 +57,10 @@ export default function Equipo() {
     const datos = { nombre: limpiarTexto(f.nombre), usuario: f.usuario || f.correo.trim().toLowerCase().split("@")[0], correo: f.correo.trim().toLowerCase(), celular: f.celular, rol: f.rol, cargo: CARGOS[f.rol].includes(f.cargo) ? f.cargo : CARGOS[f.rol][0], sede: f.rol === "vendedor" ? f.sede : f.sede || "Todas", recibeLeads: f.rol === "vendedor" ? f.recibeLeads : false, activo: f.activo };
     if (modal.p) {
       if (modal.p.nombre !== datos.nombre) {
-        // El nombre identifica al responsable en leads, seguimiento y ventas: se actualiza en todos
         leads.filter((l) => l.responsable === modal.p.nombre).forEach((l) => actualizar("leads", l.id, { responsable: datos.nombre }));
         seguimientos.filter((x) => x.responsable === modal.p.nombre).forEach((x) => actualizar("seguimientos", x.id, { responsable: datos.nombre }));
         ventas.filter((v) => v.vendedor === modal.p.nombre).forEach((v) => actualizar("ventas", v.id, { vendedor: datos.nombre }));
       }
-      // Si pierde el acceso o deja de ser vendedor, sus leads abiertos quedan «Sin asignar» (igual que con «Quitar acceso»)
       const deja = (modal.p.activo && !datos.activo) || (modal.p.rol === "vendedor" && datos.rol !== "vendedor");
       const suyos = deja ? leads.filter((l) => l.responsable === modal.p.nombre && !["Cerrado ganado", "Perdido"].includes(l.estado)) : [];
       suyos.forEach((l) => actualizar("leads", l.id, { responsable: "Sin asignar" }));
@@ -79,11 +72,11 @@ export default function Equipo() {
     }
     setModal(null);
   }
+  // Acceso y eliminación
   async function alternarAcceso(p) {
     if (p.id === user.idEquipo || p.nombre === user.nombre) return toast("No puedes quitarte tu propio acceso.", "error");
     if (p.activo && p.rol === "gerente" && equipo.filter((x) => x.rol === "gerente" && x.activo).length === 1) return toast("Debe quedar al menos un gerente activo.", "error");
     if (p.activo && !(await confirmar({ titulo: `Quitar acceso a ${p.nombre}`, texto: "No podrá ingresar al panel. Sus datos y su historial se conservan; puedes devolverle el acceso cuando quieras.", boton: "Quitar acceso" }))) return;
-    // Sin acceso no puede atender: sus leads abiertos quedan «Sin asignar» para repartirlos
     const suyos = p.activo ? leads.filter((l) => l.responsable === p.nombre && !["Cerrado ganado", "Perdido"].includes(l.estado)) : [];
     suyos.forEach((l) => actualizar("leads", l.id, { responsable: "Sin asignar" }));
     actualizar("equipo", p.id, { activo: !p.activo }, `Acceso ${p.activo ? "retirado" : "restituido"}: ${p.nombre}`);
@@ -130,11 +123,12 @@ export default function Equipo() {
             ))}
           </Tabla>
         </div>
+        {/* Cuentas con acceso */}
         {MODO_REAL && (
           <Card className="mt-6">
-            <h2 className="font-bold text-marino dark:text-white">Cuentas en Supabase</h2>
-            <p className="mb-3 text-[12.5px] text-slate-500">Tabla «usuario» del backend: es la que define el rol al iniciar sesión. Las contraseñas las guarda Supabase Auth (cifradas).</p>
-            {errCuentas ? <Aviso tipo="aviso">{errCuentas}</Aviso> : !cuentas ? <p className="text-[13.5px] text-slate-400">Cargando…</p> : cuentas.length === 0 ? <p className="text-[13.5px] text-slate-400">Supabase no devolvió cuentas: la tabla «usuario» está vacía o no permite leerla desde el panel (RLS). El login funciona igual.</p> : (
+            <h2 className="font-bold text-marino dark:text-white">Cuentas con acceso al panel</h2>
+            <p className="mb-3 text-[12.5px] text-slate-500">Usuarios que pueden iniciar sesión y su rol.</p>
+            {errCuentas ? <Aviso tipo="aviso">{errCuentas}</Aviso> : !cuentas ? <p className="text-[13.5px] text-slate-400">Cargando…</p> : cuentas.length === 0 ? <p className="text-[13.5px] text-slate-400">No hay cuentas para mostrar.</p> : (
               <ul className="divide-y divide-slate-100 text-[13.5px] dark:divide-white/10">
                 {cuentas.map((c) => (
                   <li key={c.codusu} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -157,7 +151,7 @@ export default function Equipo() {
         </div>
       </div>
 
-
+      {/* Agregar / editar usuario */}
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.p ? `Editar a ${modal.p.nombre}` : "Agregar usuario"} ancho="max-w-xl"
         confirmarGuardar={modal?.p ? { titulo: "¿Guardar los cambios?", texto: `Se actualizarán los datos y el acceso de ${f.nombre || "este usuario"}.`, boton: "Guardar cambios", validar } : { titulo: "¿Crear este usuario?", texto: `${f.nombre || "La persona"} podrá ingresar como ${CARGOS[f.rol].includes(f.cargo) ? f.cargo : ROLES[f.rol]?.nombre} con su correo y la contraseña temporal.`, boton: "Crear usuario", validar }}
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-eq" className="btn btn-primary !py-2">{modal?.p ? "Guardar" : "Crear usuario"}</button></>}>
@@ -176,7 +170,7 @@ export default function Equipo() {
             {f.rol === "vendedor" && <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-[#0e2c52]" checked={f.recibeLeads} onChange={set("recibeLeads")} />Recibe leads de la web (turnos)</label>}
             <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-[#0e2c52]" checked={f.activo} onChange={set("activo")} />Acceso activo</label>
           </div>
-          {MODO_REAL && <div className="sm:col-span-2"><Aviso tipo="aviso">Con Supabase conectado, la cuenta y su contraseña se crean en Supabase (Authentication) y su rol en la tabla «usuario». Sigue los pasos de docs/supabase-usuarios-equipo.sql.</Aviso></div>}
+          {MODO_REAL && <div className="sm:col-span-2"><Aviso tipo="aviso">La cuenta para iniciar sesión se crea aparte, en el sistema. Aquí se guarda la ficha del integrante del equipo.</Aviso></div>}
         </form>
       </Modal>
     </div>

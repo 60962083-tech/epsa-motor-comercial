@@ -1,3 +1,4 @@
+// HU-010 · Sedes y sucursales
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { enlaceGoogleMaps, enlaceMapaEmbebido } from "../data/mockData";
@@ -21,7 +22,7 @@ const PREGUNTAS = [
   ["¿Atienden domingos o feriados?", "Atendemos de lunes a sábado. Domingos y feriados puedes dejarnos tu consulta por WhatsApp y te respondemos el siguiente día hábil."],
 ];
 
-/** ¿La sede está abierta ahora? Horario L-S 9:00-17:00, hora de Lima. */
+// ¿Abierto ahora? (hora de Lima)
 function abiertoAhora() {
   try {
     const p = new Intl.DateTimeFormat("es-PE", { timeZone: "America/Lima", weekday: "short", hour: "numeric", hour12: false }).formatToParts(new Date());
@@ -31,10 +32,6 @@ function abiertoAhora() {
   } catch { return null; }
 }
 
-/**
- * Sedes y sucursales (HU-010). Las sedes salen del panel (Ubicaciones, tipo "Sede propia" y activas):
- * si el gerente desactiva o agrega una sede, esta página cambia sola.
- */
 export default function Sedes() {
   const { sedes } = useApp();
   const cotizar = useCotizar();
@@ -46,7 +43,7 @@ export default function Sedes() {
   return (
     <div className="fade-in">
 
-      {/* Hero */}
+      {/* Presentación */}
       <section className="relative overflow-hidden bg-marino text-white">
         <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-acento/20 blur-2xl" />
         <div className="wrap relative grid gap-8 py-14 lg:grid-cols-[1.2fr_1fr] lg:items-center">
@@ -70,7 +67,7 @@ export default function Sedes() {
         </div>
       </section>
 
-      {/* Selector + mapa */}
+      {/* Lista de sedes y mapa */}
       <section className="wrap py-12">
         {sedes.length === 0 ? (
           <p className="rounded-xl2 border-2 border-dashed py-12 text-center text-slate-500">No hay sedes activas por el momento. Escríbenos por WhatsApp y te atendemos.</p>
@@ -126,7 +123,7 @@ export default function Sedes() {
         )}
       </section>
 
-      {/* Requisitos */}
+      {/* Qué traer */}
       <section className="bg-marino-50 py-12 dark:bg-white/[0.03]">
         <div className="wrap">
           <h2 className="titulo text-center">Qué traer a tu visita</h2>

@@ -1,14 +1,11 @@
+// Opiniones de clientes (inicio)
 import { useState } from "react";
 import { useApp } from "../store/appStore.jsx";
 import ModeloImg from "./ModeloImg";
 
-/**
- * «Historias de éxito»: opiniones de clientes en dos filas que avanzan solas.
- * Las opiniones se cargan desde el panel (Opiniones); solo se muestran las publicadas.
- * Las de demostración se marcan como «Ejemplo» para no presentarlas como reales.
- */
 const TONOS = ["bg-marino text-white", "bg-acento text-white"];
 
+// Estrellas
 function Estrellas({ n }) {
   return (
     <span className="flex gap-0.5 text-acento" aria-label={`${n} de 5 estrellas`}>
@@ -19,6 +16,7 @@ function Estrellas({ n }) {
   );
 }
 
+// Tarjeta de opinión
 function Tarjeta({ o, modelo, i }) {
   return (
     <article className="relative flex h-full w-[290px] shrink-0 flex-col rounded-2xl border-l-4 border-acento bg-white p-5 text-left shadow-lg shadow-black/20 sm:w-[330px] dark:bg-[#101c33]">
@@ -41,13 +39,13 @@ function Tarjeta({ o, modelo, i }) {
   );
 }
 
+// Sección con dos filas en movimiento
 export default function Opiniones() {
   const { opiniones = [], publicos } = useApp();
   const [pausa, setPausa] = useState(false);
   const lista = opiniones.filter((o) => o.publicado);
   if (lista.length === 0) return null;
   const mitad = Math.ceil(lista.length / 2);
-  // Con pocas opiniones se repiten para que la fila siempre llene la pantalla
   const llenar = (f) => { let r = [...f]; while (r.length < 6) r = [...r, ...f]; return r; };
   const filas = (lista.length > 3 ? [lista.slice(0, mitad), lista.slice(mitad)] : [lista]).map(llenar);
   const modelo = (id) => publicos.find((m) => m.id === id);

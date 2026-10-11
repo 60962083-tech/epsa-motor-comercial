@@ -1,3 +1,4 @@
+// Tema claro / oscuro
 import { createContext, useContext, useEffect, useState } from "react";
 
 const ThemeContext = createContext(null);
@@ -7,13 +8,13 @@ export function ThemeProvider({ children }) {
     try {
       const saved = localStorage.getItem("epsa-theme");
       if (saved) return saved === "dark";
-    } catch { /* sin storage */ }
+    } catch {}
     try { return window.matchMedia("(prefers-color-scheme: dark)").matches; } catch { return false; }
   });
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
-    try { localStorage.setItem("epsa-theme", dark ? "dark" : "light"); } catch { /* sin storage */ }
+    try { localStorage.setItem("epsa-theme", dark ? "dark" : "light"); } catch {}
   }, [dark]);
 
   return (

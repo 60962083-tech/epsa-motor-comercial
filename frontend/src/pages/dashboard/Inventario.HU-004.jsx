@@ -1,3 +1,4 @@
+// HU-004 · Inventario de unidades
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -8,10 +9,6 @@ import { Aviso, Campo, Card, Modal, PageHeader, Stat, Tabla, Vacio, btnMini, btn
 const DISP = { "No disponible": "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-white/70", Disponible: "bg-emerald-100 text-emerald-700", Separada: "bg-amber-100 text-amber-700", Vendida: "bg-slate-200 text-slate-600" };
 const POR_PAGINA = 15;
 
-/**
- * Inventario de unidades. Toda unidad nace de una compra identificada, con estado "No disponible"
- * y sin ubicación. Aquí se registra la recepción, el techo/preparación, el traslado y la liberación para venta.
- */
 export default function Inventario() {
   const { unidades, modelos, ubicaciones, ventas = [], actualizar, eliminar } = useApp();
   const { state } = useLocation();
@@ -19,9 +16,8 @@ export default function Inventario() {
   const toast = useToast(); const confirmar = useConfirm();
   const [f, setF] = useState({ q: "", disp: "", modelo: "", ubic: state?.ubic || "", color: "" });
   const [pag, setPag] = useState(1);
-  const [modal, setModal] = useState(null); // {tipo:'trasladar'|'historial'|'recibir', u}
+  const [modal, setModal] = useState(null);
   const [d, setD] = useState({}); const [err, setErr] = useState({});
-  // Las unidades de un modelo de Supabase sin ficha en la web guardan el nombre que dio la compra
   const nombreModelo = (u) => modelos.find((m) => m.id === u.modelo)?.nombre || u.nombreModelo || u.modelo || "—";
   const activas = ubicaciones.filter((u) => u.activo);
 
@@ -33,10 +29,11 @@ export default function Inventario() {
   const paginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
   const visibles = lista.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
   const setFiltro = (k, v) => { setF({ ...f, [k]: v }); setPag(1); };
-  const hoy = () => new Date().toLocaleDateString("en-CA"); // fecha local (no UTC)
+  const hoy = () => new Date().toLocaleDateString("en-CA");
   const texto = (t) => String(t || "").trim().replace(/\s+/g, " ");
   const log = (u, detalle) => [...u.historial, { fecha: hoy(), detalle: `${detalle} · ${user.nombre}` }];
 
+  // Traslado, recepción y liberación
   function abrir(tipo, u) {
     setErr({});
     if (tipo === "trasladar") setD({ destino: activas.find((a) => a.nombre !== u.ubicacion)?.nombre || "", motivo: "" });
@@ -50,7 +47,6 @@ export default function Inventario() {
     if (u.disponibilidad === "Vendida") return setErr({ destino: "Una unidad vendida ya no se traslada." });
     const motivo = texto(d.motivo);
     if (motivo.length > 200) return setErr({ motivo: "Máximo 200 caracteres." });
-    // Una unidad disponible que va al proveedor de techo deja de estar a la venta hasta que vuelva y se libere otra vez
     const aProveedor = ubicaciones.find((a) => a.nombre === d.destino)?.tipo === "Proveedor de techo";
     const retirar = aProveedor && u.disponibilidad === "Disponible";
     actualizar("unidades", u.id, { ubicacion: d.destino, ...(retirar ? { disponibilidad: "No disponible" } : {}), historial: log(u, `Traslado ${u.ubicacion || "sin ubicación"} → ${d.destino}${motivo ? ` (${motivo})` : ""}${retirar ? " · sale de la venta hasta volver a liberarla" : ""}`) }, `${u.id} trasladada a ${d.destino}`);
@@ -87,6 +83,7 @@ export default function Inventario() {
       <PageHeader titulo="Inventario" subtitulo="Cada unidad con su modelo, color, ubicación y techo. Abre «Ficha y techo» para configurar el techo y su fibrera.">
         {puede("compras.registrar") && <Link className="btn btn-primary !py-2.5" to="/admin/compras">+ Identificar unidades de una compra</Link>}
       </PageHeader>
+      {/* Indicadores */}
       <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-5">
         <Stat etiqueta="Por recibir / preparar" valor={cuenta((u) => u.disponibilidad === "No disponible")} nota="Identificadas, aún no a la venta" />
         <Stat etiqueta="Disponibles" valor={cuenta((u) => u.disponibilidad === "Disponible")} tono="verde" />
@@ -119,6 +116,7 @@ export default function Inventario() {
           </table>
         </div>
       </Card>
+      {/* Filtros */}
       <Card className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <div className="sm:col-span-2"><label className="field-label">Código o serie</label><input className="field-input" value={f.q} onChange={(e) => setFiltro("q", e.target.value)} placeholder="MC-001, motor o chasis" /></div>
         {sel("disp", "Disponibilidad", ["No disponible", "Disponible", "Separada", "Vendida"])}
@@ -128,6 +126,7 @@ export default function Inventario() {
         <div className="flex items-end"><button className="pb-3 text-[13px] font-semibold text-acento hover:underline" onClick={() => { setF({ q: "", disp: "", modelo: "", ubic: "", color: "" }); setPag(1); }}>Limpiar filtros</button></div>
       </Card>
 
+      {/* Tabla de unidades */}
       {lista.length === 0 ? <Vacio titulo="Sin unidades con esos filtros" /> : (
         <>
           <Tabla columnas={["Unidad", "Modelo", "Ubicación", "Preparación", "Techo", "Disponibilidad", "Acciones"]}>
@@ -157,6 +156,7 @@ export default function Inventario() {
         </>
       )}
 
+      {/* Trasladar */}
       <Modal abierto={modal?.tipo === "trasladar"} onClose={() => setModal(null)} titulo={`Trasladar ${modal?.u?.id}`} confirmarGuardar ancho="max-w-md" pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-tr" className="btn btn-primary !py-2">Trasladar</button></>}>
         <form id="f-tr" onSubmit={guardarTraslado} className="grid gap-4">
           <p className="text-[13.5px] text-slate-500">Ubicación actual: <b>{modal?.u?.ubicacion}</b></p>
@@ -165,11 +165,13 @@ export default function Inventario() {
           <Aviso tipo="aviso">Solo se muestran ubicaciones activas.</Aviso>
         </form>
       </Modal>
+      {/* Historial */}
       <Modal abierto={modal?.tipo === "historial"} onClose={() => setModal(null)} titulo={`Historial · ${modal?.u?.id}`} ancho="max-w-md">
         <ol className="space-y-3 border-l-2 border-slate-200 pl-4 dark:border-white/15">
           {[...(modal?.u?.historial || [])].reverse().map((h, i) => <li key={i}><p className="text-[12px] text-slate-400">{h.fecha}</p><p className="text-[14px]">{h.detalle}</p></li>)}
         </ol>
       </Modal>
+      {/* Recibir */}
       <Modal abierto={modal?.tipo === "recibir"} onClose={() => setModal(null)} titulo={`Recibir ${modal?.u?.id}`} confirmarGuardar ancho="max-w-md" pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-rc" className="btn btn-primary !py-2">Registrar recepción</button></>}>
         <form id="f-rc" onSubmit={guardarRecepcion} className="grid gap-4" noValidate>
           <p className="text-[13.5px] text-slate-500">Motor <b>{modal?.u?.motor}</b> · chasis <b>{modal?.u?.chasis}</b></p>
