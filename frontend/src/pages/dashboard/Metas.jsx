@@ -1,3 +1,4 @@
+// Metas mensuales por sede
 import { useState } from "react";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
@@ -7,10 +8,8 @@ import { Progreso } from "../../components/charts";
 import { mesLocal } from "../../lib/validar";
 
 const MES_VALIDO = /^\d{4}-(0[1-9]|1[0-2])$/;
-// Mes a «n» meses de hoy (formato AAAA-MM): las metas se registran desde un año atrás hasta un año adelante
 const mesDesde = (n) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 
-/** Metas mensuales por sede, comparadas con las ventas realmente registradas en EPSA. */
 export default function Metas() {
   const { metas, ventas, agregar, actualizar, eliminar } = useApp();
   const { puede } = useAuth();
@@ -27,6 +26,7 @@ export default function Metas() {
   const puedeEditar = puede("metas.gestionar");
 
   function abrir(m) { setErr({}); setF(m ? { sede: m.sede, meta: String(m.meta) } : { sede: SEDES_ATENCION.find((s) => !delMes.some((x) => x.sede === s)) || SEDES_ATENCION[0], meta: "" }); setModal({ m }); }
+  // Guardar meta
   function guardar(e) {
     e.preventDefault();
     const n = Number(f.meta); const x = {};
@@ -47,6 +47,7 @@ export default function Metas() {
         <input type="month" className="field-input !w-auto" value={mes} onChange={(e) => setMes(e.target.value || mesLocal())} aria-label="Mes" />
         {puedeEditar && <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Registrar meta</button>}
       </PageHeader>
+      {/* Indicadores */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
         <Stat etiqueta="Meta informada" valor={totalMeta} nota="unidades del mes" />
         <Stat etiqueta="Ventas registradas" valor={totalReg} nota="en EPSA" tono="verde" />
@@ -64,6 +65,7 @@ export default function Metas() {
           ))}
         </div>
       )}
+      {/* Registrar / editar meta */}
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.m ? "Editar meta" : "Registrar meta"} ancho="max-w-md" pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-meta" className="btn btn-primary !py-2">Guardar</button></>}>
         <form id="f-meta" onSubmit={guardar} className="grid gap-4">
           {err.mes && <p className="text-[12.5px] font-medium text-acento">{err.mes}</p>}

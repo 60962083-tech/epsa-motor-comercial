@@ -1,3 +1,4 @@
+// HU-034 · Registrar compra pendiente de factura
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -14,22 +15,15 @@ import { emparejarModelos } from "../../lib/modelos";
 
 const PALETA = Object.keys(COLOR_HEX);
 
+// Clave de idempotencia
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => { const r = (Math.random() * 16) | 0; return (c === "x" ? r : (r & 3) | 8).toString(16); }));
 
-/**
- * Registrar compra pendiente de factura (POST /api/compras).
- * El color solo puede ser uno de los colores que tiene el modelo.
- * Se envían solo modelo, color y cantidad. Autor, fecha, hora y estado los asigna el backend.
- * Cada intención de compra lleva un UUID (Idempotency-Key) que se reutiliza si hay que reintentar.
- */
 export default function RegistrarCompra() {
   const { compras: locales, modelos: modelosLocales, apiModelos, agregar } = useApp();
-  // Con backend, los modelos (y su codmod) salen SOLO de GET /api/modelos: los códigos locales no son los de Supabase.
-  // Los colores salen del catálogo de la web; si el modelo no tiene ficha en la web, se ofrecen todos los colores.
   const par = MODO_REAL ? emparejarModelos(apiModelos || [], modelosLocales) : null;
   const localDe = (a) => { for (const [id, x] of par.porLocal) if (x === a) return modelosLocales.find((m) => m.id === id); return null; };
   const modelos = par
-    ? (apiModelos || []).map((a) => { const l = localDe(a); return { ...(l || {}), id: l?.id || `api-${a.codmod}`, codmod: String(a.codmod), nombre: a.nommod, colores: l?.colores?.length ? l.colores : PALETA, sinFicha: !l, imagenApi: a.imagenes?.[0]?.urlimo }; })
+    ? (apiModelos || []).map((a) => { const l = localDe(a); return { ...l, id: l?.id || `api-${a.codmod}`, codmod: String(a.codmod), nombre: a.nommod, colores: l?.colores?.length ? l.colores : PALETA, sinFicha: !l, imagenApi: a.imagenes?.[0]?.urlimo }; })
     : modelosLocales;
   const { puede, user } = useAuth();
   const toast = useToast(); const confirmar = useConfirm(); const navigate = useNavigate();
@@ -45,7 +39,6 @@ export default function RegistrarCompra() {
     api.listarCompras(100, 0).then((r) => setPendientes(r.data || [])).catch((e) => toast(mensajeError(e), "error"));
   }, []); // eslint-disable-line
 
-  // Los modelos de Supabase llegan después del primer dibujo: si el elegido ya no está en la lista, se toma el primero
   const codigos = modelos.map((m) => m.codmod).join("|");
   useEffect(() => {
     if (reintento || !modelos.length || modelos.some((m) => m.codmod === f.codmod)) return;
@@ -62,9 +55,10 @@ export default function RegistrarCompra() {
     return <div className="space-y-3"><Aviso tipo="aviso">Solo gerencia y administración registran compras a proveedor. Tu rol puede consultarlas.</Aviso><Link className="btn btn-secondary" to="/admin/compras">Ver compras</Link></div>;
   }
 
+  // Validación
   function validar() {
     const x = {};
-    if (!modelo) x.codmod = MODO_REAL && !modelos.length ? "Todavía no hay modelos publicados en Supabase." : "Elige el modelo comprado.";
+    if (!modelo) x.codmod = MODO_REAL && !modelos.length ? "Todavía no hay modelos publicados." : "Elige el modelo comprado.";
     if (!color) x.colcom = "Elige uno de los colores del modelo.";
     const n = Number(f.cancom);
     if (!Number.isInteger(n) || n < 1 || n > 9999) x.cancom = "La cantidad debe ser un número entero entre 1 y 9999.";
@@ -72,7 +66,6 @@ export default function RegistrarCompra() {
     setErr(x); return Object.keys(x).length === 0;
   }
 
-  // Mismo comportamiento que el backend en modo demostración (idempotencia por clave)
   function registrarLocal(cuerpo) {
     const previa = locales.find((c) => c.idem === clave.current);
     if (previa) {
@@ -85,6 +78,7 @@ export default function RegistrarCompra() {
     return { status: 201, data: { codcom } };
   }
 
+  // Enviar (POST /api/compras)
   async function enviar(e) {
     e.preventDefault();
     if (!validar()) return;
@@ -97,7 +91,7 @@ export default function RegistrarCompra() {
       navigate(`/admin/compras/${r.data?.codcom}`);
     } catch (er) {
       if (er.status === 0 || er.status >= 500) { setReintento(true); toast("No hubo respuesta clara del servidor. Presiona «Reintentar»: se usa la misma clave y no se duplica.", "error"); }
-      else { clave.current = uuid(); setReintento(false); setErr({ general: mensajeError(er) }); toast(mensajeError(er), "error"); } // respuesta definitiva: la próxima vez es otra intención
+      else { clave.current = uuid(); setReintento(false); setErr({ general: mensajeError(er) }); toast(mensajeError(er), "error"); }
     } finally { setEnviando(false); }
   }
 
@@ -107,6 +101,7 @@ export default function RegistrarCompra() {
         <Link to="/admin/compras" className="btn btn-secondary !py-2.5">← Compras</Link>
       </PageHeader>
 
+      {/* Formulario de compra */}
       <form onSubmit={enviar} noValidate className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <Card className="min-w-0">
           <h2 className="text-lg font-bold text-marino dark:text-white">Datos de la compra</h2>
@@ -115,11 +110,11 @@ export default function RegistrarCompra() {
               <div className="flex items-center gap-4">
                 <div className="grid h-20 w-28 shrink-0 place-items-center overflow-hidden rounded-xl bg-escenario dark:bg-escenario-oscuro">{modelo && <ModeloImg modelo={modelo} className="h-full w-full object-contain p-1" />}</div>
                 <select id="compra-modelo" disabled={reintento || !modelos.length} className="field-input" value={modelo ? f.codmod : ""} onChange={(e) => { const m = modelos.find((x) => x.codmod === e.target.value); setF({ ...f, codmod: e.target.value, colcom: m?.colores?.length === 1 ? m.colores[0] : "" }); }}>
-                  {!modelos.length && <option value="">{apiModelos === null ? "Cargando modelos de Supabase…" : "Sin modelos publicados"}</option>}
+                  {!modelos.length && <option value="">{apiModelos === null ? "Cargando modelos…" : "Sin modelos publicados"}</option>}
                   {modelos.map((m) => <option key={m.codmod} value={m.codmod}>{m.nombre}</option>)}
                 </select>
               </div>
-              {MODO_REAL && apiModelos === null && <p className="mt-2 text-[12.5px] text-slate-500">Si la lista no carga, revisa que la API esté encendida.</p>}
+              {MODO_REAL && apiModelos === null && <p className="mt-2 text-[12.5px] text-slate-500">Si la lista no carga, espera un minuto y actualiza la página.</p>}
             </Campo>
             <Campo etiqueta="Color" error={err.colcom} ayuda={!modelo ? "" : modelo.sinFicha ? `${modelo.nombre} aún no tiene ficha en la web: elige el color que figura en la compra.` : coloresModelo.length === 1 ? `El ${modelo.nombre} solo viene en ${coloresModelo[0]}.` : `Colores disponibles del ${modelo.nombre}.`}>
               <div id="compra-color" role="radiogroup" aria-label="Color" className="flex flex-wrap gap-2">

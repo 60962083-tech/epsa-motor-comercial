@@ -1,10 +1,4 @@
-/**
- * mockData.js
- * Datos base de EPSA Motor. Los 8 modelos, precios "Desde" y fichas
- * técnicas se tomaron de https://torito.pe (catálogo oficial Torito).
- * Mientras el backend no esté publicado, la web lee estos datos y los
- * guarda en el navegador (ver src/store/appStore.jsx).
- */
+// Datos de la web y del panel (catálogo, sedes, ejemplos)
 const TORITO = "https://torito.pe/wp-content/uploads";
 export const TORITO_ICONOS = {
   Motor: `${TORITO}/2025/06/icono-motor-1.svg`, Cilindrada: `${TORITO}/2025/06/cilindrada.svg`, Llantas: `${TORITO}/2025/06/llantas.svg`,
@@ -15,9 +9,7 @@ export const TORITO_ICONOS = {
 export const LOGO_TORITO = `${TORITO}/2026/01/logotipo-torito-bajaj-1.png`;
 export const SELLO_BAJAJ = `${TORITO}/2025/12/bajaj-favorita-en-100-paises-125x53-1.png`;
 
-// Cada modelo usa su foto real de torito.pe. Si la web oficial no responde, se usa la copia
-// local /public/images/modelos/modelo-N.png (se crea con: npm run imagenes) y, si tampoco
-// existe, una silueta neutra. No hay imágenes inventadas.
+// Catálogo de modelos
 export const FAMILIAS = ["Motores 4 Válvulas", "Motores 2 Tiempos", "Motores Crom Plus"];
 
 export const MODELOS = [
@@ -77,7 +69,6 @@ export const MODELOS = [
     estado: "Publicado", tipoMotor: "4 tiempos", combustible: "GLP", uso: "Pasajeros", tipoTecho: "Especial",
     precioDesde: 18299, badges: ["NUEVO MODELO"],
     imagen: `${TORITO}/2026/09/torito-250-4v-frontal-lateral-izq.png`, local: "/images/modelos/modelo-3.png",
-    // Vista 360°: 8 fotos reales publicadas por torito.pe, en orden de giro.
     colores: ["Rojo"],
     descripcion: "El Torito 250 4V GLP lleva el motor de 4 válvulas a GLP con llantas aro 10 y suspensión delantera doble: más estabilidad y comodidad en cualquier ruta, con el ahorro del gas.",
     destacados: ["Llantas 4.00-10, aro 10\" sin cámara", "Suspensión delantera doble", "Motor 4 válvulas: 10.33 HP y 18 Nm", "Tanque de 20.6 L de GLP + 3 L de gasolina"],
@@ -180,12 +171,9 @@ export const MODELOS = [
   },
 ];
 
-// Colores que vende EPSA Motor (torito.pe). No existe el blanco.
+// Colores
 export const COLORES = ["Rojo", "Azul", "Amarillo", "Verde", "Negro"];
 export const COLOR_HEX = { Rojo: "#d3222c", Azul: "#1d6fd1", Amarillo: "#f2c200", Verde: "#1f9a3c", Negro: "#17191e" };
-// Si un color no tiene foto propia, se usa la foto del modelo y se cambia el color de la pintura con un filtro SVG
-// (components/FiltrosColor.jsx): mezcla los canales para que el blanco, el negro y los grises no cambien
-// y la pintura quede del color real (por ejemplo, amarillo de verdad y no anaranjado).
 const CLAVE_COLOR = { Rojo: "rojo", Azul: "azul", Amarillo: "amarillo", Verde: "verde", Negro: "negro" };
 export function filtroEntre(desde, hacia) {
   if (!hacia || desde === hacia) return "";
@@ -193,8 +181,8 @@ export function filtroEntre(desde, hacia) {
   if (!a || !b || a === "negro") return "";
   return `url(#epsa-color-${a}-${b})`;
 }
-export const FILTRO_COLOR = Object.fromEntries(["Azul", "Amarillo", "Verde", "Negro"].map((c) => [c, filtroEntre("Rojo", c)]));
 
+// Ficha técnica y filtros del catálogo
 export const TABS_TECNICOS = [
   { id: "motor", label: "Motor" },
   { id: "chasis", label: "Chasis y Carrocería" },
@@ -209,7 +197,7 @@ export const FILTROS_CATALOGO = {
   uso: ["Pasajeros", "Carga"],
 };
 
-// Techo de fibra: es un adicional que se suma al precio de la moto (calculadora de torito.pe).
+// Techos y financiamiento
 export const OPCIONES_TECHO = [
   { id: "lona", nombre: "Lona", precio: 200 },
   { id: "basico", nombre: "Básico", precio: 2000 },
@@ -217,13 +205,13 @@ export const OPCIONES_TECHO = [
   { id: "deportivo", nombre: "Superlujo Deportivo", precio: 4000 },
 ];
 export const SIN_TECHO = { id: "ninguno", nombre: "Sin techo (solo la moto)", precio: 0 };
-export const techoPorId = (id) => OPCIONES_TECHO.find((t) => t.id === id) || (id === "ninguno" ? SIN_TECHO : null);
 export const CUOTAS_INICIAL = [20, 30, 40, 50];
 export const PLAZOS = [6, 12, 18, 24, 30, 36];
 
-// Sin precio (por ejemplo, un modelo que llegó de Supabase sin precio) se muestra «A consultar», nunca «S/ NaN»
+// Precio en soles
 export const formatoSoles = (n) => (n === null || n === undefined || n === "" || !Number.isFinite(Number(n)) ? "A consultar" : `S/ ${Number(n).toLocaleString("es-PE")}`);
 
+// Ubicaciones y sedes
 const HORARIO_SEDE = "Lunes a Sábado de 9:00 AM a 5:00 PM";
 const HORARIO_NOTA = "Domingos: consultar por WhatsApp o en sede";
 export const UBICACIONES = [
@@ -236,10 +224,10 @@ export const UBICACIONES = [
   { id: 7, nombre: "FIBRAT", tipo: "Proveedor de techo", direccion: "", telefono: "", correo: "", activo: true },
 ];
 export const TIPOS_UBICACION = ["Sede propia", "Almacén externo", "Proveedor de techo"];
-// Etiquetas del backend (tipubi) ↔ etiquetas de la interfaz
 export const TIPO_A_API = { "Sede propia": "Sede", "Almacén externo": "Almacen", "Proveedor de techo": "Proveedor" };
 export const TIPO_DE_API = { Sede: "Sede propia", Almacen: "Almacén externo", Proveedor: "Proveedor de techo" };
 
+// Mapas
 export function enlaceGoogleMaps(direccion) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}`;
 }
@@ -247,13 +235,11 @@ export function enlaceMapaEmbebido(direccion) {
   return `https://www.google.com/maps?q=${encodeURIComponent(direccion)}&output=embed`;
 }
 
-// HU-004: configuración del techo de cada unidad (mismos tipos que el backend, tabla tipotecho).
-// Solo el techo de fibra deportiva lo hace un proveedor externo (FIVESA, JAVICAR o FIBRAT); el clásico lo fabrica EPSA Motor.
+// Techo y preparación de unidades
 export const TIPOS_TECHO = ["Sin techo", "Lona", "Techo clásico de fibra", "Techo de fibra deportiva"];
 export const TECHO_REQUIERE_PROVEEDOR = (t) => t === "Techo de fibra deportiva";
 export const PROVEEDORES_TECHO = ["FIVESA", "JAVICAR", "FIBRAT"];
 export const MAX_DETALLE_TECHO = 250;
-/** Datos guardados con los nombres anteriores («Fibra Básico», «Fibra Superlujo»…) pasan a los tipos del backend. */
 export function normalizarTecho(techo, proveedor) {
   const t = String(techo || "Sin techo");
   if (TIPOS_TECHO.includes(t)) return t;
@@ -262,14 +248,12 @@ export function normalizarTecho(techo, proveedor) {
 }
 export const ESTADOS_PREPARACION = ["Sin preparar", "Pendiente de techo", "En preparación", "Lista para entrega"];
 
+// Leads
 export const SEDES_ATENCION = ["Comas", "Ventanilla", "Puente Piedra"];
 export const CANALES = ["WhatsApp", "Llamada", "Formulario web", "Visita a sede", "Facebook", "TikTok", "Referido"];
 export const ESTADOS_LEAD = ["Nuevo", "En seguimiento", "Cotizado", "Cerrado ganado", "Perdido"];
 
-// ---- Equipo ----
-// Usuarios del panel. Cada persona entra con su correo (o su usuario) y una contraseña temporal
-// que debe cambiar al primer ingreso. Las contraseñas no se guardan: solo su resumen SHA-256 (src/lib/clave.js).
-// Con el backend conectado, las cuentas viven en Supabase Auth + tabla «usuario» (docs/supabase-usuarios-equipo.sql).
+// Equipo y cuentas
 export const EQUIPO = [
   { id: 1, nombre: "Harold Salazar Masgo", usuario: "harold", correo: "75063427@mail.isil.pe", claveHash: "1f63a5e8af36546a4e12899ec1bb536618b8ba3228e2daaa0e29c01c1cf68893", claveTemporal: true, celular: "", rol: "gerente", cargo: "Gerente", sede: "Todas", activo: true, ausente: false, recibeLeads: false },
   { id: 2, nombre: "Jazmín Reinoso Rojas", usuario: "jazmin", correo: "60770861@mail.isil.pe", claveHash: "99a3ef76fbb883d337bd66128974ab5844d5cf866247738e79904e1ebad44878", claveTemporal: true, celular: "", rol: "administradora", cargo: "Administradora", sede: "Todas", activo: true, ausente: false, recibeLeads: false },
@@ -278,18 +262,15 @@ export const EQUIPO = [
   { id: 5, nombre: "Michelle Fuentes Villaorduña", usuario: "michelle", correo: "61106576@mail.isil.pe", claveHash: "314d6b7d5b779aaa120d1509f684c59a3be3e721dbdd262a89f78359f10cae10", claveTemporal: true, celular: "", rol: "vendedor", cargo: "Vendedora", sede: "Ventanilla", activo: true, ausente: false, recibeLeads: true },
 ];
 
-// Cuentas de prueba del backend de Michelle (Supabase Auth). Conectado, las valida Supabase;
-// sin conexión también se aceptan aquí, para que el equipo use los mismos accesos en ambos modos.
-// Las contraseñas terminan en coma: clave1234567, · clave12345678, · clave123456789,
 export const CUENTAS_DEMO = [
   { correo: "gerente.demo@epsamotor.test", claveHash: "d65f3e153803f34fdd1ef6182495282a73e89f1b8f5c1657e880cf7342684dd9", nombre: "Gerente Demo", rol: "gerente", cargo: "Gerente" },
   { correo: "admin.demo@epsamotor.test", claveHash: "b10fc3456f38c210d557cd0573ddd30e2de07c79f5056c9f9fe35b066563e15f", nombre: "Admin Demo", rol: "administradora", cargo: "Administradora" },
   { correo: "vendedor.demo@epsamotor.test", claveHash: "22178c0656a5765c2aa0d96abf5b8dc1a5a2d461152d9d2979433cfa7b1e9b53", nombre: "Vendedor Demo", rol: "vendedor", cargo: "Vendedor" },
 ];
 
-// ---- Datos de ejemplo (modo demostración): unos pocos registros por sección ----
+// Registros de ejemplo
 const hoy = new Date();
-const dia = (n) => new Date(hoy.getTime() - n * 86400000).toLocaleDateString("en-CA"); // fecha local (no UTC)
+const dia = (n) => new Date(hoy.getTime() - n * 86400000).toLocaleDateString("en-CA");
 
 export const LEADS = [
   { id: 1, fecha: dia(0), contacto: "Carlos Ramírez", telefono: "987654321", canal: "Formulario web", modelo: "torito-4v-gsl", color: "Rojo", sede: "Comas", responsable: "Didier Leguía Sandoval", estado: "Nuevo", nota: "Techo: Básico · Pago: Financiamiento" },
@@ -306,7 +287,6 @@ export const SEGUIMIENTOS = [
   { id: 4, leadId: 5, fecha: dia(6), tipo: "Visita", detalle: "Prueba de manejo en Comas", responsable: "Didier Leguía Sandoval", hecho: true },
 ];
 
-// Ventas: una por cada etapa. El total incluye el techo adicional elegido.
 export const VENTAS = [
   { id: 1, fecha: dia(0), cliente: "Carlos Ramírez", celular: "987654321", documento: "", modelo: "torito-4v-gsl", color: "Rojo", techo: "Básico", techoPrecio: 2000, pago: "Financiamiento", etapa: "Solicitud web", vendedor: "Sin asignar", sede: "Comas", adelanto: 0, total: 19899, unidad: null, canal: "Formulario web", origen: "Web de EPSA", leadId: 1 },
   { id: 2, fecha: dia(2), cliente: "José Quispe", celular: "944778899", documento: "DNI 45879632", modelo: "torito-2t-ug-glp", color: "Verde", techo: "", techoPrecio: 0, pago: "Pago al contado", etapa: "Cotización", vendedor: "Didier Leguía Sandoval", sede: "Comas", adelanto: 0, total: 14699, unidad: null, canal: "Visita a sede", origen: "Pasó por la sede" },
@@ -322,12 +302,12 @@ export const METAS = [
   { id: 3, mes: hoy.toLocaleDateString("en-CA").slice(0, 7), sede: "Puente Piedra", meta: 4, registradas: 0 },
 ];
 
-// ---- Inventario: pocas unidades de ejemplo (el Crom Plus GSL queda sin stock para ver ese aviso en la web) ----
 const unidad = (n, modelo, color, ubicacion, disponibilidad, techo = "Sin techo", proveedorTecho = "", preparacion = "Lista para entrega") => ({
   id: `MC-${String(n).padStart(3, "0")}`, modelo, color, ubicacion, preparacion, techo, proveedorTecho,
   estadoTecho: techo === "Sin techo" ? "" : "Instalado", disponibilidad, motor: `BJM-${10200 + n * 3}`, chasis: `BJC-${88200 + n * 5}`,
   observaciones: [], historial: [{ fecha: dia(20), detalle: "Recepción desde Crosland" }],
 });
+// Inventario
 export const UNIDADES = [
   unidad(1, "torito-4v-gsl", "Rojo", "Comas", "Disponible"),
   unidad(2, "torito-4v-glp", "Rojo", "Ventanilla", "Disponible", "Techo de fibra deportiva", "FIVESA"),
@@ -340,7 +320,6 @@ export const UNIDADES = [
   unidad(9, "torito-250-4v-glp", "Rojo", "Puente Piedra", "Disponible"),
 ];
 
-// Unidades de la compra #2 ya identificadas: nacen "No disponible" y sin ubicación hasta su recepción.
 const IDENT_C2 = Array.from({ length: 3 }, (_, i) => ({ nummotuni: `CPG-${40100 + i * 7}`, chauni: `CPC-${77300 + i * 9}`, codmod: "6", coluni: "Rojo", fecreguni: dia(5) }));
 UNIDADES.push(...IDENT_C2.map((u, i) => ({
   id: `MC-${String(10 + i).padStart(3, "0")}`, codcom: "2", modelo: "torito-crom-plus-gnv", color: "Rojo",
@@ -349,7 +328,6 @@ UNIDADES.push(...IDENT_C2.map((u, i) => ({
   historial: [{ fecha: dia(5), detalle: "Identificada en la compra #2" }, ...(i === 0 ? [{ fecha: dia(3), detalle: "Recepción física en Crossland Ancón" }] : [])],
 })));
 
-// Más unidades disponibles para que la web muestre stock (el Crom Plus GSL sigue sin stock a propósito)
 UNIDADES.push(
   unidad(13, "torito-2t-ug-gsl", "Azul", "Comas", "Disponible"),
   unidad(14, "torito-crom-plus-gnv", "Rojo", "Comas", "Disponible", "Techo clásico de fibra"),
@@ -357,7 +335,7 @@ UNIDADES.push(
   unidad(16, "torito-4v-gsl", "Rojo", "Puente Piedra", "Disponible", "Lona"),
 );
 
-// ---- Compras a proveedor (modo demostración; mismo contrato que /api/compras) ----
+// Compras
 export const COMPRAS = [
   { id: 1, codcom: "1", codmod: "1", nommod: "Torito 4V GSL", colcom: "Rojo", cancom: 4, cantidad_pendiente: 0, estcom: "Identificada", feccom: dia(30), horcom: "10:15", codusu: "Harold Salazar Masgo",
     factura: { codfac: "1", emisor: "Crosland Perú S.A.C.", numero: "F001-004512", fecha_emision: dia(28), cantidad_motos: 4, archivo_adjuntado: false }, unidades: [] },
@@ -366,9 +344,7 @@ export const COMPRAS = [
   { id: 3, codcom: "3", codmod: "4", nommod: "Torito 2T UG GLP", colcom: "Amarillo", cancom: 3, cantidad_pendiente: 3, estcom: "Pendiente de factura", feccom: dia(1), horcom: "09:20", codusu: "Jazmín Reinoso Rojas", factura: null, unidades: [] },
 ];
 
-// ---- Opiniones de clientes (sección «Historias de éxito» del inicio) ----
-// Se administran en el panel (Opiniones). Las de demostración llevan «ejemplo: true» y la web las marca
-// como «Ejemplo» hasta que EPSA Motor cargue opiniones reales autorizadas por sus clientes.
+// Opiniones
 export const ETIQUETAS_OPINION = ["Pasajeros", "Inicio de negocio", "Carga", "Financiamiento", "Ahorro", "Logística"];
 export const OPINIONES = [
   { id: 1, nombre: "Cliente de Comas", sede: "Comas", modelo: "torito-crom-plus-glp", etiqueta: "Pasajeros", estrellas: 5, texto: "Trabajo turnos largos y necesitaba un motor parejo. Me explicaron bien el financiamiento y salí con mi unidad el mismo mes.", publicado: true, ejemplo: true },
@@ -381,11 +357,7 @@ export const OPINIONES = [
   { id: 8, nombre: "Cliente de Ventanilla", sede: "Ventanilla", modelo: "torito-4v-gsl", etiqueta: "Inicio de negocio", estrellas: 5, texto: "Primera vez que compraba un mototaxi. Me asesoraron paso a paso y me llamaron el mismo día que coticé.", publicado: true, ejemplo: true },
 ];
 
-// ---- Roles (HU-007) ----
-// "puede": secciones del menú. "permisos": acciones. El gerente tiene todas ("*").
-// La administradora gestiona catálogo, compras, facturas e inventario, pero no elimina,
-// no administra sedes/ubicaciones ni usuarios, no fija metas y no emite comprobantes.
-// El vendedor atiende leads, seguimiento y ventas, y consulta lo demás.
+// HU-007 · Roles y permisos
 export const ROLES = {
   gerente: {
     nombre: "Gerente",
@@ -399,8 +371,6 @@ export const ROLES = {
     permisos: ["ver", "crear", "editar", "mover", "modelos.editar", "modelos.publicar", "compras.registrar", "compras.factura", "unidades.gestionar", "unidades.trasladar", "leads.ausencia", "comprobantes.emitir", "ubicaciones.gestionar"],
     descripcion: "Gestiona modelos, compras, facturas de proveedor, inventario y comprobantes de venta. No elimina ni administra sedes ni usuarios.",
   },
-  // El vendedor solo ve su trabajo comercial: stock, leads, seguimiento, separaciones y ventas.
-  // No ve compras, ubicaciones, modelos ni facturación; si escribe esas direcciones, ve «sin acceso».
   vendedor: {
     nombre: "Vendedor",
     puede: ["resumen", "leads", "seguimiento", "ventas", "inventario"],

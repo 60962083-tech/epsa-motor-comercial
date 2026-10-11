@@ -1,3 +1,4 @@
+// HU-007 · Login del panel
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
@@ -9,17 +10,10 @@ import { MODO_REAL } from "../../lib/config";
 import { IconOjo, IconOjoTachado, IconVolver } from "../../components/Icons";
 import { CUENTAS_DEMO } from "../../data/mockData";
 
-/**
- * Login: acceder con permisos por rol. Ruta: /admin
- * Se entra con el correo (o el usuario) y la contraseña. El rol lo define la cuenta, no la pantalla.
- * Conectado: Supabase Auth (correo y contraseña) + rol desde la base de datos (rpc hu007_usuario_actual).
- * Demostración: valida contra el equipo registrado en el panel (Equipo), comparando el resumen de la contraseña.
- * Si la contraseña es temporal, antes de entrar se pide crear una nueva.
- */
 export default function Login() {
   const { login } = useAuth();
   const { equipo, actualizar } = useApp();
-  const [cambio, setCambio] = useState(null); // { persona | real, temporal } → pantalla «Crea tu contraseña»
+  const [cambio, setCambio] = useState(null);
   const [nueva, setNueva] = useState({ clave: "", confirmar: "" });
   const navigate = useNavigate();
   const [usuario, setUsuario] = useState("");
@@ -28,6 +22,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
 
+  // Iniciar sesión
   async function onSubmit(e) {
     e.preventDefault();
     setError("");
@@ -37,7 +32,6 @@ export default function Login() {
     if (MODO_REAL) {
       setCargando(true);
       try {
-        // Supabase Auth trabaja con el correo: si escribió su usuario (p. ej. «harold»), se usa el correo de su ficha
         const correo = u.includes("@") ? u.toLowerCase() : equipo.find((x) => x.usuario?.toLowerCase() === u.toLowerCase())?.correo || u;
         const r = await iniciarSesion(correo, clave);
         if (!["gerente", "administradora", "vendedor"].includes(r.rol)) { cerrarSesionApi(); throw new Error("Tu usuario no tiene un rol válido en EPSA Motor."); }
@@ -53,7 +47,6 @@ export default function Login() {
     const k = u.toLowerCase();
     const p = equipo.find((x) => (x.correo?.toLowerCase() === k || x.usuario?.toLowerCase() === k) && x.claveHash === resumenClave(x.correo, clave));
     if (!p) {
-      // Cuentas de prueba de Michelle (las mismas de Supabase): también entran sin conexión
       const d = CUENTAS_DEMO.find((x) => x.correo === k && x.claveHash === resumenClave(x.correo, clave));
       if (d) { login(d.nombre, d.rol, { correo: d.correo, cargo: d.cargo, sede: "Todas" }); navigate("/admin"); return; }
       return setError("Correo o contraseña incorrectos.");
@@ -68,6 +61,7 @@ export default function Login() {
     navigate("/admin");
   }
 
+  // Cambiar la contraseña temporal
   async function guardarNueva(e) {
     e.preventDefault(); setError("");
     const msg = validarClaveNueva(nueva.clave, nueva.confirmar, cambio.temporal);
@@ -90,6 +84,7 @@ export default function Login() {
       <div className="fade-in relative w-full max-w-[400px]">
         <img src="/images/logo-epsa.svg" alt="EPSA Motor" className="mx-auto h-16 w-auto" />
 
+        {/* Formulario: nueva contraseña / login */}
         {cambio ? (
           <form onSubmit={guardarNueva} noValidate className="mt-8 rounded-2xl bg-white p-8 shadow-[0_24px_60px_rgba(0,0,0,.28)] dark:bg-[#101c33] sm:p-9" data-cambio-clave>
             <h1 className="text-[22px] font-bold text-marino dark:text-white">Crea tu contraseña</h1>

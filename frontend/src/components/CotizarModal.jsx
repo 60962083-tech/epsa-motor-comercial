@@ -1,3 +1,4 @@
+// HU-013 · Formulario «Cotizar mi Torito»
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { Modal, Campo, Aviso } from "./ui";
 import { useApp } from "../store/appStore.jsx";
@@ -7,13 +8,6 @@ import ModeloImg from "./ModeloImg";
 import { OPCIONES_TECHO, SIN_TECHO, formatoSoles } from "../data/mockData";
 import { soloDigitos, soloLetras, esNombre, esCelular, hoyLocal, limpiarTexto, MSJ } from "../lib/validar";
 
-/**
- * Cotizar: el botón «Cotizar» de la web abre este formulario.
- * - Muestra siempre la moto que se está cotizando (foto, color y precio) para que no haya confusión.
- * - El techo es un adicional obligatorio de elegir (o «Sin techo») y su precio se suma al total.
- * - Guarda el interesado como lead, crea la solicitud en Ventas y arma el mensaje de WhatsApp con la misma moto.
- * - Si el celular ya existe en un lead abierto, no se duplica: se actualiza ese cliente con la nueva consulta.
- */
 const Ctx = createContext(() => {});
 export const useCotizar = () => useContext(Ctx);
 
@@ -21,13 +15,14 @@ const TECHOS = [SIN_TECHO, ...OPCIONES_TECHO];
 const VACIO = { nombre: "", telefono: "", modelo: "", color: "", sede: "", techo: "", pago: "Financiamiento", acepta: false };
 const ABIERTO = (l) => !["Cerrado ganado", "Perdido"].includes(l.estado);
 
+// Ventana de cotización (se abre desde cualquier página)
 export function CotizarProvider({ children }) {
   const { publicos, sedes, equipo, leads, ventas, config, agregar, actualizar } = useApp();
   const [abierto, setAbierto] = useState(false);
   const [f, setF] = useState(VACIO);
   const [err, setErr] = useState({});
   const [hecho, setHecho] = useState(null);
-  const [pausaClic, setPausaClic] = useState(false); // evita que el 2.º clic de un doble clic cierre la confirmación
+  const [pausaClic, setPausaClic] = useState(false);
   const enviando = useRef(false);
 
   const abrir = useCallback((pre = {}) => {
@@ -39,7 +34,7 @@ export function CotizarProvider({ children }) {
 
   const modelo = publicos.find((m) => m.id === f.modelo);
   const techo = TECHOS.find((t) => t.id === f.techo);
-  const conPrecio = Number(modelo?.precioDesde) > 0; // un modelo que solo existe en Supabase aún no tiene precio
+  const conPrecio = Number(modelo?.precioDesde) > 0;
   const total = (Number(modelo?.precioDesde) || 0) + (techo?.precio || 0);
   const set = (k, v) => setF((p) => {
     const n = { ...p, [k]: v };
@@ -47,6 +42,7 @@ export function CotizarProvider({ children }) {
     return n;
   });
 
+  // Validación
   function validar() {
     const e = {};
     if (!esNombre(f.nombre)) e.nombre = MSJ.nombre;
@@ -59,7 +55,7 @@ export function CotizarProvider({ children }) {
     return Object.keys(e).length === 0;
   }
 
-  // Reparto por turnos: vendedor activo, presente y que recibe leads, de la sede con menos leads asignados.
+  // Reparto del lead entre vendedores
   function asignar(sede) {
     if (config?.modoAusencia) return "Sin asignar";
     const cand = equipo.filter((p) => p.rol === "vendedor" && p.activo && !p.ausente && p.recibeLeads !== false);
@@ -68,21 +64,20 @@ export function CotizarProvider({ children }) {
     return lista.map((p) => ({ n: p.nombre, c: leads.filter((l) => l.responsable === p.nombre).length })).sort((a, b) => a.c - b.c)[0].n;
   }
 
+  // Enviar la cotización
   function enviar(e) {
     e.preventDefault();
     if (enviando.current || !validar()) return;
     enviando.current = true;
-    const hoy = hoyLocal(); // fecha local (no UTC)
+    const hoy = hoyLocal();
     const nombre = limpiarTexto(f.nombre);
     const tel = f.telefono;
     const techoTxt = techo.precio ? techo.nombre : "";
     const detalle = `${modelo.nombre}${f.color ? ` (${f.color})` : ""}${techoTxt ? ` · techo ${techoTxt}` : " · sin techo"} · ${f.pago} · total ${conPrecio ? formatoSoles(total) : "a consultar"}`;
     const solicitud = { cliente: nombre, celular: tel, modelo: modelo.id, color: f.color, techo: techoTxt, techoPrecio: techo.precio, pago: f.pago, sede: f.sede, total: conPrecio ? total : 0 };
 
-    // Mismo celular con un lead abierto: es el mismo cliente, no se crea otro.
     const existente = leads.find((l) => l.telefono === tel && ABIERTO(l));
     if (existente) {
-      // Se conserva la fecha de registro del lead; la nueva consulta queda en la nota (y el nombre, si lo escribió distinto)
       const otroNombre = nombre.toLowerCase() !== limpiarTexto(existente.contacto).toLowerCase() ? ` (esta vez se registró como ${nombre})` : "";
       actualizar("leads", existente.id, { modelo: modelo.id, color: f.color, ultimaConsulta: hoy, nota: `${existente.nota ? `${existente.nota} · ` : ""}Volvió a consultar por la web el ${hoy}${otroNombre}: ${detalle}` }, `Cliente conocido volvió a cotizar: ${existente.contacto}`);
       const pendiente = ventas.find((v) => v.leadId === existente.id && v.etapa === "Solicitud web");
@@ -106,8 +101,8 @@ export function CotizarProvider({ children }) {
     <Ctx.Provider value={valor}>
       {children}
       <Modal abierto={abierto} onClose={() => { if (!pausaClic) setAbierto(false); }} sinAvisoCambios={!!hecho || !publicos.length} titulo={hecho ? "¡Solicitud recibida!" : "Cotizar mi Torito"} ancho="max-w-2xl">
+        {/* Sin catálogo / confirmación / formulario */}
         {!hecho && !publicos.length ? (
-          // Catálogo vacío (por ejemplo, mientras Supabase aún no tiene modelos publicados): se cotiza por WhatsApp
           <div className="space-y-4 text-center" data-cotizar-vacio>
             <p className="text-[15px] text-slate-600 dark:text-slate-300">Estamos actualizando nuestro catálogo. Escríbenos por WhatsApp y un asesor te cotiza al momento.</p>
             <a href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent("Hola, quisiera cotizar un Torito.")}`} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp w-full"><IconWhatsapp /> Cotizar por WhatsApp</a>
@@ -134,6 +129,7 @@ export function CotizarProvider({ children }) {
                 </div>
               </div>
             )}
+            {/* Datos del cliente */}
             <Campo etiqueta="Nombre completo" error={err.nombre} className="sm:col-span-2">
               <input className="field-input" value={f.nombre} maxLength={80} onChange={(e) => set("nombre", soloLetras(e.target.value))} autoComplete="name" />
             </Campo>
@@ -145,6 +141,7 @@ export function CotizarProvider({ children }) {
                 {sedes.map((s) => <option key={s.id}>{s.nombre}</option>)}
               </select>
             </Campo>
+            {/* Modelo y color */}
             <Campo etiqueta="Modelo" error={err.modelo}>
               <select className="field-input" value={f.modelo} onChange={(e) => set("modelo", e.target.value)} aria-label="Modelo">
                 {publicos.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}

@@ -1,3 +1,4 @@
+// Resumen del panel
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -15,7 +16,7 @@ function ultimosMeses(n) {
   });
 }
 
-/** Resumen operativo: KPIs, gráficos interactivos y puesta en marcha comercial. */
+// Indicadores y gráficos
 export default function Resumen() {
   const { user } = useAuth();
   const { ventas, leads, unidades, seguimientos, modelos, ubicaciones, equipo, metas, actividad, publicos = [] } = useApp();
@@ -37,7 +38,7 @@ export default function Resumen() {
   const adelantos = cerradas.reduce((s, v) => s + v.adelanto, 0);
   const ganados = L.filter((l) => l.estado === "Cerrado ganado").length;
   const conv = L.length ? Math.round((ganados / L.length) * 100) : 0;
-  const hoy = new Date().toLocaleDateString("en-CA"); // fecha local
+  const hoy = new Date().toLocaleDateString("en-CA");
   const pendSeg = seguimientos.filter((s) => !s.hecho);
   const vencidos = pendSeg.filter((s) => s.fecha < hoy).length;
   const disp = U.filter((u) => u.disponibilidad === "Disponible").length;
@@ -71,6 +72,7 @@ export default function Resumen() {
         {import.meta.env.VITE_ROUTER !== "memory" && <button className="btn btn-secondary !py-2" onClick={() => window.print()}>Imprimir</button>}
       </PageHeader>
 
+      {/* Filtros */}
       <Card className="mb-6 flex flex-wrap items-end gap-3">
         <div><label className="field-label">Desde</label><input type="date" className="field-input" value={desde} onChange={(e) => setDesde(e.target.value)} /></div>
         <div><label className="field-label">Hasta</label><input type="date" className="field-input" value={hasta} onChange={(e) => setHasta(e.target.value)} /></div>
@@ -87,6 +89,7 @@ export default function Resumen() {
         </div>
       )}
 
+      {/* Indicadores */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Stat etiqueta="Ventas registradas" valor={cerradas.length} nota={`${V.filter((v) => v.etapa === "Cotización").length} cotizaciones abiertas`} />
         <Stat etiqueta="Ingresos" valor={formatoSoles(ingresos)} nota={`Adelantos: ${formatoSoles(adelantos)}`} tono="verde" />
@@ -98,6 +101,7 @@ export default function Resumen() {
         <Stat etiqueta="Entregas pendientes" valor={cerradas.filter((v) => v.etapa === "Pedido registrado").length} nota="Pedidos por entregar" tono="ambar" />
       </div>
 
+      {/* Gráficos */}
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

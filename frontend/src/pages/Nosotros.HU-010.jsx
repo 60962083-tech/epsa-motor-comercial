@@ -1,3 +1,4 @@
+// HU-010 · Quiénes somos
 import ImgReal from "../components/ImgReal";
 import MotoIllustration from "../components/MotoIllustration";
 import { Link } from "react-router-dom";
@@ -7,7 +8,6 @@ import { IconWhatsapp, IconPhone, IconMail, IconPin } from "../components/Icons"
 import { WHATSAPP_NUMERO } from "../lib/config";
 import { IconShield, IconMapArea, IconCreditCard, IconDocument } from "../components/Icons";
 
-// Fotos de la web de EPSA Motor (el polo del asesor se ajustó al azul marino y al logo de esta web).
 const SOCIO = [
   { imagen: "/images/nosotros/socio-respaldo.webp", stat: "+12 años", statNota: "EN EL MERCADO", titulo: "Respaldo comercial", texto: "Experiencia acompañando la compra y el financiamiento de tu herramienta de trabajo.", Icono: IconShield },
   { imagen: "/images/nosotros/socio-presencia.webp", stat: "20555595469", statNota: "RUC EPSA MOTOR", titulo: "Presencia local", texto: "INVERSIONES EPSA MOTOR S.A.C., empresa formal y distribuidor autorizado de Torito Bajaj.", Icono: IconMapArea },
@@ -15,23 +15,13 @@ const SOCIO = [
   { imagen: "/images/nosotros/socio-placa.webp", stat: "Gratis", statNota: "PLACA Y TARJETA", titulo: "Placa y tarjeta de propiedad", texto: "Gestionamos ante Sunarp el registro de placa y la tarjeta de propiedad, de manera gratuita y veloz, con la compra de tu mototaxi nuevo.", Icono: IconDocument },
 ];
 
-/**
- * Nosotros.jsx — HU-010 "Ver información de EPSA Motor y sus sedes"
- * -----------------------------------------------------------------
- * Corrige OBS-002: antes esta pantalla repetía las tarjetas de sede
- * que también estaban en Sedes.jsx, con riesgo de quedar
- * desactualizadas una respecto a la otra. Ahora "Quiénes somos" solo
- * cuenta quién es la empresa y enlaza a /sedes para el detalle
- * completo (dirección, horario, mapa), que vive en un solo lugar.
- * -----------------------------------------------------------------
- */
 export default function Nosotros() {
   const { sedes, publicos } = useApp();
   const cotizar = useCotizar();
   return (
     <div className="fade-in">
 
-      {/* Hero con el estilo de la web principal de EPSA Motor */}
+      {/* Presentación */}
       <section className="relative overflow-hidden bg-marino text-white">
         <div className="pointer-events-none absolute -left-32 -top-40 h-[480px] w-[480px] rounded-full bg-white/5" />
         <div className="pointer-events-none absolute -bottom-48 right-[-6%] h-[520px] w-[520px] rounded-full bg-acento/20" />
@@ -65,6 +55,7 @@ export default function Nosotros() {
         </div>
       </section>
 
+      {/* Sedes */}
       <section className="wrap grid gap-10 py-14 lg:grid-cols-2">
         <div>
           <h2 className="titulo">Quiénes somos</h2>

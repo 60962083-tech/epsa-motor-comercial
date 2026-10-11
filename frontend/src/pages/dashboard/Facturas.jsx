@@ -1,3 +1,4 @@
+// Facturas y clientes
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -8,10 +9,6 @@ import { descargarComprobante, numeroComprobante } from "../../lib/voucher";
 
 const soles2 = (n) => `S/ ${Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/**
- * Facturas y clientes: comprobantes emitidos (boletas y facturas) con descarga en PDF,
- * ventas que aún falta facturar y la lista de clientes que ya compraron.
- */
 export default function Facturas() {
   const { ventas, modelos, publicos = [] } = useApp();
   const { puede } = useAuth();
@@ -48,6 +45,7 @@ export default function Facturas() {
       <PageHeader titulo="Facturas y clientes" subtitulo="Comprobantes de venta emitidos, ventas por facturar y clientes que ya compraron. Cada comprobante se descarga en PDF.">
         <button className="btn btn-primary !py-2.5" onClick={() => navigate("/admin/ventas", { state: { nueva: true } })}>+ Registrar venta</button>
       </PageHeader>
+      {/* Indicadores */}
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat etiqueta="Comprobantes emitidos" valor={emitidos.length} />
         <Stat etiqueta="Monto facturado" valor={formatoSoles(Math.round(emitidos.reduce((s, v) => s + Number(v.comprobante.total || 0), 0)))} tono="verde" />
@@ -61,6 +59,7 @@ export default function Facturas() {
         <div className="ml-auto min-w-[220px] flex-1 sm:max-w-sm"><label className="field-label" htmlFor="fac-q">Buscar</label><input id="fac-q" className="field-input" placeholder="Cliente, DNI, celular o N° de comprobante" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       </Card>
 
+      {/* Comprobantes emitidos */}
       {tab === "emitidos" && (emitidos.filter(coincide).length === 0 ? <Vacio titulo="Sin comprobantes" texto="Cuando emitas una boleta o factura desde Ventas aparecerá aquí." /> : (
         <Tabla columnas={["Comprobante", "Fecha", "Cliente", "Moto", "Total", "Emitido por", "Acciones"]}>
           {emitidos.filter(coincide).map((v) => (
@@ -77,6 +76,7 @@ export default function Facturas() {
         </Tabla>
       ))}
 
+      {/* Por facturar */}
       {tab === "pendientes" && (porFacturar.filter(coincide).length === 0 ? <Vacio titulo="Todo facturado" texto="No hay pedidos ni entregas pendientes de comprobante." /> : (
         <Tabla columnas={["Fecha", "Cliente", "Moto", "Total", "Etapa", "Acción"]}>
           {porFacturar.filter(coincide).map((v) => (
@@ -92,6 +92,7 @@ export default function Facturas() {
         </Tabla>
       ))}
 
+      {/* Clientes */}
       {tab === "clientes" && (clientes.filter(coincide).length === 0 ? <Vacio titulo="Sin clientes" texto="Los clientes aparecen al registrar su pedido o entrega." /> : (
         <Tabla columnas={["Cliente", "Documento", "Celular", "Compras", "Total comprado", "Última compra"]}>
           {clientes.filter(coincide).map((c) => (
@@ -107,6 +108,7 @@ export default function Facturas() {
         </Tabla>
       ))}
 
+      {/* Ver comprobante */}
       <Modal abierto={!!ver} onClose={() => setVer(null)} titulo={ver ? `${ver.comprobante.tipo} ${numeroComprobante(ver.comprobante)}` : ""} ancho="max-w-lg"
         pie={<><Link to="/admin/ventas" className="btn btn-secondary !py-2">Ir a Ventas</Link>{ver && <button className="btn btn-primary !py-2" onClick={() => descargar(ver)}>Descargar PDF</button>}</>}>
         {ver && (() => { const c = ver.comprobante; return (

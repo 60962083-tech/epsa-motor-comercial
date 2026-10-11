@@ -1,3 +1,4 @@
+// HU-009 · Ficha del modelo
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useApp } from "../store/appStore.jsx";
@@ -21,21 +22,15 @@ const INCLUYE = [
 ];
 const CLAVES = [["Motor", IconMotor], ["Cilindrada", IconPiston], ["Llantas", IconLlanta], ["Potencia", IconRayo], ["Torque", IconMedidor]];
 
-/**
- * Ficha del modelo — HU-009 "Consultar la ficha de un modelo" (estilo torito.pe).
- * Foto oficial por color (solo los colores que vende EPSA), cifras clave, techo adicional que se suma al precio,
- * detalles técnicos en 5 pestañas con lectura visual, calculadora de inicial y cotización.
- * Errores: modelo inexistente o no publicado → «Producto no disponible»; sin unidades → aviso de stock.
- */
 export default function ModeloDetalleRuta() {
   const { id } = useParams();
   return <ModeloDetalle key={id} id={id} />;
 }
 
+// Página del modelo
 function ModeloDetalle({ id }) {
   const { modelo: buscar, publicos, unidades } = useApp();
   const cotizar = useCotizar();
-  // Solo modelos publicados (y, con backend, confirmados por GET /api/modelos)
   const m = publicos.find((x) => x.id === id);
   const retirado = !m ? buscar(id) : null;
   const [color, setColor] = useState("");
@@ -43,8 +38,6 @@ function ModeloDetalle({ id }) {
   const [inicial, setInicial] = useState(30);
   const [plazo, setPlazo] = useState(24);
   const stock = useMemo(() => unidades.filter((u) => u.modelo === id && u.disponibilidad === "Disponible").length, [unidades, id]);
-  // HU-009 conectado: se consulta la ficha del modelo en el backend (GET /api/modelos/:id).
-  // Si Supabase lo despublicó, la web muestra «Producto no disponible» aunque el catálogo aún no se haya recargado.
   const [ficha, setFicha] = useState(null); const [despublicado, setDespublicado] = useState(false);
   useEffect(() => {
     if (!MODO_REAL || !m?.codmodApi) return undefined;
@@ -56,7 +49,7 @@ function ModeloDetalle({ id }) {
   if (!m || despublicado) return <ProductoNoDisponible nombre={m?.nombre || retirado?.nombre} />;
 
   const desc = ficha?.desmod && !m.editadoEnPanel ? ficha.desmod : m.descripcion;
-  const conPrecio = Number(m.precioDesde) > 0; // un modelo que solo existe en Supabase aún no tiene precio
+  const conPrecio = Number(m.precioDesde) > 0;
   const colores = m.colores?.length ? m.colores : [];
   const colorSel = color || colores[0] || "";
   const t = TECHOS.find((o) => o.id === techo);
@@ -68,7 +61,7 @@ function ModeloDetalle({ id }) {
 
   return (
     <div className="fade-in">
-      {/* ---------- Producto ---------- */}
+      {/* Producto: foto, colores, techo y precio */}
       <section className="border-b border-slate-200 dark:border-white/10">
         <div className="wrap py-6 lg:py-10">
           <nav aria-label="Ruta de navegación" className="text-[13.5px] text-slate-500">
@@ -147,7 +140,7 @@ function ModeloDetalle({ id }) {
         </div>
       </section>
 
-      {/* ---------- Detalles técnicos (con los destacados del modelo) ---------- */}
+      {/* Ficha técnica */}
       <section className="wrap py-14 lg:py-20">
         <h2 className="titulo">Detalles técnicos</h2>
         <p className="bajada mt-3">Las barras comparan este modelo con el resto de la línea Torito que ofrecemos.</p>
@@ -159,7 +152,7 @@ function ModeloDetalle({ id }) {
         <div className="mt-8"><FichaTecnica modelo={m} todos={publicos} /></div>
       </section>
 
-      {/* ---------- Inversión ---------- */}
+      {/* Inversión y financiamiento */}
       <section className="wrap grid gap-12 py-14 lg:grid-cols-[1fr_1.1fr] lg:py-20">
         <div>
           <h2 className="titulo">Tu {m.nombre} incluye</h2>
@@ -211,8 +204,10 @@ function ModeloDetalle({ id }) {
         </div>
       </section>
 
+      {/* Sin stock */}
       {stock === 0 && <section className="wrap pb-14"><SinStockAviso nombre={m.nombre} onAvisar={pedir} /></section>}
 
+      {/* Modelos relacionados */}
       {relacionados.length > 0 && (
         <section className="border-t border-slate-200 bg-escenario/60 py-14 dark:border-white/10 dark:bg-transparent">
           <div className="wrap">

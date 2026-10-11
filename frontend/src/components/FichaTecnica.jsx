@@ -1,12 +1,11 @@
+// HU-009 · Ficha técnica por pestañas
 import { useState } from "react";
 import { TABS_TECNICOS } from "../data/mockData";
 import { IconBateria, IconChasis, IconLlanta, IconMotor, IconRegla, IconTanque } from "./Icons";
 
-/** Primer número de un texto de ficha técnica: "2,635 mm" → 2635 · "10.73 HP a 5,000" → 10.73 */
 export const numero = (t) => { const m = String(t ?? "").replace(/(\d),(\d{3})/g, "$1$2").match(/\d+(\.\d+)?/); return m ? Number(m[0]) : null; };
 const fila = (m, tab, re) => (m.specs?.[tab] || []).find(([k]) => re.test(k))?.[1];
 
-/** Valores comparables de un modelo (para las barras frente al resto de la línea Torito). */
 export function cifras(m) {
   return {
     potencia: numero(m.resumen?.Potencia), torque: numero(m.resumen?.Torque), cilindrada: numero(m.resumen?.Cilindrada),
@@ -18,6 +17,7 @@ export function cifras(m) {
 
 const ICONO_TAB = { motor: IconMotor, chasis: IconChasis, consumo: IconTanque, dimensiones: IconRegla, electrico: IconBateria };
 
+// Barra comparativa
 function Barra({ etiqueta, valor, unidad, max, nota }) {
   if (valor == null) return null;
   const pct = Math.max(6, Math.round((valor / Math.max(valor, max || valor)) * 100));
@@ -33,7 +33,7 @@ function Barra({ etiqueta, valor, unidad, max, nota }) {
   );
 }
 
-/** Perfil lateral simple de un motocar con cotas de largo y alto. */
+// Medidas
 function Cotas({ c }) {
   const f = (v) => (v ? `${v.toLocaleString("es-PE")} mm` : "—");
   return (
@@ -56,6 +56,7 @@ function Cotas({ c }) {
   );
 }
 
+// Gráfico de cada pestaña
 function Visual({ tab, m, maximos }) {
   const c = cifras(m);
   if (tab === "motor") {
@@ -95,7 +96,7 @@ function Visual({ tab, m, maximos }) {
   );
 }
 
-/** Detalles técnicos en 5 pestañas, cada una con una lectura visual simple y la tabla completa. */
+// Ficha técnica
 export default function FichaTecnica({ modelo, todos }) {
   const [tab, setTab] = useState("motor");
   const maximos = todos.reduce((acc, x) => {

@@ -1,20 +1,21 @@
-/** @type {import('tailwindcss').Config} */
+// Estilos de Tailwind
 export default {
   darkMode: "class",
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
+      // Fuentes de la marca
       fontFamily: {
         sans: ["Barlow", "system-ui", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
         display: ["\"Barlow Condensed\"", "Barlow", "Arial Narrow", "system-ui", "sans-serif"],
       },
+      // Colores de la marca
       colors: {
         marino: {
           DEFAULT: "#071e3d",
           700: "#0e2c52",
           50: "#eef2f7",
         },
-        // Escenario de producto (fondo de fotos) y líneas finas
         escenario: { DEFAULT: "#f2f5f9", oscuro: "#0f1b30" },
         linea: { DEFAULT: "#e3e8ef", oscuro: "#1c2a44" },
         acento: {

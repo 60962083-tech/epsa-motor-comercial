@@ -1,7 +1,4 @@
-/**
- * Silueta lineal de un Torito (vista lateral). Se usa cuando una foto no carga y en estados vacíos.
- * Toma el color del texto (currentColor), así funciona igual sobre fondos claros y oscuros.
- */
+// Ilustración de moto (respaldo sin foto)
 export default function MotoIllustration({ className = "" }) {
   return (
     <svg viewBox="0 0 240 170" className={className} xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"

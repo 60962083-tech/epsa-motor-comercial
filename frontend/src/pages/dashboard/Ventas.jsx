@@ -1,3 +1,4 @@
+// Ventas a clientes
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -16,10 +17,11 @@ const DOCS = { DNI: [8, 8], CE: [9, 9], RUC: [11, 11] };
 const TECHOS = [SIN_TECHO, ...OPCIONES_TECHO];
 const MEDIOS = ["Efectivo", "Transferencia", "Yape / Plin", "Depósito", "Tarjeta"];
 const ORIGEN = ["Redes sociales", "Referido", "Pasó por la sede", "Publicidad", "Web de EPSA", "Otro"];
-const ADELANTO_MINIMO = 100; // un adelanto simbólico (S/ 0.01) no reserva una unidad
+const ADELANTO_MINIMO = 100;
 const ABIERTO = (l) => !["Cerrado ganado", "Perdido"].includes(l.estado);
 const limpiaOperacion = (t) => String(t || "").replace(/[^\w-]/g, "").toUpperCase().slice(0, 20);
 
+// Documento del cliente
 function validarDoc(tipo, num) {
   if (!num) return "";
   const [min, max] = DOCS[tipo];
@@ -28,12 +30,7 @@ function validarDoc(tipo, num) {
   return num.length < min || num.length > max ? `El ${tipo} debe tener ${min} dígitos.` : "";
 }
 
-/**
- * Ventas a clientes (complemento del panel). Sigue las tablas del esquema de Supabase:
- * cliente (documento y contacto), separacion (metpagsep = medio de pago, monadesep = adelanto > 0,
- * refsep = N° de operación) y venta (modcomven = forma de compra). Aún no hay endpoints en el backend:
- * en esta etapa se guarda en la web.
- */
+// Página de ventas
 export default function Ventas() {
   const { ventas, modelos, equipo, unidades, leads, agregar, actualizar, eliminar, publicos = [] } = useApp();
   const { user, puede } = useAuth();
@@ -44,8 +41,6 @@ export default function Ventas() {
   const [q, setQ] = useState(""); const [etapa, setEtapa] = useState(""); const [sedeF, setSedeF] = useState("");
   const nombreModelo = (id) => (modelos.find((m) => m.id === id) || publicos.find((m) => m.id === id))?.nombre || "—";
 
-  // ----- Nueva venta -----
-  // Solo modelos publicados: si el lead pidió uno en borrador, se elige el primero publicado
   const base = () => { const mod = publicados.find((m) => m.id === state?.lead?.modelo) || publicados[0]; return { cliente: state?.lead?.contacto || "", celular: state?.lead?.telefono || "", modelo: mod?.id || "", color: mod?.colores?.includes(state?.lead?.color) ? state.lead.color : mod?.colores?.[0] || "", techo: "", tipoDoc: "DNI", doc: "", canal: "WhatsApp", origen: "Pasó por la sede", vendedor: user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre || "", sede: state?.lead?.sede || "Comas", pago: "", accion: "cotizar", medio: "Transferencia", adelanto: "", operacion: "" }; };
   const unidadPara = (modelo, sede, color) => {
     const libres = unidades.filter((u) => u.modelo === modelo && u.disponibilidad === "Disponible" && (!color || u.color === color));
@@ -53,16 +48,13 @@ export default function Ventas() {
   };
   const [nueva, setNueva] = useState(state?.lead || state?.nueva ? { paso: 1, f: base() } : null);
   const [err, setErr] = useState({});
-  // ----- Atender solicitud web y comprobante manual -----
   const [atender, setAtender] = useState(null); const [vendAt, setVendAt] = useState("");
   const [comp, setComp] = useState(null); const [cf, setCf] = useState({}); const [cerr, setCerr] = useState({});
   const [verComp, setVerComp] = useState(null);
-  // Desde «Facturas y clientes» se puede pedir emitir el comprobante de una venta concreta
   useEffect(() => {
     const v = state?.emitir && ventas.find((x) => x.id === state.emitir);
     if (v && !v.comprobante) abrirComprobante(v);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // ----- Pedido -----
   const [pedido, setPedido] = useState(null);
   const [pf, setPf] = useState({});
   const [perr, setPerr] = useState({});
@@ -80,14 +72,14 @@ export default function Ventas() {
   });
   const totalDe = (f) => (modelos.find((m) => m.id === f.modelo)?.precioDesde || 0) + (TECHOS.find((t) => t.id === f.techo)?.precio || 0);
   const ultimoPaso = useRef(0);
+  // Nueva venta
   function siguiente() {
-    if (Date.now() - ultimoPaso.current < 450) return; // un doble clic no se salta el paso «Forma de compra»
+    if (Date.now() - ultimoPaso.current < 450) return;
     const f = nueva.f; const e = {};
     if (nueva.paso === 1) {
       if (!esNombre(f.cliente)) e.cliente = MSJ.nombre;
       if (!esCelular(f.celular)) e.celular = MSJ.celular;
       const d = validarDoc(f.tipoDoc, f.doc); if (d || !f.doc) e.doc = d || `Ingresa el ${f.tipoDoc} del cliente.`;
-      // Un mismo documento es un mismo cliente (en la base, el documento del cliente es único)
       const mismoDoc = !e.doc && ventas.find((v) => v.documento === `${f.tipoDoc} ${f.doc}` && limpiarTexto(v.cliente).toLowerCase() !== limpiarTexto(f.cliente).toLowerCase());
       if (mismoDoc) e.doc = `Ese ${f.tipoDoc} ya está registrado a nombre de ${mismoDoc.cliente}. Revisa el documento o el nombre.`;
       if (!publicados.some((m) => m.id === f.modelo)) e.modelo = "Elige una moto publicada.";
@@ -126,15 +118,15 @@ export default function Ventas() {
     const datos = { fecha: hoy, cliente: f.cliente.trim().replace(/\s+/g, " "), celular: f.celular, documento: `${f.tipoDoc} ${f.doc}`, modelo: f.modelo, color: f.color, techo: tSel?.precio ? tSel.nombre : "", techoPrecio: tSel?.precio || 0, pago: f.pago, etapa: unidad ? "Pedido registrado" : "Cotización", vendedor: f.vendedor, sede: f.sede, adelanto: unidad ? Number(f.adelanto) : 0, total: totalDe(f), unidad: unidad?.id || null, canal: f.canal, origen: f.origen, ...(unidad ? { medioPago: f.medio, operacion: limpiaOperacion(f.operacion), fechaPago: hoy } : {}) };
     const id = ventas.reduce((mx, v) => Math.max(mx, Number(v.id) || 0), 0) + 1;
     agregar("ventas", { id, ...datos }, `Venta registrada: ${f.cliente} · ${m.nombre}`);
-    const lead = leads.find((l) => l.telefono === f.celular && ABIERTO(l)); // un lead cerrado no se reabre
+    const lead = leads.find((l) => l.telefono === f.celular && ABIERTO(l));
     if (lead) actualizar("leads", lead.id, { estado: "Cotizado" });
     toast(unidad ? `Unidad ${unidad.id} separada para ${f.cliente.trim()}` : "Cliente registrado y cotización creada");
     setNueva(null);
     if (f.accion === "pedido") abrirPedido({ id, ...datos });
   }
 
+  // Pedido con adelanto
   function abrirPedido(v) {
-    // Solicitud de un modelo que llegó sin precio (solo existía en Supabase): si ya tiene precio en el panel, se usa ese
     if (!(Number(v.total) > 0)) {
       const precio = Number((modelos.find((m) => m.id === v.modelo) || publicos.find((m) => m.id === v.modelo))?.precioDesde);
       if (precio > 0) v = { ...v, total: precio + (Number(v.techoPrecio) || 0) };
@@ -155,7 +147,6 @@ export default function Ventas() {
     if (pf.separar && !pedido.unidad && !unidadPara(pedido.modelo, pedido.sede, pedido.color)) x.separar = `No hay unidades disponibles de este modelo en color ${pedido.color || "elegido"} para separar.`;
     if (limpiarTexto(pf.obs).length > 500) x.obs = "Máximo 500 caracteres.";
     const d = validarDoc(pf.tipoDoc, pf.doc); if (d || !pf.doc) x.doc = d || "El documento es obligatorio para registrar el pedido.";
-    // Un mismo documento es un mismo cliente: no se puede usar el DNI/RUC de otra persona
     const otro = !x.doc && ventas.find((v) => v.id !== pedido.id && v.documento === `${pf.tipoDoc} ${pf.doc}` && limpiarTexto(v.cliente).toLowerCase() !== limpiarTexto(pedido.cliente).toLowerCase());
     if (otro) x.doc = `Ese ${pf.tipoDoc} ya está registrado a nombre de ${otro.cliente}. Revisa el documento.`;
     if (!esCelular(pf.celular)) x.celular = MSJ.celular;
@@ -172,7 +163,6 @@ export default function Ventas() {
       actualizar("unidades", u.id, (x) => ({ disponibilidad: "Separada", historial: [...x.historial, { fecha: hoy, detalle: `Separada para ${pedido.cliente} (adelanto ${formatoSoles(monto)})` }] }));
     }
     const conPago = pf.conAdelanto || pf.separar;
-    // El voucher de pago va en su propio campo: «comprobante» es solo la boleta o factura emitida
     actualizar("ventas", pedido.id, { etapa: "Pedido registrado", unidad, total: pedido.total, adelanto: conPago ? monto : 0, fechaPago: conPago ? pf.fecha : "", documento: `${pf.tipoDoc} ${pf.doc}`, celular: pf.celular, medioPago: conPago ? pf.medio : "", operacion: conPago ? limpiaOperacion(pf.operacion) : "", voucherPago: conPago ? pf.archivo : "", obs: limpiarTexto(pf.obs) }, `Pedido registrado: ${pedido.cliente}`);
     toast(unidad && !pedido.unidad ? `Pedido registrado y unidad ${unidad} separada` : "Pedido registrado"); setPedido(null);
   }
@@ -182,6 +172,7 @@ export default function Ventas() {
     if (a.size > 10 * 1024 * 1024) { setPerr({ ...perr, archivo: "El archivo supera los 10 MB." }); e.target.value = ""; return; }
     setPerr({ ...perr, archivo: "" }); setPf({ ...pf, archivo: a.name });
   }
+  // Entrega
   async function entregar(v) {
     const u = v.unidad ? unidades.find((x) => x.id === v.unidad) : unidadPara(v.modelo, v.sede, v.color);
     if (!u) return toast(`No hay una unidad disponible del ${nombreModelo(v.modelo)}${v.color ? ` en color ${v.color}` : ""} para entregar. Revisa el inventario.`, "error");
@@ -190,6 +181,7 @@ export default function Ventas() {
     actualizar("unidades", u.id, (x) => ({ disponibilidad: "Vendida", historial: [...x.historial, { fecha: hoyLocal(), detalle: `Entregada a ${v.cliente}` }] }));
     actualizar("ventas", v.id, { etapa: "Entregado", unidad: u.id }, `Entrega confirmada: ${v.cliente}`); toast("Entrega registrada");
   }
+  // Atender solicitud web
   function abrirAtender(v) { setVendAt(v.vendedor !== "Sin asignar" ? v.vendedor : user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre || ""); setAtender(v); }
   function guardarAtender(e) {
     e.preventDefault();
@@ -200,7 +192,7 @@ export default function Ventas() {
     toast(`Solicitud asignada a ${vendAt} y convertida en cotización`); setAtender(null);
   }
 
-  // Comprobante manual (solo gerencia): boleta o factura interna con IGV desglosado
+  // Comprobante (boleta o factura)
   function abrirComprobante(v) {
     const [td, num] = (v.documento || "").split(" ");
     const u = unidades.find((x) => x.id === v.unidad);
@@ -218,7 +210,6 @@ export default function Ventas() {
     } else {
       const d = validarDoc(cf.tipoDoc, cf.doc); if (!["DNI", "CE"].includes(cf.tipoDoc)) x.doc = "La boleta es para clientes con DNI o CE. Con RUC, emite una factura.";
       else if (d || !cf.doc) x.doc = d || "El documento del cliente es obligatorio.";
-      // La boleta es para el mismo cliente del pedido: su documento debe coincidir
       else if (comp.documento && comp.documento !== `${cf.tipoDoc} ${cf.doc}`) x.doc = `Debe ser el documento del pedido (${comp.documento}).`;
     }
     const total = Number(cf.total);
@@ -232,7 +223,6 @@ export default function Ventas() {
     e.preventDefault();
     if (!validarComprobante()) return;
     const serie = cf.tipo === "Factura" ? "F001" : "B001";
-    // El número nunca se reutiliza: cuenta también los comprobantes anulados
     const usados = ventas.flatMap((v) => [v.comprobante, ...(v.comprobantesAnulados || [])]).filter((c) => c && typeof c === "object" && c.serie === serie);
     const correlativo = usados.reduce((m, c) => Math.max(m, Number(c.numero) || 0), 0) + 1;
     const total = Number(cf.total); const gravada = total / (1 + IGV);
@@ -246,6 +236,7 @@ export default function Ventas() {
     toast("Comprobante anulado"); setVerComp(null);
   }
 
+  // Eliminar
   async function borrar(v) {
     if (v.etapa === "Entregado") return toast("Una venta entregada no se elimina: forma parte del historial.", "error");
     if (v.comprobante || (v.comprobantesAnulados || []).length) return toast("Una venta con comprobante emitido o anulado no se elimina: su numeración debe quedar registrada.", "error");
@@ -262,12 +253,14 @@ export default function Ventas() {
       <PageHeader titulo="Ventas a clientes" subtitulo="Solicitudes de la web, cotizaciones, pedidos con adelanto, separación de unidades, entregas y comprobantes.">
         <button className="btn btn-primary !py-2.5" onClick={() => { setErr({}); setNueva({ paso: 1, f: base() }); }}>+ Nueva venta</button>
       </PageHeader>
+      {/* Indicadores */}
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat etiqueta="Solicitudes web por atender" valor={ventas.filter((v) => v.etapa === "Solicitud web").length} tono="ambar" nota="Llegan desde «Cotizar» en la web" />
         <Stat etiqueta="Cotizaciones" valor={ventas.filter((v) => v.etapa === "Cotización").length} />
         <Stat etiqueta="Pedidos registrados" valor={ventas.filter((v) => v.etapa === "Pedido registrado").length} tono="marino" />
         <Stat etiqueta="Entregadas" valor={ventas.filter((v) => v.etapa === "Entregado").length} tono="verde" />
       </div>
+      {/* Filtros */}
       <Card className="mb-5 grid gap-3 sm:grid-cols-4">
         <div className="sm:col-span-2"><label className="field-label">Buscar</label><input className="field-input" placeholder="Cliente, celular o documento" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <div><label className="field-label">Etapa</label><select className="field-input" value={etapa} onChange={(e) => setEtapa(e.target.value)}><option value="">Todas</option>{Object.keys(ETAPA_TONO).map((x) => <option key={x}>{x}</option>)}</select></div>
@@ -299,7 +292,7 @@ export default function Ventas() {
         </Tabla>
       )}
 
-      {/* ---------- Nueva venta ---------- */}
+      {/* Nueva venta */}
       <Modal abierto={!!nueva} onClose={() => setNueva(null)} titulo="Nueva venta" ancho="max-w-2xl"
         pie={nueva && <>
           {nueva.paso > 1 && <button className="btn btn-secondary !py-2" onClick={() => setNueva({ ...nueva, paso: nueva.paso - 1 })}>Atrás</button>}
@@ -346,7 +339,7 @@ export default function Ventas() {
                   <Campo etiqueta="Medio de pago"><select className="field-input" value={f.medio} onChange={(e) => setN("medio", e.target.value)}>{MEDIOS.map((x) => <option key={x}>{x}</option>)}</select></Campo>
                   <Campo etiqueta="Adelanto (S/)" error={err.adelanto} ayuda={`Mínimo ${formatoSoles(ADELANTO_MINIMO)}`}><input className="field-input" inputMode="decimal" value={f.adelanto} onChange={(e) => setN("adelanto", soloMonto(e.target.value))} /></Campo>
                   <Campo etiqueta="N° de operación" error={err.operacion}><input className="field-input" maxLength={20} value={f.operacion} onChange={(e) => setN("operacion", limpiaOperacion(e.target.value))} placeholder={CON_OPERACION.includes(f.medio) ? "Obligatorio" : "Opcional"} /></Campo>
-                  <p className="text-[12.5px] text-amber-800 sm:col-span-3 dark:text-amber-200">Separar exige un adelanto (tabla <b>separacion</b>: medio de pago, monto mayor a 0 y referencia).</p>
+                  <p className="text-[12.5px] text-amber-800 sm:col-span-3 dark:text-amber-200">Separar exige un adelanto: medio de pago, monto mayor a 0 y referencia.</p>
                 </div>
               )}
               {err.general && <Aviso tipo="error">{err.general}</Aviso>}
@@ -356,7 +349,7 @@ export default function Ventas() {
         </>}
       </Modal>
 
-      {/* ---------- Registrar pedido ---------- */}
+      {/* Registrar pedido */}
       <Modal abierto={!!pedido} onClose={() => setPedido(null)} titulo={`Registrar pedido · cotización #${pedido?.id}`} ancho="max-w-2xl"
         confirmarGuardar={pedido ? { titulo: "¿Registrar el pedido?", texto: `${pedido.cliente} · ${nombreModelo(pedido.modelo)}${pf.conAdelanto || pf.separar ? ` · adelanto ${formatoSoles(Number(pf.adelanto) || 0)} por ${pf.medio}` : " · sin adelanto"}${pf.separar && !pedido.unidad ? " · se separará una unidad disponible" : ""}.`, boton: "Registrar pedido", validar: validarPedido } : false}
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setPedido(null)}>Cancelar</button><button form="f-ped" className="btn btn-primary !py-2">Registrar pedido</button></>}>
@@ -378,7 +371,7 @@ export default function Ventas() {
           </form>
         )}
       </Modal>
-      {/* ---------- Atender solicitud web ---------- */}
+      {/* Atender solicitud web */}
       <Modal abierto={!!atender} onClose={() => setAtender(null)} titulo={`Atender solicitud de ${atender?.cliente || ""}`} ancho="max-w-md"
         confirmarGuardar={{ titulo: "¿Atender esta solicitud?", texto: `Pasará a «Cotización» a cargo de ${vendAt || "—"}.`, boton: "Atender" }}
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setAtender(null)}>Cancelar</button><button form="f-at" className="btn btn-primary !py-2">Atender</button></>}>
@@ -396,7 +389,7 @@ export default function Ventas() {
         )}
       </Modal>
 
-      {/* ---------- Emitir comprobante manual (gerencia) ---------- */}
+      {/* Emitir comprobante */}
       <Modal abierto={!!comp} onClose={() => setComp(null)} titulo={`Emitir comprobante · ${comp?.cliente || ""}`} ancho="max-w-2xl"
         confirmarGuardar={comp ? { titulo: `¿Emitir ${cf.tipo === "Factura" ? "la factura" : "la boleta"}?`, texto: `${cf.tipo === "Factura" ? "F001" : "B001"} · ${cf.tipo === "Factura" ? cf.razon || "—" : comp.cliente} · total S/ ${dosDec(Number(cf.total) || 0)}. El número se asigna en orden y no se reutiliza.`, boton: "Emitir", validar: validarComprobante } : false}
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setComp(null)}>Cancelar</button><button form="f-comp" className="btn btn-primary !py-2">Emitir comprobante</button></>}>
@@ -428,7 +421,7 @@ export default function Ventas() {
         )}
       </Modal>
 
-      {/* ---------- Ver comprobante ---------- */}
+      {/* Ver comprobante */}
       <Modal abierto={!!verComp} onClose={() => setVerComp(null)} titulo="Comprobante" ancho="max-w-lg"
         pie={<>{verComp && puede("comprobantes.emitir") && <button className="btn !py-2 border border-acento/40 text-acento hover:bg-acento/10" onClick={() => anularComprobante(verComp)}>Anular</button>}<button className="btn btn-secondary !py-2" onClick={() => setVerComp(null)}>Cerrar</button>{verComp?.comprobante && <button className="btn btn-primary !py-2" onClick={() => descargarComprobante({ comprobante: verComp.comprobante, venta: verComp, modelo: nombreModelo(verComp.modelo) })}>Descargar PDF</button>}</>}>
         {verComp?.comprobante && (() => { const c = verComp.comprobante; return (

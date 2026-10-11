@@ -1,8 +1,4 @@
-/**
- * Emparejar los modelos de Supabase (GET /api/modelos) con el catálogo de la web.
- * La web tiene precio, colores y ficha técnica; Supabase decide qué modelos están publicados.
- * Se compara por nombre de forma tolerante (mayúsculas, tildes, espacios, «Torito», «4 válvulas» = «4V»…).
- */
+// Modelos: unir los de Supabase con el catálogo de la web
 export const claveModelo = (t) =>
   String(t || "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -14,11 +10,7 @@ export const claveModelo = (t) =>
     .replace(/\bug\b/g, " ")
     .replace(/[^a-z0-9]/g, "");
 
-/**
- * Devuelve { porLocal: Map(idLocal → modeloApi), sinFicha: modelosApi que la web no conoce }.
- * Solo por nombre: los códigos de Supabase no corresponden a los del catálogo de la web
- * (por ejemplo, el código 1 de Supabase puede ser «Modelo prueba 1» y no el «Torito 4V GSL»).
- */
+// Emparejar por nombre
 export function emparejarModelos(apiModelos = [], locales = []) {
   const porLocal = new Map();
   const usados = new Set();
@@ -31,11 +23,7 @@ export function emparejarModelos(apiModelos = [], locales = []) {
 
 export const slugModelo = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-/**
- * Un modelo publicado en Supabase que la web todavía no tiene en su catálogo se muestra igual,
- * con lo que da el backend: nombre, descripción, características (carmod) y fotos.
- * Precio y colores no existen en la tabla modelo: la web dice «A consultar» y no inventa colores.
- */
+// Modelo que solo existe en Supabase
 export function modeloDesdeApi(a, idsOcupados = new Set()) {
   const nombre = String(a.nommod || "").trim();
   const pares = String(a.carmod || "").split("·").map((x) => x.trim()).filter(Boolean)

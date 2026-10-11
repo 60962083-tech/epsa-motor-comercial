@@ -1,14 +1,8 @@
+// Foto del modelo (con su color)
 import { useState } from "react";
 import MotoIllustration from "./MotoIllustration";
 import { filtroEntre } from "../data/mockData";
 
-/**
- * Foto del modelo en el color elegido.
- * 1) Si el color tiene foto oficial propia (fotosColor), se usa esa.
- * 2) Si no, se usa la foto del modelo y un filtro cambia el tono de la pintura,
- *    partiendo del color real de esa foto (colorFoto: roja, azul, etc.).
- * 3) Si la foto no carga, copia local y, al final, una silueta neutra.
- */
 export function fotoDeColor(modelo, color) {
   const c = color || modelo.colorPortada || modelo.colores?.[0];
   const propia = c && modelo.fotosColor?.[c];

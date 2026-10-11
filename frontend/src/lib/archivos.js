@@ -1,18 +1,12 @@
+// HU-002 · PDF de la factura
 import { MODO_REAL } from "./config";
 import { consultarPdfFacturaApi, subirPdfFacturaApi, urlPdfFacturaApi } from "./api";
 import { ApiError } from "./errores";
 
-/**
- * Archivos adjuntos (PDF de la factura de Crosland).
- * - Conectado: se usan los endpoints del backend de Michelle (bucket privado «facturas-compra»):
- *   POST /api/compras/:id/factura/archivo (campo «archivo», multipart), GET …/archivo y GET …/archivo/url.
- *   Cada factura admite un solo PDF y se guarda como compras/{codcom}/factura.pdf.
- * - Demostración: se guardan en este navegador (IndexedDB) y, si no está disponible, en memoria.
- */
 const memoria = new Map();
 export const MAX_PDF = 10 * 1024 * 1024;
 
-/** Revisión rápida (sin leer el archivo): tipo, extensión y tamaño. */
+// Validar el archivo
 export function validarPdf(archivo) {
   if (!archivo) return "Elige un archivo.";
   const tipoOk = ["application/pdf", "application/x-pdf"].includes(archivo.type) || (!archivo.type && /\.pdf$/i.test(archivo.name || ""));
@@ -22,17 +16,17 @@ export function validarPdf(archivo) {
   return "";
 }
 
-/** Revisión del contenido: un PDF real empieza con «%PDF» (evita fotos o documentos renombrados). */
 export async function validarPdfContenido(archivo) {
   const rapido = validarPdf(archivo);
   if (rapido) return rapido;
   try {
     const cabecera = await archivo.slice(0, 5).text();
     if (!cabecera.startsWith("%PDF")) return "El archivo no es un PDF válido.";
-  } catch { /* si el navegador no puede leerlo, decide el servidor */ }
+  } catch {}
   return "";
 }
 
+// Guardado local (modo demostración)
 function db() {
   return new Promise((ok, mal) => {
     try {
@@ -57,7 +51,7 @@ async function leerLocal(clave) {
   } catch { return null; }
 }
 
-/** Sube el PDF y devuelve los datos del adjunto. */
+// Subir, buscar y abrir el PDF
 export async function subirPdfFactura(codcom, archivo) {
   const error = await validarPdfContenido(archivo);
   if (error) throw new ApiError(400, error);
@@ -72,22 +66,20 @@ export async function subirPdfFactura(codcom, archivo) {
   return { ruta, nombre: archivo.name, tamano: archivo.size, fecha };
 }
 
-/** Conectado: pregunta al backend si la factura ya tiene su PDF (lo ve cualquier gerente o administradora). */
 export async function buscarPdfFactura(codcom) {
   if (!MODO_REAL) return null;
   try {
     const r = await consultarPdfFacturaApi(codcom);
     return r.data?.archivo_adjuntado ? { codcom: String(codcom), api: true, nombre: "factura.pdf" } : null;
-  } catch { return null; } // sin factura registrada (404) o sin permiso: no hay PDF que mostrar
+  } catch { return null; }
 }
 
-/** Devuelve una URL para abrir o descargar el PDF guardado. */
 export async function urlPdfFactura(adjunto) {
   if (MODO_REAL) {
     if (!adjunto?.codcom) throw new ApiError(404, "Esta factura no tiene PDF adjunto.");
     const r = await urlPdfFacturaApi(adjunto.codcom);
     if (!r.data?.url) throw new ApiError(500, "No se pudo abrir el PDF.");
-    return r.data.url; // enlace temporal (60 s) del bucket privado
+    return r.data.url;
   }
   if (!adjunto?.ruta) throw new ApiError(404, "Esta factura no tiene PDF adjunto.");
   const blob = await leerLocal(adjunto.ruta);
@@ -95,11 +87,11 @@ export async function urlPdfFactura(adjunto) {
   return URL.createObjectURL(blob);
 }
 
-// Modo demostración: se recuerda el adjunto por compra para volver a abrirlo desde este equipo.
+// Recordar el adjunto
 const CLAVE_ADJ = "epsa-adjuntos-factura";
 export function adjuntoRecordado(codcom) {
   try { return JSON.parse(localStorage.getItem(CLAVE_ADJ) || "{}")[codcom] || null; } catch { return null; }
 }
 export function recordarAdjunto(codcom, adjunto) {
-  try { const m = JSON.parse(localStorage.getItem(CLAVE_ADJ) || "{}"); m[codcom] = adjunto; localStorage.setItem(CLAVE_ADJ, JSON.stringify(m)); } catch { /* sin almacenamiento */ }
+  try { const m = JSON.parse(localStorage.getItem(CLAVE_ADJ) || "{}"); m[codcom] = adjunto; localStorage.setItem(CLAVE_ADJ, JSON.stringify(m)); } catch {}
 }

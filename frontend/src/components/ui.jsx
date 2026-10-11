@@ -1,7 +1,8 @@
+// Componentes base del panel
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { IconClose, IconCheck, IconAlert } from "./Icons";
 
-/* ---------------- Toasts ---------------- */
+// Avisos (toasts)
 const ToastCtx = createContext(() => {});
 export const useToast = () => useContext(ToastCtx);
 
@@ -27,27 +28,20 @@ export function ToastProvider({ children }) {
   );
 }
 
-/* ---------------- Modal ---------------- */
-const PILA = []; // modales abiertos: Escape solo cierra el de más arriba
-/**
- * Modal con protección profesional:
- * - Si el usuario escribió algo y cierra (X, Esc o clic afuera) pregunta "¿Salir sin guardar?".
- * - En formularios de edición (título "Editar ..." o prop confirmarGuardar) pide confirmar antes de guardar.
- */
+// Ventana modal
+const PILA = [];
 export function Modal({ abierto, onClose, titulo, children, ancho = "max-w-lg", pie, confirmarGuardar, sinAvisoCambios = false }) {
   const ref = useRef(null);
   const sucio = useRef(false);
   const confirmado = useRef(false);
   const formRef = useRef(null);
-  const [aviso, setAviso] = useState(null); // 'salir' | 'guardar'
+  const [aviso, setAviso] = useState(null);
   const pideGuardar = confirmarGuardar ?? /^editar/i.test(String(titulo || ""));
   const textos = typeof confirmarGuardar === "object" && confirmarGuardar ? confirmarGuardar : {};
 
   const pedirCierre = () => {
     if (sucio.current && !sinAvisoCambios) setAviso("salir"); else onClose();
   };
-  // Referencia a la última versión: el efecto de abajo solo se ejecuta al abrir/cerrar,
-  // así no se reinicia el estado ni se roba el foco mientras el usuario escribe.
   const cierreRef = useRef(pedirCierre);
   cierreRef.current = pedirCierre;
 
@@ -67,7 +61,7 @@ export function Modal({ abierto, onClose, titulo, children, ancho = "max-w-lg", 
 
   function alEnviar(e) {
     if (!pideGuardar || confirmado.current || e.target.tagName !== "FORM") { confirmado.current = false; return; }
-    if (textos.validar && !textos.validar()) return; // datos inválidos: el propio formulario muestra los errores
+    if (textos.validar && !textos.validar()) return;
     e.preventDefault(); e.stopPropagation();
     formRef.current = e.target; setAviso("guardar");
   }
@@ -106,7 +100,7 @@ export function Modal({ abierto, onClose, titulo, children, ancho = "max-w-lg", 
   );
 }
 
-/* ---------------- Confirmación ---------------- */
+// Confirmación
 const ConfirmCtx = createContext(async () => true);
 export const useConfirm = () => useContext(ConfirmCtx);
 
@@ -128,7 +122,7 @@ export function ConfirmProvider({ children }) {
   );
 }
 
-/* ---------------- Bloques de página ---------------- */
+// Encabezado de página
 export function PageHeader({ titulo, subtitulo, children }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -141,22 +135,24 @@ export function PageHeader({ titulo, subtitulo, children }) {
   );
 }
 
+// Tarjeta
 export function Card({ children, className = "" }) {
   return <div className={`rounded-xl2 border border-slate-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#121a2b] sm:p-5 ${className}`}>{children}</div>;
 }
 
+// Indicador
 export function Stat({ etiqueta, valor, nota, tono = "marino" }) {
   const col = { marino: "text-marino dark:text-white", rojo: "text-acento", verde: "text-emerald-600", ambar: "text-amber-600" }[tono];
   return (
     <Card>
       <p className="text-[12px] font-semibold uppercase tracking-wide text-slate-400">{etiqueta}</p>
-      {/* En celular los montos largos (S/ 456,072) bajan de tamaño para no partirse en dos líneas */}
       <p className={`cifra mt-1 whitespace-nowrap font-bold tracking-tight ${String(valor).length > 7 ? "text-[1.2rem] min-[380px]:text-2xl" : "text-[1.75rem]"} sm:text-3xl ${col}`}>{valor}</p>
       {nota && <p className="mt-1 text-[12.5px] text-slate-500">{nota}</p>}
     </Card>
   );
 }
 
+// Estado vacío
 export function Vacio({ titulo, texto, children }) {
   return (
     <div className="rounded-xl2 border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center dark:border-white/10 dark:bg-white/5">
@@ -167,6 +163,7 @@ export function Vacio({ titulo, texto, children }) {
   );
 }
 
+// Tabla
 export function Tabla({ columnas, children, vacio }) {
   return (
     <div className="overflow-x-auto rounded-xl2 border border-slate-100 bg-white shadow-card dark:border-white/10 dark:bg-[#121a2b]">
@@ -181,6 +178,7 @@ export function Tabla({ columnas, children, vacio }) {
   );
 }
 
+// Campo de formulario
 export function Campo({ etiqueta, children, ayuda, error, className = "" }) {
   return (
     <div className={className}>
@@ -192,9 +190,11 @@ export function Campo({ etiqueta, children, ayuda, error, className = "" }) {
   );
 }
 
+// Botones pequeños
 export const btnMini = "rounded-md border border-slate-200 px-2.5 py-1 text-[12.5px] font-medium text-marino-700 transition hover:bg-marino-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/10";
 export const btnMiniPeligro = "rounded-md border border-acento/40 px-2.5 py-1 text-[12.5px] font-medium text-acento transition hover:bg-acento/10";
 
+// Aviso
 export function Aviso({ tipo = "info", children }) {
   const c = { info: "bg-sky-50 text-sky-800 dark:bg-sky-500/10 dark:text-sky-200", aviso: "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200", error: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300", ok: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" }[tipo];
   return <div className={`rounded-lg px-4 py-3 text-[13.5px] ${c}`}>{children}</div>;

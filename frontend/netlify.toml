@@ -1,5 +1,4 @@
-# Netlify: si el sitio está conectado a GitHub, construye con estos valores.
-# Para subir a mano (arrastrar y soltar), se usa la carpeta ya construida (dist).
+# Netlify: construye con npm run build y publica la carpeta dist
 [build]
   command = "npm run build"
   publish = "dist"

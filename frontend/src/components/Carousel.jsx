@@ -1,24 +1,20 @@
+// Carrusel de modelos (inicio)
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import ModeloImg from "./ModeloImg";
 import VideoFondo from "./VideoFondo";
 import { formatoSoles } from "../data/mockData";
 
-/**
- * Banner del inicio: video de fondo en movimiento y una diapositiva por modelo (foto, nombre, frase, precio y acciones).
- * - Pasa solo cada 6 s y se detiene al pasar el mouse, al enfocar o al tocarlo en el celular.
- * - Los botones solo responden en la diapositiva que realmente se ve: durante el cambio de moto
- *   el toque no puede caer en la moto siguiente (así «Cotizar» siempre abre la moto que estás viendo).
- */
 export default function Carousel({ slides, onCotizar }) {
   const [i, setI] = useState(0);
-  const [visible, setVisible] = useState(0); // diapositiva que ya terminó de aparecer
+  const [visible, setVisible] = useState(0);
   const [pausa, setPausa] = useState(false);
   const n = slides.length;
   const toque = useRef(null);
   const reanudar = useRef(null);
   const reducido = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
+  // Avance automático
   useEffect(() => {
     if (pausa || reducido || n < 2) return;
     const t = setInterval(() => setI((x) => (x + 1) % n), 6000);
@@ -39,8 +35,8 @@ export default function Carousel({ slides, onCotizar }) {
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-marino via-marino/80 to-marino/10" aria-hidden="true" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-marino to-transparent" aria-hidden="true" />
 
-      {/* Todas las diapositivas ocupan la misma celda de la grilla: el alto se ajusta a la más alta y nada se desborda en celular */}
       <div className="relative grid lg:min-h-[580px]">
+        {/* Diapositivas */}
         {slides.map((s, idx) => {
           const m = s.modelo;
           if (!m) return null;
@@ -77,6 +73,7 @@ export default function Carousel({ slides, onCotizar }) {
         })}
       </div>
 
+      {/* Puntos y flechas */}
       <div className="absolute inset-x-0 bottom-5 sm:bottom-6">
         <div className="wrap flex items-center gap-4">
           <div className="flex gap-2">

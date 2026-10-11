@@ -1,29 +1,17 @@
-/**
- * Filtros SVG para mostrar la moto en otro color cuando no hay foto propia de ese color.
- *
- * Cada filtro mezcla los canales de color de la foto (feColorMatrix). Las filas suman 1, así que el blanco,
- * el negro y los grises quedan igual (techo blanco, llantas, vidrios) y solo cambia la pintura de color.
- * Así el amarillo sale amarillo de verdad, no un tono anaranjado como con hue-rotate.
- *
- * Se usa con `filter: url(#epsa-color-rojo-amarillo)` (ver filtroEntre en data/mockData.js).
- */
+// Filtros SVG para cambiar el color de la foto
 export const MATRICES_COLOR = {
-  // Foto roja (la mayoría de fotos oficiales)
   "rojo-amarillo": "1 0 0 0 0  0.8 0.2 0 0 0  -0.2 0 1.2 0 0  0 0 0 1 0",
   "rojo-verde": "0 0.5 0.5 0 0  0.65 0.35 0 0 0  0.25 0 0.75 0 0  0 0 0 1 0",
   "rojo-azul": "0 0 1 0 0  0.35 0.65 0 0 0  0.85 0 0.15 0 0  0 0 0 1 0",
   "rojo-negro": "-0.2 0.6 0.6 0 0  -0.2 0.6 0.6 0 0  -0.2 0.6 0.6 0 0  0 0 0 1 0",
-  // Foto azul (Crom Plus GLP y GSL)
   "azul-rojo": "0 0 1 0 0  0.5 0.5 0 0 0  1 0 0 0 0  0 0 0 1 0",
   "azul-amarillo": "0 0 1 0 0  0 0.2 0.8 0 0  1.2 0 -0.2 0 0  0 0 0 1 0",
   "azul-verde": "1 0 0 0 0  0 0.3 0.7 0 0  0.6 0.4 0 0 0  0 0 0 1 0",
   "azul-negro": "0.6 0.6 -0.2 0 0  0.6 0.6 -0.2 0 0  0.6 0.6 -0.2 0 0  0 0 0 1 0",
-  // Foto amarilla
   "amarillo-rojo": "1 0 0 0 0  0 0 1 0 0  0 0 1 0 0  0 0 0 1 0",
   "amarillo-azul": "0 0 1 0 0  0.5 0 0.5 0 0  1 0 0 0 0  0 0 0 1 0",
   "amarillo-verde": "0 0 1 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0",
   "amarillo-negro": "-0.1 -0.1 1.2 0 0  -0.1 -0.1 1.2 0 0  -0.1 -0.1 1.2 0 0  0 0 0 1 0",
-  // Foto verde
   "verde-rojo": "0 1 0 0 0  1 0 0 0 0  0 0 1 0 0  0 0 0 1 0",
   "verde-azul": "1 0 0 0 0  0.5 0.5 0 0 0  0 1 0 0 0  0 0 0 1 0",
   "verde-amarillo": "0 1 0 0 0  0.2 0.8 0 0 0  0 -0.2 1.2 0 0  0 0 0 1 0",

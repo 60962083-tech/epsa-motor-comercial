@@ -1,3 +1,4 @@
+// HU-008 · Catálogo de modelos
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FILTROS_CATALOGO, FAMILIAS, COLOR_HEX, formatoSoles } from "../data/mockData";
@@ -8,11 +9,7 @@ import MotoIllustration from "../components/MotoIllustration";
 import { numero } from "../components/FichaTecnica";
 import { IconBuscar, IconClose, IconFiltros } from "../components/Icons";
 
-
-/**
- * Tarjeta de modelo: foto sobre escenario, nombre en estilo Torito, precio y colores. Se usa en Inicio, catálogo y ficha.
- * colores={false} oculta los círculos de color (Inicio); colorInicial elige con qué foto aparece (por ejemplo, "Azul").
- */
+// Tarjeta de modelo
 export function TarjetaModelo({ m, stock, colores = true, colorInicial }) {
   const cotizar = useCotizar();
   const [color, setColor] = useState(colorInicial || m.colorPortada || m.colores?.[0]);
@@ -57,16 +54,11 @@ export function TarjetaModelo({ m, stock, colores = true, colorInicial }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Filtro único del catálogo                                           */
-/* ------------------------------------------------------------------ */
-
+// Filtro del catálogo
 const sinTildes = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const corto = (familia) => familia.replace(/^Motores\s+/i, "");
 const potenciaDe = (m) => numero(m.resumen?.Potencia) ?? 0;
 
-// Grupos del filtro. Cada grupo solo muestra opciones presentes en los modelos publicados
-// y se oculta si todos los modelos comparten el mismo valor (por ejemplo, Uso = Pasajeros).
 const GRUPOS = [
   { k: "familia", titulo: "Motor", orden: FAMILIAS, etiqueta: corto },
   { k: "combustible", titulo: "Combustible", orden: FILTROS_CATALOGO.combustible },
@@ -80,6 +72,7 @@ const ORDENES = [
 ];
 const VACIO = { familia: [], combustible: [], uso: [] };
 
+// Casilla del filtro
 function Casilla({ etiqueta, n, activo, onChange }) {
   const deshabilitado = !activo && n === 0;
   return (
@@ -94,6 +87,7 @@ function Casilla({ etiqueta, n, activo, onChange }) {
   );
 }
 
+// Panel de filtros
 function PanelFiltros({ grupos, sel, alternar, conteo, precio, setPrecio, rango }) {
   return (
     <div className="divide-y divide-slate-200 dark:divide-white/10">
@@ -121,14 +115,14 @@ function PanelFiltros({ grupos, sel, alternar, conteo, precio, setPrecio, rango 
   );
 }
 
-/** Catálogo: un solo filtro (motor, combustible y precio), búsqueda y orden. El techo es un adicional y se elige en la ficha. */
+// Página del catálogo
 export default function Modelos() {
   const { publicos, unidades } = useApp();
   const [sel, setSel] = useState(VACIO);
   const [q, setQ] = useState("");
-  const [precio, setPrecio] = useState(null); // null = sin tope
+  const [precio, setPrecio] = useState(null);
   const [orden, setOrden] = useState("precio-asc");
-  const [panel, setPanel] = useState(false); // cajón de filtros en móvil
+  const [panel, setPanel] = useState(false);
 
   const stockDe = (id) => unidades.filter((u) => u.modelo === id && u.disponibilidad === "Disponible").length;
 
@@ -144,7 +138,6 @@ export default function Modelos() {
   }).filter((g) => g.opciones.length > 1), [publicos]);
 
   const qn = sinTildes(q.trim());
-  // Un modelo pasa si cumple todo; "excepto" ignora un grupo para calcular cuántos quedarían al marcar otra opción.
   const pasa = (m, excepto) => (!qn || sinTildes(`${m.nombre} ${m.familia} ${m.combustible} ${m.tipoMotor}`).includes(qn))
     && (precio == null || !m.precioDesde || m.precioDesde <= precio)
     && GRUPOS.every(({ k }) => k === excepto || !sel[k].length || sel[k].includes(m[k]));
@@ -165,7 +158,6 @@ export default function Modelos() {
   const nFiltros = activos.filter((a) => a.id !== "q").length;
   const limpiar = () => { setSel(VACIO); setPrecio(null); setQ(""); };
 
-  // Cajón móvil: Escape lo cierra y el fondo no se desplaza mientras está abierto
   useEffect(() => {
     if (!panel) return;
     const esc = (e) => e.key === "Escape" && setPanel(false);
@@ -180,13 +172,14 @@ export default function Modelos() {
 
   return (
     <div className="fade-in">
+      {/* Encabezado */}
       <section className="wrap pb-8 pt-10 lg:pb-10 lg:pt-14">
         <h1 className="font-display text-[3rem] font-bold uppercase leading-[0.9] tracking-tight text-marino sm:text-[4rem] dark:text-white">Modelos Torito</h1>
         <p className="bajada mt-4">Compara motores, combustible y precios de la línea oficial Torito Bajaj. Todos se pueden financiar con crédito directo.</p>
       </section>
 
       <div className="wrap grid gap-10 pb-16 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-14 lg:pb-24">
-        {/* Filtro (escritorio) */}
+        {/* Filtros (escritorio) */}
         <aside className="hidden lg:block" aria-label="Filtros del catálogo">
           <div className="sticky top-24">
             <div className="mb-5 flex items-center justify-between border-b border-slate-200 pb-4 dark:border-white/10">
@@ -198,7 +191,6 @@ export default function Modelos() {
         </aside>
 
         <div className="min-w-0">
-          {/* Búsqueda, filtros en móvil y orden */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_280px] sm:max-w-md">
               <IconBuscar className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
@@ -216,7 +208,7 @@ export default function Modelos() {
             </label>
           </div>
 
-          {/* Resultado y filtros activos */}
+          {/* Filtros activos */}
           <div className="mt-5 flex min-h-[32px] flex-wrap items-center gap-2" aria-live="polite">
             <p className="mr-2 text-[14.5px] font-semibold text-marino dark:text-white">{nModelos(lista.length)}</p>
             {activos.map((a) => (
@@ -228,6 +220,7 @@ export default function Modelos() {
             {activos.length > 1 && <button type="button" onClick={limpiar} className="ml-1 text-[13px] font-semibold text-acento hover:underline">Limpiar todo</button>}
           </div>
 
+          {/* Resultados */}
           {lista.length === 0 ? (
             <div className="mt-6 rounded-2xl border border-dashed border-slate-300 px-6 py-16 text-center dark:border-white/15">
               <MotoIllustration className="mx-auto w-28 opacity-40" />
@@ -244,7 +237,7 @@ export default function Modelos() {
         </div>
       </div>
 
-      {/* Filtro (móvil): cajón inferior */}
+      {/* Filtros (móvil) */}
       {panel && (
         <div className="fixed inset-0 z-[80] lg:hidden" role="dialog" aria-modal="true" aria-label="Filtros">
           <div className="absolute inset-0 bg-marino/60 backdrop-blur-sm" onClick={() => setPanel(false)} />

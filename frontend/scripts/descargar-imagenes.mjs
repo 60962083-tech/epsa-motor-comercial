@@ -1,7 +1,4 @@
-// Descarga TODAS las imágenes reales que usa la web (torito.pe y epsamotor.com.pe) a /public/images,
-// para que el proyecto no dependa de las webs oficiales. Uso, en tu PC con internet:
-//   npm run imagenes
-// La lista se arma sola desde src/data/mockData.js: si agregas un modelo con su foto, también se descarga.
+// Descarga las fotos de los modelos a public/images (npm run imagenes)
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { MODELOS, TORITO_ICONOS, LOGO_TORITO, SELLO_BAJAJ } from "../src/data/mockData.js";

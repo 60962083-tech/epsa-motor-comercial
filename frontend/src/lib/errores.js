@@ -1,4 +1,4 @@
-// Mensajes amigables por código HTTP (catálogo de errores del backend de Michelle).
+// Errores de la API
 export class ApiError extends Error {
   constructor(status, message, detalle) {
     super(message);
@@ -7,6 +7,7 @@ export class ApiError extends Error {
   }
 }
 
+// Mensajes por código HTTP
 const POR_ESTADO = {
   400: "Revisa los datos ingresados: hay un campo inválido.",
   401: "Tu sesión venció o no es válida. Inicia sesión nuevamente.",
@@ -18,10 +19,9 @@ const POR_ESTADO = {
   0: "No se pudo conectar con el servidor. Revisa tu conexión a internet.",
 };
 
-// Errores de HU-002 (PT410…PT413 y PT409 con conflicto)
+// Texto que se muestra al usuario
 export function mensajeError(err) {
   if (!err) return "Ocurrió un error inesperado.";
-  // Se muestra tal cual el mensaje del backend de Michelle; el genérico solo si no envió ninguno.
   const base = err.message && err.status !== 0 ? err.message : POR_ESTADO[err.status];
   let msg = base || err.message || "Ocurrió un error inesperado.";
   const c = err.detalle?.conflicto;

@@ -1,3 +1,4 @@
+// HU-034 · Compras a proveedor
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -9,10 +10,7 @@ import { Aviso, PageHeader, Stat, Tabla, Vacio, btnMini } from "../../components
 
 export const ESTADO_COMPRA = { "Pendiente de factura": "bg-slate-200 text-slate-700", "Pendiente de identificación": "bg-amber-100 text-amber-700", Identificada: "bg-emerald-100 text-emerald-700" };
 
-/**
- * Compras a proveedor. El registro está en /admin/compras/nueva y el detalle (factura con PDF
- * e identificación de motos) en /admin/compras/:id.
- */
+// Lista de compras
 export default function Compras() {
   const { compras: locales } = useApp();
   const { puede, user } = useAuth();
@@ -38,7 +36,7 @@ export default function Compras() {
         {gestiona && <Link id="btn-nueva-compra" className="btn btn-acento !py-2.5 shadow-lg shadow-acento/25" to="/admin/compras/nueva">+ Registrar compra pendiente de factura</Link>}
       </PageHeader>
       {errorApi && <div className="mb-4"><Aviso tipo="error">{errorApi}</Aviso></div>}
-      {MODO_REAL && <div className="mb-4"><Aviso>Conectado a <b>/api/compras</b>: el listado del backend muestra las compras pendientes de factura o de identificación. Las identificadas se consultan por su número.</Aviso></div>}
+      {/* Indicadores */}
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat etiqueta="Pendientes de factura" valor={lista.filter((c) => c.estcom === "Pendiente de factura").length} tono="rojo" />
         <Stat etiqueta="Pendientes de identificación" valor={lista.filter((c) => c.estcom === "Pendiente de identificación").length} tono="ambar" />
@@ -50,6 +48,7 @@ export default function Compras() {
         <div><label className="field-label">Estado</label><select className="field-input" value={est} onChange={(e) => setEst(e.target.value)}><option value="">Todos</option>{Object.keys(ESTADO_COMPRA).map((s) => <option key={s}>{s}</option>)}</select></div>
         <div className="flex items-end text-[13px] text-slate-500"><span className="pb-3">{pendientes.length} pendientes de {lista.length}</span></div>
       </div>
+      {/* Tabla de compras */}
       {cargando ? <p className="py-10 text-center text-slate-400">Cargando compras…</p> : filtradas.length === 0 ? <Vacio titulo="No hay compras" texto="Registra la primera compra a proveedor." /> : (
         <Tabla columnas={["N°", "Modelo", "Color", "Cantidad", "Pendiente de identificar", "Fecha", "Estado", "Acciones"]}>
           {filtradas.map((c) => (
