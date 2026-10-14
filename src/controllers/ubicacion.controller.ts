@@ -1,7 +1,8 @@
 import { RequestHandler } from 'express';
 import * as servicio from '../services/ubicacion.service';
 import { ErrorHttp, responderError } from '../utils/errores';
-import { validarId, validarUbicacion } from '../utils/validacion';
+import { validarId } from '../utils/validacion';
+import { validarUbicacion } from '../utils/ubicacion.validacion';
 export const obtenerUbicaciones: RequestHandler = async (req, res) => {
   try {
     const estado = req.query.activo;
@@ -20,7 +21,7 @@ export const editarUbicacion: RequestHandler = async (req, res) => {
   try {
     const data = await servicio.actualizarUbicacion(res.locals.db, validarId(req.params.id), validarUbicacion(req.body));
     res.json({ ok: true, message: 'Ubicación actualizada correctamente', data });
-  } catch (error) { responderError(res, error); }
+  } catch (error) { responderError(res, error, { PT404: [404, 'La ubicación no existe'] }); }
 };
 export const actualizarEstadoUbicacion: RequestHandler = async (req, res) => {
   try {
@@ -28,6 +29,6 @@ export const actualizarEstadoUbicacion: RequestHandler = async (req, res) => {
     if (typeof req.body?.estubi !== 'boolean') throw new ErrorHttp(400, 'El estado debe ser true o false');
     const data = await servicio.cambiarEstadoUbicacion(res.locals.db, id, req.body.estubi);
     res.json({ ok: true, message: req.body.estubi ? 'Ubicación activada correctamente' : 'Ubicación desactivada correctamente', data });
-  } catch (error) { responderError(res, error); }
+  } catch (error) { responderError(res, error, { PT404: [404, 'La ubicación no existe'] }); }
 };
 

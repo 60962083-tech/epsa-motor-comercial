@@ -12,6 +12,7 @@ import { crearRutasUnidad } from './routes/unidad.routes';
 import { crearRutasTecho } from './routes/techo.routes';
 import { crearRutasLead } from './routes/lead.routes';
 import { crearRutasSede } from './routes/sede.routes';
+import { crearRutasCanalWhatsapp } from './routes/canal-whatsapp.routes';
 
 export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClientePublico) {
   const app = express();
@@ -21,6 +22,7 @@ export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClien
   app.use('/api/modelos', crearRutasModelo(fabricaPublica, fabrica));
   app.use('/api/sedes', crearRutasSede(fabricaPublica));
   app.use('/api/leads', crearRutasLead(fabrica));
+  app.use('/api/canal-whatsapp', crearRutasCanalWhatsapp(fabrica));
 
   app.get('/', (_req, res) => {
     res.json({

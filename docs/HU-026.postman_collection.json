@@ -1,194 +1,724 @@
 {
   "info": {
-    "name": "EPSA HU-026 Backend",
+    "name": "EPSA - Sedes y WhatsApp (HU-026)",
+    "description": "Pruebas manuales de ubicaciones, sedes y actualización de canales de WhatsApp.\n\nUsar una instancia QA/local y completar tokens de Gerente/Administradora y Vendedor en el environment EPSA Local.\n\nNo ejecutar automáticamente contra producción. La colección no incluye token, anon key ni service_role reales.\n\nCrea los registros QA Almacen Postman y QA Sede Postman. No existe endpoint DELETE; revisar y limpiar/desactivar manualmente al terminar.\n\nLas pruebas de WhatsApp modifican el canal indicado por codcwaPrueba. Usa un canal QA dedicado y números no asignados a otros canales.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [
-    {
-      "key": "api_url",
-      "value": "http://localhost:3000"
-    },
-    {
-      "key": "supabase_url",
-      "value": "https://TU-PROYECTO.supabase.co"
-    },
-    {
-      "key": "supabase_anon_key",
-      "value": ""
-    },
-    {
-      "key": "email",
-      "value": "gerente@epsamotor.test"
-    },
-    {
-      "key": "password",
-      "value": ""
-    },
-    {
-      "key": "access_token",
-      "value": ""
-    },
-    {
-      "key": "codubi",
-      "value": ""
-    },
-    {
-      "key": "nombre_prueba",
-      "value": "QA {{$timestamp}}"
-    }
-  ],
   "auth": {
     "type": "bearer",
     "bearer": [
       {
         "key": "token",
-        "value": "{{access_token}}",
+        "value": "{{tokenGestion}}",
         "type": "string"
       }
     ]
   },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "tokenGestion",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tokenVendedor",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "codubiPrueba",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "codubiSedePrueba",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "codcwaPrueba",
+      "value": "",
+      "type": "string"
+    }
+  ],
   "item": [
     {
-      "name": "1. Iniciar sesión (Supabase Auth)",
-      "request": {
-        "auth": {
-          "type": "noauth"
-        },
-        "method": "POST",
-        "header": [
-          {
-            "key": "apikey",
-            "value": "{{supabase_anon_key}}"
+      "name": "01 - Ubicaciones",
+      "description": "Consultas, creación QA y rechazo de datos de Sede para otros tipos.",
+      "item": [
+        {
+          "name": "1. Listar ubicaciones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones"
           },
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "url": "{{supabase_url}}/auth/v1/token?grant_type=password",
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
-        }
-      },
-      "event": [
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"data es un arreglo\", function () { pm.expect(json.data).to.be.an(\"array\"); });"
+              }
+            }
+          ]
+        },
         {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test('Sesión válida', () => pm.response.to.have.status(200));",
-              "const body = pm.response.json();",
-              "pm.collectionVariables.set('access_token', body.access_token || '');"
-            ]
-          }
+          "name": "2. Listar ubicaciones activas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones?activo=true"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"data es un arreglo y todas están activas\", function () { pm.expect(json.data).to.be.an(\"array\"); pm.expect(json.data.every((u) => u.estubi === true)).to.eql(true); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Rechazar filtro activo inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones?activo=invalido"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });\nconst json = pm.response.json();\npm.test(\"ok es false\", function () { pm.expect(json.ok).to.eql(false); });\npm.test(\"Incluye un mensaje de validación\", function () { pm.expect(json.message).to.be.a(\"string\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Crear ubicación QA tipo Almacen",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomubi\": \"QA Almacen Postman\",\n  \"tipubi\": \"Almacen\",\n  \"dirubi\": \"Dirección QA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"Se creó un Almacen activo sin campos de Sede\", function () { pm.expect(json.data.tipubi).to.eql(\"Almacen\"); pm.expect(json.data.estubi).to.eql(true); pm.expect(Object.prototype.hasOwnProperty.call(json.data, \"telsed\")).to.eql(false); pm.expect(Object.prototype.hasOwnProperty.call(json.data, \"horsed\")).to.eql(false); });\nif (pm.response.code === 201 && json.data && json.data.codubi !== undefined) {\n  const id = String(json.data.codubi);\n  pm.collectionVariables.set('codubiPrueba', id);\n  if (pm.environment && typeof pm.environment.set === 'function') pm.environment.set('codubiPrueba', id);\n}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Rechazar datos de Sede en Proveedor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomubi\": \"QA Proveedor inválido\",\n  \"tipubi\": \"Proveedor\",\n  \"dirubi\": \"Dirección QA\",\n  \"telsed\": \"999999999\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });\nconst json = pm.response.json();\npm.test(\"ok es false\", function () { pm.expect(json.ok).to.eql(false); });\npm.test(\"La respuesta incluye el error\", function () { pm.expect(json.message).to.be.a(\"string\"); });"
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "2. Listar catálogo",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "url": "{{api_url}}/api/ubicaciones"
-      }
-    },
-    {
-      "name": "3. Seleccionar ubicaciones activas",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "url": "{{api_url}}/api/ubicaciones?activo=true"
-      }
-    },
-    {
-      "name": "4. Crear ubicación QA",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "url": "{{api_url}}/api/ubicaciones",
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"nomubi\": \"{{nombre_prueba}}\",\n  \"tipubi\": \"Proveedor\",\n  \"dirubi\": null\n}"
-        }
-      },
-      "event": [
+      "name": "02 - Sedes",
+      "description": "Crear/editar Sede, limpiar un campo nullable, convertir tipos y alternar estado.",
+      "item": [
         {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "if (pm.response.code === 201) pm.collectionVariables.set('codubi', String(pm.response.json().data.codubi));"
-            ]
-          }
+          "name": "1. Crear Sede QA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomubi\": \"QA Sede Postman\",\n  \"tipubi\": \"Sede\",\n  \"dirubi\": \"Av. QA 123\",\n  \"telsed\": \"999000001\",\n  \"horsed\": \"Lunes a sábado de 9:00 AM a 5:00 PM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"Devuelve la Sede activa con teléfono y horario\", function () { pm.expect(json.data.tipubi).to.eql(\"Sede\"); pm.expect(json.data.telsed).to.eql(\"999000001\"); pm.expect(json.data.horsed).to.eql(\"Lunes a sábado de 9:00 AM a 5:00 PM\"); pm.expect(json.data.estubi).to.eql(true); });\nif (pm.response.code === 201 && json.data && json.data.codubi !== undefined) {\n  const id = String(json.data.codubi);\n  pm.collectionVariables.set('codubiSedePrueba', id);\n  if (pm.environment && typeof pm.environment.set === 'function') pm.environment.set('codubiSedePrueba', id);\n}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Editar Sede QA",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones/{{codubiSedePrueba}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomubi\": \"QA Sede Postman Editada\",\n  \"tipubi\": \"Sede\",\n  \"dirubi\": \"Av. QA 456\",\n  \"telsed\": \"999000002\",\n  \"horsed\": \"Lunes a viernes de 9:00 AM a 6:00 PM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"Nombre, teléfono y horario fueron actualizados\", function () { pm.expect(json.data.nomubi).to.eql(\"QA Sede Postman Editada\"); pm.expect(json.data.telsed).to.eql(\"999000002\"); pm.expect(json.data.horsed).to.eql(\"Lunes a viernes de 9:00 AM a 6:00 PM\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Limpiar teléfono y conservar horario",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones/{{codubiSedePrueba}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomubi\": \"QA Sede Postman Editada\",\n  \"tipubi\": \"Sede\",\n  \"dirubi\": \"Av. QA 456\",\n  \"telsed\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"Teléfono limpio y horario conservado\", function () { pm.expect(json.data.telsed).to.eql(null); pm.expect(json.data.horsed).to.eql(\"Lunes a viernes de 9:00 AM a 6:00 PM\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Convertir ubicación QA a Sede",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones/{{codubiPrueba}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomubi\": \"QA Ubicación convertida a sede\",\n  \"tipubi\": \"Sede\",\n  \"dirubi\": \"Dirección QA\",\n  \"telsed\": \"999000003\",\n  \"horsed\": \"Horario QA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"La ubicación ahora es Sede y expone sus datos\", function () { pm.expect(json.data.tipubi).to.eql(\"Sede\"); pm.expect(json.data.telsed).to.eql(\"999000003\"); pm.expect(json.data.horsed).to.eql(\"Horario QA\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Cambiar Sede QA a Proveedor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones/{{codubiPrueba}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomubi\": \"QA Ubicación convertida a proveedor\",\n  \"tipubi\": \"Proveedor\",\n  \"dirubi\": \"Dirección QA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"El payload de Proveedor omite datos de Sede\", function () { pm.expect(json.data.tipubi).to.eql(\"Proveedor\"); pm.expect(Object.prototype.hasOwnProperty.call(json.data, \"telsed\")).to.eql(false); pm.expect(Object.prototype.hasOwnProperty.call(json.data, \"horsed\")).to.eql(false); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. Desactivar ubicación QA",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones/{{codubiPrueba}}/estado",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estubi\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"La ubicación queda inactiva\", function () { pm.expect(json.data.estubi).to.eql(false); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Reactivar ubicación QA",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones/{{codubiPrueba}}/estado",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estubi\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"La ubicación queda activa\", function () { pm.expect(json.data.estubi).to.eql(true); });"
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "5. Editar ubicación QA",
-      "request": {
-        "method": "PUT",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "url": "{{api_url}}/api/ubicaciones/{{codubi}}",
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"nomubi\": \"{{nombre_prueba}}\",\n  \"tipubi\": \"Proveedor\",\n  \"dirubi\": null\n}"
+      "name": "03 - Canal WhatsApp",
+      "description": "Sincronización y validación de número/enlace WhatsApp.",
+      "item": [
+        {
+          "name": "1. Actualizar solo número y sincronizar wa.me",
+          "description": "Modifica el canal indicado por codcwaPrueba. Usa un canal QA dedicado y números libres para evitar una colisión de unicidad.",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/canal-whatsapp/{{codcwaPrueba}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numcwa\": \"+51 907 000 001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"Número normalizado y enlace wa.me sincronizado\", function () { pm.expect(json.data.numcwa).to.eql(\"51907000001\"); pm.expect(json.data.enlcwa).to.eql(\"https://wa.me/51907000001\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Actualizar número y enlace correspondientes",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/canal-whatsapp/{{codcwaPrueba}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numcwa\": \"51907000002\",\n  \"enlcwa\": \"https://wa.me/51907000002\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"Número y enlace coinciden\", function () { pm.expect(json.data.numcwa).to.eql(\"51907000002\"); pm.expect(json.data.enlcwa).to.eql(\"https://wa.me/51907000002\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Rechazar número y enlace inconsistentes",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/canal-whatsapp/{{codcwaPrueba}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numcwa\": \"51907000003\",\n  \"enlcwa\": \"https://wa.me/51999999999\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });\nconst json = pm.response.json();\npm.test(\"ok es false\", function () { pm.expect(json.ok).to.eql(false); });\npm.test(\"La respuesta indica la inconsistencia\", function () { pm.expect(json.message).to.eql(\"enlcwa debe corresponder al número numcwa\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Rechazar número inválido",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/canal-whatsapp/{{codcwaPrueba}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numcwa\": \"abc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });\nconst json = pm.response.json();\npm.test(\"ok es false\", function () { pm.expect(json.ok).to.eql(false); });\npm.test(\"La respuesta incluye un mensaje de validación\", function () { pm.expect(json.message).to.be.a(\"string\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Rechazar ID de canal inexistente",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/canal-whatsapp/999999999",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomcwa\": \"QA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 404\", function () { pm.response.to.have.status(404); });\nconst json = pm.response.json();\npm.test(\"ok es false\", function () { pm.expect(json.ok).to.eql(false); });\npm.test(\"Identifica que el canal no existe\", function () { pm.expect(json.message).to.eql(\"El canal WhatsApp no existe\"); });"
+              }
+            }
+          ]
         }
-      }
+      ]
     },
     {
-      "name": "6. Desactivar ubicación QA",
-      "request": {
-        "method": "PATCH",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "url": "{{api_url}}/api/ubicaciones/{{codubi}}/estado",
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"estubi\": false\n}"
+      "name": "04 - Seguridad",
+      "description": "Token obligatorio, autorización de gestión y consulta permitida a Vendedor.",
+      "item": [
+        {
+          "name": "1. Ubicaciones: creación sin token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomubi\": \"QA Sin token\",\n  \"tipubi\": \"Almacen\",\n  \"dirubi\": \"Dirección QA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 401\", function () { pm.response.to.have.status(401); });\nconst json = pm.response.json();\npm.test(\"ok es false\", function () { pm.expect(json.ok).to.eql(false); });\npm.test(\"Explica que se requiere autenticación\", function () { pm.expect(json.message).to.be.a(\"string\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Ubicaciones: vendedor no puede crear",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenVendedor}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomubi\": \"QA Vendedor no autorizado\",\n  \"tipubi\": \"Almacen\",\n  \"dirubi\": \"Dirección QA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 403\", function () { pm.response.to.have.status(403); });\nconst json = pm.response.json();\npm.test(\"ok es false\", function () { pm.expect(json.ok).to.eql(false); });\npm.test(\"La operación de gestión queda denegada\", function () { pm.expect(json.message).to.eql(\"Solo gerente y administradora pueden realizar esta operación de gestión\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. WhatsApp: vendedor no puede editar",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/canal-whatsapp/{{codcwaPrueba}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenVendedor}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomcwa\": \"QA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 403\", function () { pm.response.to.have.status(403); });\nconst json = pm.response.json();\npm.test(\"ok es false\", function () { pm.expect(json.ok).to.eql(false); });\npm.test(\"La operación de gestión queda denegada\", function () { pm.expect(json.message).to.eql(\"Solo gerente y administradora pueden realizar esta operación de gestión\"); });"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Ubicaciones: vendedor sí puede consultar",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/ubicaciones",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenVendedor}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.test(\"ok es true\", function () { pm.expect(json.ok).to.eql(true); });\npm.test(\"data es un arreglo\", function () { pm.expect(json.data).to.be.an(\"array\"); });"
+              }
+            }
+          ]
         }
-      }
-    },
-    {
-      "name": "7. Reactivar ubicación QA",
-      "request": {
-        "method": "PATCH",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "url": "{{api_url}}/api/ubicaciones/{{codubi}}/estado",
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"estubi\": true\n}"
-        }
-      }
+      ]
     }
   ]
 }
