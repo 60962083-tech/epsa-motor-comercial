@@ -12,6 +12,7 @@ import { crearRutasUnidad } from './routes/unidad.routes';
 import { crearRutasTecho } from './routes/techo.routes';
 import { crearRutasLead } from './routes/lead.routes';
 import { crearRutasSede } from './routes/sede.routes';
+import { crearRutasMovimiento } from './routes/movimiento.routes';
 
 export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClientePublico) {
   const app = express();
@@ -41,6 +42,11 @@ export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClien
   app.use(
     '/api/unidades',
     crearRutasTecho(fabrica)
+  );
+
+  app.use(
+    '/api/unidades',
+    crearRutasMovimiento(fabrica)
   );
 
   app.use(
