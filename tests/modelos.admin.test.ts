@@ -161,13 +161,14 @@ test('HU-012: urlimo admite rutas /images y HTTPS válidas; rechaza esquemas act
   const llamadas: Array<[string, unknown]> = [];
   await entorno(async (nombre, parametros) => { llamadas.push([nombre, parametros?.p_urlimo]); return { data: { codimo: '21', urlimo: 'ok', ordimo: 1, estimo: true }, error: null }; }, async base => {
     const headers = { Authorization: 'Bearer token-Gerente', 'Content-Type': 'application/json' };
-    for (const urlimo of [' /images/modelos/3/principal.png ', 'https://imagenes.example.test/modelo.png']) {
+    const urlStorage = 'https://epsa-test.supabase.co/storage/v1/object/public/modelos/3/principal.webp';
+    for (const urlimo of [' /images/modelos/3/principal.png ', 'https://example.com/foto.webp', 'https://imagenes.example.test/modelo.png', urlStorage]) {
       const respuesta = await fetch(`${base}/3/imagenes`, { method: 'POST', headers, body: JSON.stringify({ urlimo, ordimo: 1 }) });
       assert.equal(respuesta.status, 201);
     }
     for (const urlimo of [
       'data:image/png;base64,AAAA', 'javascript:alert(1)', 'file:///tmp/modelo.png',
-      'ftp://imagenes.example.test/modelo.png', 'https://', 'https://user:pass@imagenes.example.test/modelo.png',
+      'http://example.com/foto.webp', 'ftp://imagenes.example.test/modelo.png', 'https://', 'https://user:pass@imagenes.example.test/modelo.png',
       '/images/../privado.png', '/images/%2e%2e/privado.png', '/images/modelos/3/a.png?x=1'
     ]) {
       const respuesta = await fetch(`${base}/3/imagenes`, { method: 'POST', headers, body: JSON.stringify({ urlimo, ordimo: 1 }) });
@@ -185,7 +186,9 @@ test('HU-012: urlimo admite rutas /images y HTTPS válidas; rechaza esquemas act
   });
   assert.deepEqual(llamadas, [
     ['hu012_agregar_imagen_modelo', '/images/modelos/3/principal.png'],
-    ['hu012_agregar_imagen_modelo', 'https://imagenes.example.test/modelo.png']
+    ['hu012_agregar_imagen_modelo', 'https://example.com/foto.webp'],
+    ['hu012_agregar_imagen_modelo', 'https://imagenes.example.test/modelo.png'],
+    ['hu012_agregar_imagen_modelo', 'https://epsa-test.supabase.co/storage/v1/object/public/modelos/3/principal.webp']
   ]);
 });
 

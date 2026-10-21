@@ -80,14 +80,18 @@ test('HU-012: migración administrativa, colores, precio, permisos y catálogo p
     const imagenPrincipal = await conRol<{ imagen: Record<string, unknown> }>(idGerente,
       'SELECT public.hu012_agregar_imagen_modelo($1,$2,$3) AS imagen', [borrador.codmod, ' /images/modelos/1/principal.png ', 1]);
     const imagenSecundaria = await conRol<{ imagen: Record<string, unknown> }>(idAdministradora,
-      'SELECT public.hu012_agregar_imagen_modelo($1,$2,$3) AS imagen', [borrador.codmod, 'https://imagenes.example.test/segunda.png', 2]);
+      'SELECT public.hu012_agregar_imagen_modelo($1,$2,$3) AS imagen',
+      [borrador.codmod, 'https://epsa-test.supabase.co/storage/v1/object/public/modelos/3/lateral.webp', 2]);
     const imagenSinPrecio = await conRol<{ imagen: Record<string, unknown> }>(idAdministradora,
       'SELECT public.hu012_agregar_imagen_modelo($1,$2,$3) AS imagen', [sinPrecioNiColores.codmod, '/images/modelos/3/principal.png', 1]);
+    assert.equal((await db.query('SELECT estmod FROM modelo WHERE codmod=$1', [borrador.codmod])).rows[0].estmod, 'Borrador',
+      'Agregar imágenes no publica automáticamente un modelo en borrador');
     assert.deepEqual(imagenPrincipal.rows[0].imagen, {
       codimo: '1', codmod: borrador.codmod, urlimo: '/images/modelos/1/principal.png', ordimo: 1, estimo: true
     });
     assert.deepEqual(imagenSecundaria.rows[0].imagen, {
-      codimo: '2', codmod: borrador.codmod, urlimo: 'https://imagenes.example.test/segunda.png', ordimo: 2, estimo: true
+      codimo: '2', codmod: borrador.codmod,
+      urlimo: 'https://epsa-test.supabase.co/storage/v1/object/public/modelos/3/lateral.webp', ordimo: 2, estimo: true
     });
     assert.equal(imagenSinPrecio.rows[0].imagen.urlimo, '/images/modelos/3/principal.png');
     await conRol(idAdministradora, 'SELECT public.hu012_cambiar_estado_modelo($1,$2)', [sinPrecioNiColores.codmod, 'Publicado']);
