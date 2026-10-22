@@ -1,20 +1,27 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { ErrorHttp } from '../utils/errores';
-type Datos = { nomubi: string; tipubi: string; dirubi: string | null };
+type Datos = { nomubi: string; tipubi: string; dirubi: string | null; telubi: string | null };
+const PROYECCION = 'codubi,nomubi,tipubi,dirubi,telubi,estubi';
 export async function listarUbicaciones(db: SupabaseClient, activo?: boolean) {
-  let consulta = db.from('ubicacion').select('*').order('nomubi', { ascending: true });
+  let consulta = db.from('ubicacion').select(PROYECCION).order('nomubi', { ascending: true });
   if (activo !== undefined) consulta = consulta.eq('estubi', activo);
   const { data, error } = await consulta;
   if (error) throw error;
   return data;
 }
+export async function obtenerUbicacion(db: SupabaseClient, id: string) {
+  const { data, error } = await db.from('ubicacion').select(PROYECCION).eq('codubi', id).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new ErrorHttp(404, 'La ubicación no existe');
+  return data;
+}
 export async function crearUbicacion(db: SupabaseClient, datos: Datos) {
-  const { data, error } = await db.from('ubicacion').insert({ ...datos, estubi: true }).select().single();
+  const { data, error } = await db.from('ubicacion').insert({ ...datos, estubi: true }).select(PROYECCION).single();
   if (error) throw error;
   return data;
 }
 async function actualizar(db: SupabaseClient, id: string, cambios: Datos | { estubi: boolean }) {
-  const { data, error } = await db.from('ubicacion').update(cambios).eq('codubi', id).select().maybeSingle();
+  const { data, error } = await db.from('ubicacion').update(cambios).eq('codubi', id).select(PROYECCION).maybeSingle();
   if (error) throw error;
   if (!data) throw new ErrorHttp(404, 'La ubicación no existe');
   return data;

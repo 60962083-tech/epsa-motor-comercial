@@ -2,6 +2,12 @@ import { RequestHandler } from 'express';
 import * as servicio from '../services/ubicacion.service';
 import { ErrorHttp, responderError } from '../utils/errores';
 import { validarId, validarUbicacion } from '../utils/validacion';
+export const obtenerUbicacion: RequestHandler = async (req, res) => {
+  try {
+    const data = await servicio.obtenerUbicacion(res.locals.db, validarId(req.params.id));
+    res.json({ ok: true, data });
+  } catch (error) { responderError(res, error); }
+};
 export const obtenerUbicaciones: RequestHandler = async (req, res) => {
   try {
     const estado = req.query.activo;
