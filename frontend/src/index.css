@@ -36,7 +36,8 @@
   }
 
   /* Contenedor de página */
-  .wrap { @apply mx-auto w-full max-w-[1320px] px-4 sm:px-8 lg:px-10; }
+  /* En pantallas grandes (o con el navegador alejado) el contenido aprovecha más el ancho */
+  .wrap { @apply mx-auto w-full max-w-[1320px] px-4 sm:px-8 lg:px-10 2xl:max-w-[1520px] min-[1920px]:max-w-[1680px]; }
 
   /* Tipografía de marca */
   .titulo { @apply font-display text-[2.1rem] font-bold uppercase leading-[0.95] tracking-tight text-marino sm:text-[2.75rem] dark:text-white; }
@@ -67,3 +68,9 @@
 .marquesina.reversa { animation-direction: reverse; }
 .marquesina-pausa .marquesina, .marquesina-zona:hover .marquesina { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) { .marquesina { animation: none; } }
+
+/* Movimiento reducido: sin animaciones de entrada ni transiciones largas */
+@media (prefers-reduced-motion: reduce) {
+  .fade-in, .animate-pulse, [class*="animate-["] { animation: none !important; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

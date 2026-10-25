@@ -1,4 +1,4 @@
-// HU-014 · Leads: registrar interesado
+// HU-014 · Leads: registrar interesado · HU-015: asignar o transferir (base central) · HU-011: consultas web (vista previa)
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -10,6 +10,8 @@ import { esCelular, esNombre, hoyLocal, limpiarTexto, MSJ, soloDigitos, soloLetr
 import { MODO_REAL, WHATSAPP_NUMERO } from "../../lib/config";
 import { listarCanalesWhatsapp, listarUsuariosSupabase, registrarLeadApi } from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
+import { EstadoConexion } from "../../components/dashboard/Sprint2";
+import LeadsCentral from "../../components/dashboard/LeadsCentral";
 
 const TONO = { Nuevo: "bg-sky-100 text-sky-700", "En seguimiento": "bg-amber-100 text-amber-700", Cotizado: "bg-violet-100 text-violet-700", "Cerrado ganado": "bg-emerald-100 text-emerald-700", Perdido: "bg-slate-200 text-slate-600" };
 const VACIO = { contacto: "", telefono: "", canal: "", modelo: "", color: "", sede: "Comas", responsable: "", codusu: "", proximo: "", estado: "Nuevo", nota: "", primerContacto: true, otraOportunidad: false };
@@ -53,6 +55,7 @@ export default function Leads() {
   const [canalWa, setCanalWa] = useState(undefined);
   const [dupApi, setDupApi] = useState(null);
   const [enviando, setEnviando] = useState(false);
+  const [token, setToken] = useState(0);
   useEffect(() => {
     if (!MODO_REAL) return;
     listarUsuariosSupabase()
@@ -67,7 +70,8 @@ export default function Leads() {
   const yo = MODO_REAL && user?.codusu ? { codusu: String(user.codusu), nombre: user.nombre, rol: "" } : null;
   const responsablesApi = !MODO_REAL ? [] : cuentas?.length ? [...cuentas].sort((a, b) => (b.rol === "Vendedor") - (a.rol === "Vendedor")) : yo ? [yo] : [];
   const modelosLead = MODO_REAL ? publicos.filter((m) => m.codmodApi) : modelos;
-  const sedesLead = MODO_REAL && sedes.some((s) => s.codsed) ? sedes.map((s) => s.nombre) : SEDES_ATENCION;
+  // Con la base conectada, las sedes vienen de la API (sin lista fija)
+  const sedesLead = MODO_REAL ? sedes.map((s) => s.nombre) : SEDES_ATENCION;
   const codsedDe = (nombre) => sedes.find((s) => s.nombre === nombre)?.codsed || null;
   const nuevoReal = MODO_REAL && !modal?.lead;
 
@@ -165,10 +169,10 @@ export default function Leads() {
       const codlea = r.data?.codlea;
       const nombre = resp?.nombre || datos.responsable;
       const id = leads.reduce((m, l) => Math.max(m, Number(l.id) || 0), 0) + 1;
-      agregar("leads", { id, ...datos, nota, responsable: nombre, codlea, estado: "Nuevo", fecha: hoy }, `Lead #${codlea} registrado: ${datos.contacto}`);
-      agregar("seguimientos", { leadId: id, fecha: proximo, tipo: canlea === "WhatsApp" ? "WhatsApp" : "Llamada", responsable: nombre, hecho: false, detalle: `Primer contacto: consulta por el ${nombreModelo(datos.modelo)}` }, `Seguimiento creado para ${datos.contacto}`);
+      // Queda anotado en este equipo para mostrarlo mientras la lista completa no esté disponible
+      agregar("leads", { id, ...datos, nota, responsable: nombre, codlea, estado: "Nuevo", fecha: hoy, registrado: new Date().toISOString(), nombreModelo: nombreModelo(datos.modelo) }, `Lead #${codlea} registrado: ${datos.contacto}`);
       toast(`Lead #${codlea} registrado. Primer contacto: ${proximo === hoy ? "hoy" : proximo}`);
-      setModal(null);
+      setModal(null); setToken((t) => t + 1);
     } catch (e) {
       const msg = mensajeError(e);
       if (e.status === 409) { setDupApi({ codlea: "", codmod: "", estlea: "", ...e.detalle?.coincidencia }); setForm((p) => ({ ...p, otraOportunidad: false })); setErr({}); }
@@ -215,11 +219,13 @@ export default function Leads() {
       <select className="field-input" value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })}><option value="">Todos</option>{ops.map((o) => <option key={o.v ?? o} value={o.v ?? o}>{o.t ?? o}</option>)}</select></div>
   );
   const abiertos = leads.filter((l) => !cerrado(l));
+  const webNuevas = leads.filter((l) => l.canal === "Formulario web" && l.estado === "Nuevo");
 
   return (
     <div>
-      <PageHeader titulo="Leads" subtitulo="Interesados que llegan por la web, WhatsApp, redes o las sedes. Un celular no se registra dos veces.">
-        {puede("leads.ausencia") && (
+      <PageHeader titulo="Leads" subtitulo={MODO_REAL ? "Interesados registrados. Gerencia y administración los asignan o transfieren; cada vendedor ve los suyos." : "Interesados que llegan por la web, WhatsApp, redes o las sedes. Un celular no se registra dos veces."}>
+        {MODO_REAL && <EstadoConexion hu="HU-015" />}
+        {!MODO_REAL && puede("leads.ausencia") && (
           <button type="button" onClick={alternarAusencia} aria-pressed={ausencia} className={`btn !py-2.5 border ${ausencia ? "border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200" : "border-slate-300 text-slate-600 dark:border-white/15 dark:text-white/80"}`}>
             <span className={`relative h-5 w-9 rounded-full transition ${ausencia ? "bg-amber-500" : "bg-slate-300 dark:bg-white/20"}`}><span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${ausencia ? "left-[18px]" : "left-0.5"}`} /></span>
             Modo ausencia
@@ -227,7 +233,20 @@ export default function Leads() {
         )}
         <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Registrar interesado</button>
       </PageHeader>
+      {MODO_REAL && <LeadsCentral token={token} recientes={leads.filter((l) => l.codlea).sort((a, b) => Number(b.codlea) - Number(a.codlea)).slice(0, 50)} />}
+      {!MODO_REAL && <>
       {ausencia && <div className="mb-5"><Aviso tipo="aviso">Modo ausencia activo: los leads nuevos{MODO_REAL ? " de la web" : ""} quedan «Sin asignar» y «Sin próximo contacto». Repártelos con el botón «Asignar».</Aviso></div>}
+
+      {/* HU-011 · Consultas desde la web */}
+      {webNuevas.length > 0 && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl2 border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-500/30 dark:bg-sky-500/10" data-aviso-web>
+          <p className="text-[14px] text-sky-900 dark:text-sky-100"><b>{webNuevas.length === 1 ? "1 consulta nueva" : `${webNuevas.length} consultas nuevas`}</b> desde la web{webNuevas.some((l) => l.responsable === SIN || !l.responsable) ? ", algunas sin asignar" : ""}. Responde el mismo día.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <EstadoConexion hu="HU-011" />
+            <button className="btn btn-primary !py-2 text-[13.5px]" onClick={() => setF({ q: "", estado: "Nuevo", canal: "Formulario web", sede: "", resp: "", modelo: "" })}>Ver consultas web</button>
+          </div>
+        </div>
+      )}
 
       {/* Indicadores */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -274,8 +293,9 @@ export default function Leads() {
                 <tr key={l.id} className="align-top">
                   <td className="whitespace-nowrap px-4 py-3 text-slate-500">{l.fecha}</td>
                   <td className="px-4 py-3"><p className="font-semibold text-marino dark:text-white">{l.contacto}</p><p className="text-[12.5px] text-slate-400">{l.telefono} · {l.sede}</p></td>
-                  <td className="px-4 py-3">{nombreModelo(l.modelo)}{l.color && <span className="text-slate-400"> · {l.color}</span>}</td>
-                  <td className="px-4 py-3">{l.canal}</td>
+                  <td className="px-4 py-3">{l.modelo ? nombreModelo(l.modelo) : <span className="text-slate-400">Aún no decide</span>}{l.color && <span className="text-slate-400"> · {l.color}</span>}
+                    {l.mensaje && <p className="mt-1 max-w-[260px] truncate text-[12.5px] italic text-slate-500" title={l.mensaje}>“{l.mensaje}”</p>}</td>
+                  <td className="px-4 py-3">{l.canal}{l.tipoConsulta && <span className={`mt-1 block w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${l.tipoConsulta === "Consulta" ? "bg-sky-100 text-sky-700" : "bg-violet-100 text-violet-700"}`}>{l.tipoConsulta === "Consulta" ? "Pregunta" : "Cotización"}</span>}{l.codigoWeb && <span className="block text-[11.5px] text-slate-400">{l.codigoWeb}</span>}</td>
                   <td className="px-4 py-3">{l.responsable === SIN || !l.responsable ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[12px] font-semibold text-amber-800">Sin asignar</span> : l.responsable}</td>
                   <td className="whitespace-nowrap px-4 py-3">{cerrado(l) ? <span className="text-slate-400">—</span> : px ? <span className={px.fecha < hoy ? "font-semibold text-acento" : ""}>{px.fecha} · {px.tipo}</span> : <span className="rounded-full bg-red-50 px-2.5 py-1 text-[12px] font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-300">Sin próximo contacto</span>}</td>
                   <td className="px-4 py-3">
@@ -297,6 +317,8 @@ export default function Leads() {
           </Tabla>
         )}
       </div>
+
+      </>}
 
       {/* Formulario: registrar / editar interesado */}
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.lead ? `Editar lead de ${modal.lead.contacto}` : "Registrar interesado"} ancho="max-w-2xl"

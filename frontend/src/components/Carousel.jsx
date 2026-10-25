@@ -44,7 +44,7 @@ export default function Carousel({ slides, onCotizar }) {
           const clicable = activo && idx === visible;
           return (
             <div key={s.modeloId} aria-hidden={!activo} data-modelo={m.id} className={`col-start-1 row-start-1 transition-opacity duration-500 ${activo ? "opacity-100" : "opacity-0"} ${clicable ? "" : "pointer-events-none"}`}>
-              <div className="wrap grid h-full items-center gap-5 pb-16 pt-6 sm:gap-6 sm:pb-20 sm:pt-10 lg:grid-cols-[1fr_1.1fr] lg:pb-16">
+              <div className="wrap grid h-full items-center gap-5 pb-16 pt-6 sm:gap-6 sm:px-20 sm:pb-20 sm:pt-10 lg:grid-cols-[1fr_1.1fr] lg:px-24 lg:pb-16">
                 <div className={`order-2 min-w-0 lg:order-1 ${activo ? "animate-[subir_.7s_ease_both]" : ""}`}>
                   <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-white/80 ring-1 ring-white/15 backdrop-blur-sm">
                     <span className="h-1.5 w-1.5 rounded-full bg-acento" />{s.etiqueta || m.familia}
@@ -73,21 +73,25 @@ export default function Carousel({ slides, onCotizar }) {
         })}
       </div>
 
-      {/* Puntos y flechas */}
+      {/* Flechas a los costados */}
+      {n > 1 && <>
+        <button onClick={() => ir(i - 1)} aria-label="Modelo anterior" className="absolute left-2 top-[8.5rem] z-10 grid h-11 w-11 sm:top-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25 sm:left-4 sm:h-14 sm:w-14 lg:left-6" data-carrusel-anterior>
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg>
+        </button>
+        <button onClick={() => ir(i + 1)} aria-label="Modelo siguiente" className="absolute right-2 top-[8.5rem] z-10 grid h-11 w-11 sm:top-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25 sm:right-4 sm:h-14 sm:w-14 lg:right-6" data-carrusel-siguiente>
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>
+        </button>
+      </>}
+
+      {/* Avance de cada diapositiva */}
       <div className="absolute inset-x-0 bottom-5 sm:bottom-6">
-        <div className="wrap flex items-center gap-4">
-          <div className="flex gap-2">
-            {slides.map((s, idx) => (
-              <button key={s.modeloId} onClick={() => ir(idx)} aria-label={`Ver ${s.modelo?.nombre}`} aria-current={idx === i}
-                className={`relative h-1.5 overflow-hidden rounded-full transition-all ${idx === i ? "w-12 bg-white/30" : "w-5 bg-white/30 hover:bg-white/60"}`}>
-                {idx === i && <span key={`${i}-${pausa}`} className={`absolute inset-y-0 left-0 rounded-full bg-white ${pausa || reducido ? "w-full" : "animate-[progreso_6s_linear_both]"}`} />}
-              </button>
-            ))}
-          </div>
-          <div className="ml-auto hidden gap-2 sm:flex">
-            <button onClick={() => ir(i - 1)} aria-label="Modelo anterior" className="grid h-10 w-10 place-items-center rounded-full border border-white/25 text-xl backdrop-blur-sm hover:bg-white/10">‹</button>
-            <button onClick={() => ir(i + 1)} aria-label="Modelo siguiente" className="grid h-10 w-10 place-items-center rounded-full border border-white/25 text-xl backdrop-blur-sm hover:bg-white/10">›</button>
-          </div>
+        <div className="wrap flex items-center justify-center gap-2 lg:justify-start">
+          {slides.map((s, idx) => (
+            <button key={s.modeloId} onClick={() => ir(idx)} aria-label={`Ver ${s.modelo?.nombre}`} aria-current={idx === i}
+              className={`relative h-1.5 overflow-hidden rounded-full transition-all ${idx === i ? "w-12 bg-white/30" : "w-5 bg-white/30 hover:bg-white/60"}`}>
+              {idx === i && <span key={`${i}-${pausa}`} className={`absolute inset-y-0 left-0 rounded-full bg-white ${pausa || reducido ? "w-full" : "animate-[progreso_6s_linear_both]"}`} />}
+            </button>
+          ))}
         </div>
       </div>
     </section>

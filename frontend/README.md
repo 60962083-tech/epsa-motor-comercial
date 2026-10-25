@@ -1,6 +1,6 @@
 # EPSA Motor — Frontend
 
-Web pública de clientes y panel interno de gestión comercial, hechos con React, Vite y Tailwind. Están conectados a la API de Michelle (Express + Supabase). Grupo 7 · ISIL 2026-2.
+Web pública de clientes y panel interno de gestión comercial, hechos con React, Vite y Tailwind. Están conectados a la API del proyecto (Express + Supabase). Grupo 7 · ISIL 2026-2.
 
 ## Cómo correrlo
 
@@ -10,7 +10,7 @@ npm run dev     # http://localhost:5173
 npm run build   # genera dist/ para Netlify
 ```
 
-- **Web pública:** `/`, `/modelos`, `/modelos/:id`, `/nosotros` y `/sedes`.
+- **Web pública:** `/`, `/modelos`, `/modelos/:id`, `/nosotros` y `/sedes`. No muestra stock ni cantidades de motos: la disponibilidad la confirma un asesor.
 - **Panel interno:** `/admin`. No tiene enlace en la web; se entra escribiendo la dirección.
 
 ## Conexión
@@ -19,43 +19,65 @@ npm run build   # genera dist/ para Netlify
 - Solo falta la clave pública **anon** de Supabase (`SUPABASE_ANON_KEY`):
   - **En tu computadora:** se toma del `.env` de la raíz del repositorio o de `frontend/.env` (ver `.env.example`).
   - **En Netlify:** se pone como variable de entorno.
+- Para probar con la API corriendo en tu computadora: `EPSA_API_LOCAL=1` y `VITE_API_URL=http://localhost:3000` en el `.env` (sin `EPSA_API_LOCAL=1` se usa la de Render).
+- La clave `service_role` nunca va en el frontend: si alguien la pone por error, `vite.config.js` la descarta.
 - Los archivos `.env` no se suben a GitHub.
-- Sin la clave, la web funciona en modo demostración y guarda los datos en el navegador.
+- Sin la clave, la web funciona en **modo demostración**: guarda los datos en el navegador y sirve solo para mostrar las pantallas.
 - En el plan gratis de Render, la primera consulta del día tarda cerca de un minuto.
 
 ## Acceso al panel
 
-| Rol | Correo | Contraseña |
-|---|---|---|
-| Gerente | gerente.demo@epsamotor.test | `clave1234567,` |
-| Administradora | admin.demo@epsamotor.test | `clave12345678,` |
-| Vendedor | vendedor.demo@epsamotor.test | `clave123456789,` |
+Se entra con el correo y la contraseña de cada persona (Supabase Auth). Las cuentas las crea el gerente en **Equipo**. Si alguien olvida su contraseña, el gerente le pone una temporal desde **Equipo** y la persona crea la suya al entrar.
+
+- Funciones de la pantalla **Equipo**: `docs/supabase-login-equipo.sql`. Las cuentas del equipo y sus contraseñas están en un archivo privado que no se sube al repositorio.
+- Pantalla **Roles y permisos** (solo gerente): `docs/supabase-permisos-roles.sql`. Sin ese script cada rol ve sus secciones de siempre.
+- Fotos repetidas en el catálogo (opcional): `docs/supabase-fotos-repetidas.sql` le da a cada modelo su propia foto.
+
+## Sprint 2: historias conectadas a la base central
+
+Todas las pantallas del Sprint 2 leen y guardan en la API. Las listas se actualizan solas cada 30 segundos y al volver a la pestaña, muestran la hora de la última actualización, tienen botón **Actualizar** y avisan si la conexión falla. Detalle por historia y guion de prueba: [`docs/SPRINT2.md`](docs/SPRINT2.md).
+
+| HU | Qué hace | Dónde | API |
+|---|---|---|---|
+| HU-001 | Inventario central compartido: ubicación, modelo, color, techo, preparación y situación comercial | Motos → Disponibilidad, Inventario y ficha | `GET /api/inventario`, `GET /api/inventario/unidades/:id` |
+| HU-003 | Salida en tránsito y recepción (diseño de Michelle), con conflicto si otra sesión movió la moto | Motos → Movimientos, Inventario y ficha | `GET/POST /api/unidades/:id/movimientos` (`{codubiori, codubides, obsmub}`), `PATCH …/movimientos/:codmub/recepcion`; vista general `GET /api/movimientos` |
+| HU-015 | Asignar o transferir un interesado, con motivo y trazabilidad | Ventas → Leads | `GET /api/leads`, `PUT /api/leads/:id/responsable`, `GET …/asignaciones` |
+| HU-023 | Compras pendientes de factura, identificación o recepción, y documentos con incidencia | Compras → Pendientes | `GET /api/compras-pendientes` |
+| HU-030 | Facturas que llegan a Gmail registran la compra y sus motos en Ancón | Compras → Facturas recibidas | `/api/documentos-compra`, `/api/equivalencias`, `/api/importaciones/*` |
+| HU-033 | Preparación por etapas: armado, techo y condición de entrega | Motos → Preparación y ficha | `GET/PUT /api/unidades/:id/preparacion` |
+| HU-036 | Fotos de cada modelo en el almacenamiento central | Web y catálogo → Modelos → Fotos | Supabase Storage, bucket `modelos` (`<codmod>/<uuid>.<ext>`), y rutas de HU-012 `POST/PUT /api/modelos/:id/imagenes` |
+| EMT-97 | Número de contacto opcional en las ubicaciones | Configuración → Ubicaciones | `POST/PUT /api/ubicaciones` (`telubi`) |
+
+HU-005 (separaciones) y HU-011 (consultas desde la web) no son del Sprint 2: con la base conectada no se muestran. En el modo demostración siguen visibles como vista previa.
+
+**Si la API publicada todavía es la del Sprint 1:** el login, los roles y todo lo del Sprint 1 siguen funcionando. Cada vista del Sprint 2 muestra «Esta sección todavía no está disponible» (la ruta que falta queda en la consola del navegador para el equipo técnico); Compras abre la lista del Sprint 1 mientras falte `GET /api/compras-pendientes`; cada moto identificada en una compra abre su ficha con movimientos (HU-003, si la API ya los tiene) y su configuración de techo (HU-004); Inventario y Movimientos permiten abrir una compra o una moto por su número, y Ubicaciones avisa si el teléfono no se guardó. Cuando la API del Sprint 2 esté publicada, esas vistas cargan sin cambiar nada en el front.
 
 ## Sprint 1: historias conectadas a la API
 
 | HU | Qué hace | Archivo | API |
 |---|---|---|---|
-| HU-007 | Login y permisos por rol | `pages/dashboard/Login.HU-007.jsx`, `context/AuthContext.jsx` | Supabase Auth + `hu007_usuario_actual` |
+| HU-007 | Login y permisos por rol (el gerente los ajusta en Roles y permisos) | `pages/dashboard/Login.HU-007.jsx`, `pages/dashboard/RolesPermisos.jsx`, `context/AuthContext.jsx` | Supabase Auth + `hu007_usuario_actual`, `permisos_listar`, `permisos_guardar` |
 | HU-008 | Catálogo con filtros | `pages/Modelos.HU-008.jsx` | `GET /api/modelos` |
 | HU-009 | Ficha del modelo | `pages/ModeloDetalle.HU-009.jsx` | `GET /api/modelos/:id` |
 | HU-010 | Quiénes somos y sedes | `pages/Nosotros.HU-010.jsx`, `pages/Sedes.HU-010.jsx` | `GET /api/sedes` |
-| HU-012 | Modelos publicados (web y panel) | `store/appStore.jsx`, `pages/dashboard/ModelosAdmin.HU-012.jsx` | `GET /api/modelos` |
+| HU-012 | Modelos publicados (web y panel) | `store/appStore.jsx`, `pages/dashboard/ModelosAdmin.HU-012.jsx` | `GET /api/modelos`, `/api/modelos/admin` |
 | HU-013 | Cotizar y contacto por WhatsApp | `components/CotizarModal.jsx`, `components/WhatsAppButton.HU-013.jsx` | WhatsApp |
 | HU-014 | Registrar interesado | `pages/dashboard/Leads.HU-014.jsx` | `POST /api/leads` |
 | HU-026 | Ubicaciones | `pages/dashboard/Ubicaciones.HU-026.jsx` | `GET/POST/PUT /api/ubicaciones`, `PATCH /api/ubicaciones/:id/estado` |
 | HU-034 | Compras pendientes de factura | `pages/dashboard/Compras.HU-034.jsx`, `pages/dashboard/RegistrarCompra.HU-034.jsx` | `GET/POST /api/compras` |
 | HU-002 | Factura (con PDF) e identificación de motor y chasis | `pages/dashboard/CompraDetalle.HU-002.jsx` | `/api/compras/:id/factura`, `…/factura/archivo`, `…/unidades` |
-| HU-004 | Techo de cada unidad | `pages/dashboard/FichaUnidad.HU-004.jsx` | `GET/PUT /api/unidades/:id/techo` |
+| HU-004 | Techo de cada unidad | `pages/dashboard/FichaCentral.HU-004.jsx` | `GET/PUT /api/unidades/:id/techo` |
 
-- Todas las llamadas a la API están en `src/lib/api.js`.
-- Los demás módulos del panel aún no tienen API y guardan en el navegador: Seguimiento, Ventas, Facturas, Metas, Opiniones, Equipo, recepción y traslado de unidades, y la edición de leads y modelos.
+- Todas las llamadas a la API están en `src/lib/api.js` (Sprint 1) y `src/servicios/central.js` (Sprint 2).
+- Los módulos que aún no tienen historia en la base guardan en el navegador: Seguimiento, Ventas, Facturas de venta, Metas y Opiniones.
 
 ## Carpetas
 
-- `src/pages`: páginas de la web pública. `src/pages/dashboard`: páginas del panel.
-- `src/components`: menú, pie de página, carrusel, formulario de cotización, ficha técnica y componentes del panel.
+- `src/pages`: páginas de la web pública. `src/pages/dashboard`: páginas del panel (el nombre del archivo indica su HU).
+- `src/components`: menú, pie de página, carrusel, formulario de cotización y componentes del panel. Los del Sprint 2 conectado: `components/dashboard/Central.jsx`, `ModalesCentral.jsx`, `LeadsCentral.jsx`, `ComprasPendientesCentral.jsx` y `GaleriaCentral.jsx`.
+- `src/servicios`: consultas a la base central con actualización automática (`central.js`) y reglas de presentación del inventario (`inventarioCentral.js`).
 - `src/lib`: conexión con la API, validaciones y utilidades.
 - `src/store/appStore.jsx`: datos compartidos entre la web y el panel.
-- `src/data/mockData.js`: catálogo, sedes, roles y datos de ejemplo.
+- `src/data/mockData.js`: catálogo, sedes, roles y datos del modo demostración.
 
 En Netlify, `netlify.toml` construye con `npm run build` y publica `dist`. El archivo `public/_redirects` hace que `/admin` y las demás rutas funcionen al recargar.

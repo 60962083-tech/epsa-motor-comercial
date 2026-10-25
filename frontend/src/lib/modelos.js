@@ -41,7 +41,7 @@ export function modeloDesdeApi(a, idsOcupados = new Set()) {
   if (idsOcupados.has(id)) id = `${id}-${a.codmod}`;
   return {
     id, codmod: String(a.codmod), codmodApi: String(a.codmod), nombre, marca: a.marmod || "Bajaj", familia, tipoMotor, combustible, uso: "Pasajeros",
-    estado: "Publicado", soloBackend: true, precioDesde: null, colores: [], badges: [], destacados: [],
+    estado: a.estmod === "Publicado" || !a.estmod ? "Publicado" : "Borrador", soloBackend: true, precioDesde: a.premod == null ? null : Number(a.premod), colores: Array.isArray(a.colores) ? a.colores : [], badges: [], destacados: [],
     descripcion: a.desmod || "", imagen: fotos[0] || "", imagenApi: fotos[0] || undefined, fotos,
     resumen, specs: { motor: pares, chasis: [], consumo: [], dimensiones: [], electrico: [] },
   };

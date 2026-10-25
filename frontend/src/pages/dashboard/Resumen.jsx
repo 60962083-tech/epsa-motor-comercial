@@ -1,11 +1,19 @@
 // Resumen del panel
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+// Con la base conectada muestra solo datos reales (inventario, movimientos, leads, modelos y compras de la API).
+// Sin base, la vista de ejemplo muestra los indicadores comerciales con datos de este navegador.
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "../../components/dashboard/LinkPanel";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { formatoSoles, SEDES_ATENCION } from "../../data/mockData";
-import { Card, PageHeader, Stat } from "../../components/ui";
+import { Card, Stat } from "../../components/ui";
 import { BarChart, LineChart, Donut, RankingBarras } from "../../components/charts";
+import { estadoVisible } from "../../servicios/separaciones";
+import MotoIllustration from "../../components/MotoIllustration";
+import { MODO_REAL } from "../../lib/config";
+import * as api from "../../lib/api";
+import { inventarioApi, leadsCentralApi, useConsultaCentral } from "../../servicios/central";
+import { BarraActualizacion, sinApi } from "../../components/dashboard/Central";
 
 const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 function ultimosMeses(n) {
@@ -16,10 +24,42 @@ function ultimosMeses(n) {
   });
 }
 
-// Indicadores y gráficos
+// ---------------------------------------------------------------------------------------------
+// Bienvenida con la fecha y accesos rápidos según el rol
+// ---------------------------------------------------------------------------------------------
+function Bienvenida({ children }) {
+  const { user, puedeVer } = useAuth();
+  return (
+    <section className="relative mb-6 overflow-hidden rounded-2xl bg-marino px-6 py-7 text-white shadow-card sm:px-8" data-bienvenida>
+      <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-acento/25 blur-3xl" aria-hidden="true" />
+      <MotoIllustration className="pointer-events-none absolute -bottom-5 right-8 hidden h-40 w-auto text-white/[0.12] md:block" />
+      <div className="relative flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <p className="text-[13.5px] text-white/60 first-letter:uppercase">{new Date().toLocaleDateString("es-PE", { weekday: "long", day: "numeric", month: "long" })}</p>
+          <h1 className="mt-1 font-display text-[2.4rem] font-bold leading-none tracking-tight sm:text-[2.8rem]">{`Hola, ${String(user.nombre).split(" ")[0]}`}</h1>
+          <p className="mt-2 max-w-xl text-[14.5px] text-white/70">Resumen operativo de EPSA Motor.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[["leads", "/admin/leads", "Leads"], ["disponibilidad", "/admin/disponibilidad", "Disponibilidad"], ["movimientos", "/admin/movimientos", "Movimientos"], ["compras", "/admin/compras", "Compras"]].filter(([sec]) => puedeVer(sec)).map(([sec, to, t]) => (
+            <Link key={sec} to={to} className="rounded-lg bg-white/10 px-3.5 py-2 text-[13.5px] font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/20">{t}</Link>
+          ))}
+          {children}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Resumen() {
-  const { user } = useAuth();
-  const { ventas, leads, unidades, seguimientos, modelos, ubicaciones, equipo, metas, actividad, publicos = [] } = useApp();
+  return MODO_REAL ? <ResumenCentral /> : <ResumenEjemplo />;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Vista de ejemplo (sin base): indicadores comerciales con los datos de este navegador
+// ---------------------------------------------------------------------------------------------
+function ResumenEjemplo() {
+  const { puedeVer } = useAuth();
+  const { ventas, leads, unidades, seguimientos, modelos, ubicaciones, equipo, metas, actividad, publicos = [], movimientos = [], separaciones = [] } = useApp();
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [sede, setSede] = useState("Todas");
@@ -68,9 +108,9 @@ export default function Resumen() {
 
   return (
     <div>
-      <PageHeader titulo={`Hola, ${String(user.nombre).split(" ")[0]}`} subtitulo="Resumen operativo de EPSA Motor. Pasa el mouse (o toca) los gráficos para ver el detalle.">
-        {import.meta.env.VITE_ROUTER !== "memory" && <button className="btn btn-secondary !py-2" onClick={() => window.print()}>Imprimir</button>}
-      </PageHeader>
+      <Bienvenida>
+        {import.meta.env.VITE_ROUTER !== "memory" && <button className="rounded-lg px-3.5 py-2 text-[13.5px] font-semibold text-white/80 ring-1 ring-white/25 transition hover:bg-white/10" onClick={() => window.print()}>Imprimir</button>}
+      </Bienvenida>
 
       {/* Filtros */}
       <Card className="mb-6 flex flex-wrap items-end gap-3">
@@ -88,6 +128,32 @@ export default function Resumen() {
           {sinAsignar > 0 && <Link to="/admin/leads" className="flex items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 px-5 py-4 text-sky-900 transition hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100"><span><b className="cifra text-[18px]">{sinAsignar}</b> {sinAsignar === 1 ? "lead sin asignar" : "leads sin asignar"}</span><span className="text-[13px] font-semibold">Repartir en Leads</span></Link>}
         </div>
       )}
+
+      {/* Sprint 2 · Operación de hoy */}
+      {(() => {
+        const sepEst = separaciones.filter((x) => x.estado === "Activa").map((x) => estadoVisible(x));
+        const items = [
+          ["movimientos", "/admin/movimientos", movimientos.filter((m) => m.estado === "En tránsito").length, "en camino entre sedes", "celeste"],
+          ["preparacion", "/admin/preparacion", unidades.filter((u) => u.ubicacion && u.disponibilidad !== "Vendida" && u.preparacion !== "Lista para entrega").length, "en preparación", "marino"],
+          ["separaciones", "/admin/separaciones", sepEst.filter((e) => e === "Por vencer").length, "separaciones vencen en 2 días", "ambar"],
+          ["separaciones", "/admin/separaciones", sepEst.filter((e) => e === "Vencida por liberar").length, "separaciones vencidas por liberar", "rojo"],
+          ["disponibilidad", "/admin/disponibilidad", unidades.filter((u) => u.disponibilidad === "Disponible").length, "motos disponibles para vender", "verde"],
+        ].filter(([sec, , n], i) => puedeVer(sec) && (n > 0 || i === 4));
+        const tono = { celeste: "text-sky-700 dark:text-sky-300", marino: "text-marino dark:text-white", ambar: "text-amber-600", rojo: "text-acento", verde: "text-emerald-600" };
+        return items.length > 0 && (
+          <Card className="mb-6" data-operacion-hoy>
+            <h2 className="mb-3 font-bold text-marino dark:text-white">Operación de hoy</h2>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              {items.map(([, ruta, n, texto, t]) => (
+                <Link key={texto} to={ruta} className="rounded-xl border border-slate-100 px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5">
+                  <span className={`cifra block font-display text-[2rem] font-bold leading-none ${tono[t]}`}>{n}</span>
+                  <span className="mt-1 block text-[13px] text-slate-600 dark:text-white/70">{n === 1 ? texto.replace(/^motos/, "moto").replace(/^separaciones vencen/, "separación vence").replace(/^separaciones vencidas/, "separación vencida") : texto}</span>
+                </Link>
+              ))}
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Indicadores */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -156,6 +222,94 @@ export default function Resumen() {
             </ul>
           )}
         </Card>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Con la base conectada: solo datos reales de la API (cada bloque avisa si aún no hay datos)
+// ---------------------------------------------------------------------------------------------
+const ABIERTOS = ["Nuevo", "Contactado", "En seguimiento"];
+const cuentaPor = (lista, fn) => Object.entries(lista.reduce((o, x) => { const k = fn(x) || "Sin dato"; o[k] = (o[k] || 0) + 1; return o; }, {}))
+  .map(([k, v]) => ({ id: k, etiqueta: k, v })).sort((a, b) => b.v - a.v);
+const SinDatos = ({ texto = "Sin datos todavía." }) => <p className="py-8 text-center text-[13.5px] text-slate-400">{texto}</p>;
+
+function ResumenCentral() {
+  const { puedeVer, puede } = useAuth();
+  const { publicos = [] } = useApp();
+  const verMotos = puedeVer("inventario") || puedeVer("disponibilidad");
+  const inventario = useConsultaCentral(() => inventarioApi(), [], { activo: verMotos });
+  const leadsC = useConsultaCentral(() => leadsCentralApi({ limite: 200 }), [], { activo: puedeVer("leads") });
+  const [compras, setCompras] = useState(null);
+  useEffect(() => {
+    if (!puede("compras.registrar") || !puedeVer("compras")) return;
+    api.listarCompras(100, 0).then((r) => setCompras(r.data || [])).catch(() => setCompras(null));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const unidades = inventario.data?.unidades || [];
+  const leads = leadsC.data?.leads || [];
+  const libres = unidades.filter((u) => u.comercial === "Libre");
+  const transito = unidades.filter((u) => u.movimiento_activo?.estado === "En transito");
+  const listas = unidades.filter((u) => u.preparacion?.lista_para_entrega);
+  const sinUbicacion = unidades.filter((u) => !u.ubicacion);
+  const porUbicacion = cuentaPor(unidades, (u) => (u.movimiento_activo?.estado === "En transito" ? "En tránsito" : u.ubicacion?.nomubi || "Sin ubicación"));
+  const libresPorModelo = cuentaPor(libres, (u) => u.nommod).slice(0, 6);
+  const leadsPorEstado = ["Nuevo", "Contactado", "En seguimiento", "Cerrado", "Convertido"].map((e) => ({ etiqueta: e.replace("En seguimiento", "Seguim."), v: leads.filter((l) => l.estlea === e).length }));
+  const leadsPorCanal = cuentaPor(leads, (l) => l.canlea);
+  const hayInventario = Boolean(inventario.data);
+  const hayLeads = Boolean(leadsC.data);
+  // Solo se muestran los bloques cuya consulta ya existe en el servidor
+  const motosOk = verMotos && !sinApi(inventario);
+  const leadsOk = puedeVer("leads") && !sinApi(leadsC);
+  const valor = (hay, n) => (hay ? n : "—");
+
+  return (
+    <div>
+      <Bienvenida />
+      {(inventario.data || leadsC.data) && <div className="mb-4 flex flex-wrap items-center justify-end gap-2"><BarraActualizacion consulta={inventario.data ? inventario : leadsC} /></div>}
+
+      {/* Indicadores reales */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6" data-resumen-real>
+        {motosOk && <Stat etiqueta="Motos en inventario" valor={valor(hayInventario, unidades.length)} nota={hayInventario ? `${libres.length} libres para vender` : "Aún sin datos"} />}
+        {motosOk && <Stat etiqueta="En tránsito" valor={valor(hayInventario, transito.length)} tono={transito.length ? "ambar" : "marino"} nota="Falta confirmar la llegada" />}
+        {motosOk && <Stat etiqueta="Listas para entrega" valor={valor(hayInventario, listas.length)} tono="verde" nota="Preparación terminada" />}
+        {leadsOk && <Stat etiqueta="Leads abiertos" valor={valor(hayLeads, leads.filter((l) => ABIERTOS.includes(l.estlea)).length)} nota={hayLeads ? `${leadsC.data.total ?? leads.length} registrados` : "Aún sin datos"} />}
+        <Stat etiqueta="Modelos en la web" valor={publicos.length} nota="Publicados en el catálogo" />
+        {compras && <Stat etiqueta="Compras por completar" valor={compras.length} tono={compras.length ? "ambar" : "marino"} nota="Esperan su factura" />}
+        {motosOk && hayInventario && sinUbicacion.length > 0 && <Stat etiqueta="Sin ubicación" valor={sinUbicacion.length} tono="rojo" nota="Falta registrar dónde están" />}
+      </div>
+
+      {/* Gráficos con datos reales */}
+      <div className="mt-6 grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        {motosOk && <Card>
+          <h2 className="mb-3 font-bold text-marino dark:text-white">Motos por ubicación</h2>
+          {unidades.length ? <Donut datos={porUbicacion} tam={170} /> : <SinDatos />}
+        </Card>}
+        {motosOk && <Card>
+          <div className="mb-3 flex items-center justify-between gap-2"><h2 className="font-bold text-marino dark:text-white">Libres por modelo</h2>{puedeVer("disponibilidad") && <Link to="/admin/disponibilidad" className="text-[12.5px] font-semibold text-marino-700 hover:underline dark:text-white/70">Ver disponibilidad</Link>}</div>
+          {libresPorModelo.length ? <RankingBarras datos={libresPorModelo} /> : <SinDatos />}
+        </Card>}
+        {leadsOk && <Card>
+          <h2 className="mb-3 font-bold text-marino dark:text-white">Leads por estado</h2>
+          {leads.length ? <BarChart datos={leadsPorEstado} series={[{ clave: "v", nombre: "Leads" }]} ancho={380} alto={220} /> : <SinDatos />}
+        </Card>}
+        {leadsOk && <Card>
+          <h2 className="mb-3 font-bold text-marino dark:text-white">Leads por canal</h2>
+          {leads.length ? <Donut datos={leadsPorCanal} tam={160} /> : <SinDatos />}
+        </Card>}
+        {motosOk && <Card>
+          <h2 className="mb-3 font-bold text-marino dark:text-white">Para revisar hoy</h2>
+          {!hayInventario ? <SinDatos /> : (
+            <ul className="space-y-2.5 text-[14px]">
+              {[["En tránsito, por confirmar llegada", transito.length, "/admin/movimientos"],
+                ["Sin ubicación registrada", sinUbicacion.length, "/admin/movimientos"],
+                ["Listas para entregar", listas.length, "/admin/preparacion"]].map(([t, n, to]) => (
+                <li key={t}><Link to={to} className="flex items-center justify-between gap-3 rounded-lg p-2 hover:bg-slate-50 dark:hover:bg-white/5"><span>{t}</span><b className={`cifra ${n ? "text-marino dark:text-white" : "text-slate-400"}`}>{n}</b></Link></li>
+              ))}
+            </ul>
+          )}
+        </Card>}
       </div>
     </div>
   );

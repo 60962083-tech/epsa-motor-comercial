@@ -1,4 +1,4 @@
-// HU-002 · PDF de la factura
+// HU-002 · PDF de la factura · Sprint 2: fotos de modelos (HU-036) y vouchers de separación (HU-005)
 import { MODO_REAL } from "./config";
 import { consultarPdfFacturaApi, subirPdfFacturaApi, urlPdfFacturaApi } from "./api";
 import { ApiError } from "./errores";
@@ -83,7 +83,7 @@ export async function urlPdfFactura(adjunto) {
   }
   if (!adjunto?.ruta) throw new ApiError(404, "Esta factura no tiene PDF adjunto.");
   const blob = await leerLocal(adjunto.ruta);
-  if (!blob) throw new ApiError(404, "El PDF se guardó en otro navegador; adjúntalo de nuevo para verlo aquí.");
+  if (!blob) throw new ApiError(404, "Este PDF no está disponible en este equipo; adjúntalo de nuevo para verlo aquí.");
   return URL.createObjectURL(blob);
 }
 
@@ -95,3 +95,51 @@ export function adjuntoRecordado(codcom) {
 export function recordarAdjunto(codcom, adjunto) {
   try { const m = JSON.parse(localStorage.getItem(CLAVE_ADJ) || "{}"); m[codcom] = adjunto; localStorage.setItem(CLAVE_ADJ, JSON.stringify(m)); } catch {}
 }
+
+// Sprint 2 · Archivos guardados en este navegador (hasta conectar Supabase Storage)
+export const guardarArchivoLocal = guardarLocal;
+export const leerArchivoLocal = leerLocal;
+export async function borrarArchivoLocal(clave) {
+  memoria.delete(clave);
+  try {
+    const d = await db();
+    await new Promise((ok) => { const t = d.transaction("archivos", "readwrite"); t.objectStore("archivos").delete(clave); t.oncomplete = ok; t.onerror = ok; });
+  } catch {}
+}
+
+// Reducir una foto antes de guardarla (lado mayor y calidad)
+export function comprimirImagen(archivo, { lado = 1600, calidad = 0.85, tipo = "image/webp" } = {}) {
+  return new Promise((ok, mal) => {
+    const url = URL.createObjectURL(archivo);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, lado / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob((b) => (b ? ok(b) : mal(new Error("No se pudo procesar la imagen."))), tipo, calidad);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); mal(new Error("No se pudo leer la imagen. Prueba con otra foto.")); };
+    img.src = url;
+  });
+}
+
+// Validar fotos y vouchers
+export const TIPOS_FOTO = ["image/jpeg", "image/png", "image/webp"];
+export const MAX_FOTO = 2 * 1024 * 1024;
+export const MAX_VOUCHER = 5 * 1024 * 1024;
+export function validarFoto(a) {
+  if (!a) return "Elige una foto.";
+  if (!TIPOS_FOTO.includes(a.type)) return `${a.name}: usa JPG, PNG o WEBP.`;
+  if (a.size > MAX_FOTO) return `${a.name}: pesa más de 2 MB. Redúcela e inténtalo de nuevo.`;
+  return "";
+}
+export function validarVoucher(a) {
+  if (!a) return "Adjunta el voucher del pago.";
+  if (![...TIPOS_FOTO, "application/pdf"].includes(a.type)) return "El voucher debe ser una foto (JPG, PNG o WEBP) o un PDF.";
+  if (a.size > MAX_VOUCHER) return "El voucher pesa más de 5 MB.";
+  if (!a.size) return "El archivo está vacío.";
+  return "";
+}
+export const pesoLegible = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);

@@ -1,12 +1,12 @@
 // Equipo del panel
-import { useEffect, useState } from "react";
-import { listarUsuariosSupabase } from "../../lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { cambiarClaveApi, equipoActualizarApi, equipoCrearApi, equipoListarApi, equipoReiniciarClaveApi, listarUsuariosSupabase } from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
-import { esCorreo, esNombreCompleto, limpiarTexto, MSJ, soloDigitos, soloLetras } from "../../lib/validar";
+import { esCorreo, esNombreCompleto, esNombrePersona, haceCuanto, limpiarTexto, MSJ, soloDigitos, soloLetras, soloLetrasNombre } from "../../lib/validar";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { ROLES, SEDES_ATENCION } from "../../data/mockData";
-import { MIN_CLAVE, resumenClave } from "../../lib/clave";
+import { MIN_CLAVE, resumenClave, validarClaveNueva } from "../../lib/clave";
 import { MODO_REAL } from "../../lib/config";
 import { Aviso, Campo, Card, Modal, PageHeader, Tabla, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
 
@@ -15,7 +15,168 @@ const CARGOS = { gerente: ["Gerente"], administradora: ["Administradora", "Admin
 const cargoDe = (p) => p.cargo || ROLES[p.rol]?.nombre;
 const TONO_ROL = { gerente: "bg-marino text-white", administradora: "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200", vendedor: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200" };
 
+// Con la base conectada, las cuentas son las de Supabase; sin conexión, las del navegador
 export default function Equipo() {
+  return MODO_REAL ? <EquipoConectado /> : <EquipoLocal />;
+}
+
+// ---------------------------------------------------------------------
+// Cuentas reales (Supabase): funciones de docs/supabase-login-equipo.sql
+// ---------------------------------------------------------------------
+const ROL_BASE = { gerente: "Gerente", administradora: "Administradora", vendedor: "Vendedor" };
+const ROL_PANEL = { Gerente: "gerente", Administradora: "administradora", Vendedor: "vendedor" };
+const VACIO_REAL = { nombres: "", paterno: "", materno: "", correo: "", rol: "vendedor", activo: true, clave: "" };
+const nombreVisible = (nombres, paterno, materno) => [String(nombres || "").trim().split(/\s+/)[0], paterno, materno].filter(Boolean).join(" ");
+const claveEquipo = (c) => validarClaveNueva(c, undefined, "") || (/\s/.test(c) ? "La contraseña no lleva espacios." : "");
+
+function EquipoConectado() {
+  const { puede, user } = useAuth();
+  const toast = useToast(); const confirmar = useConfirm();
+  const gestiona = puede("accesos");
+  const [cuentas, setCuentas] = useState(null);
+  const [falla, setFalla] = useState(null);
+  const [modal, setModal] = useState(null); const [f, setF] = useState(VACIO_REAL); const [err, setErr] = useState({});
+  const [guardando, setGuardando] = useState(false);
+
+  // Cuentas de la base (se vuelven a leer después de cada cambio)
+  const cargar = useCallback(() => equipoListarApi()
+    .then((l) => { setCuentas(Array.isArray(l) ? l : []); setFalla(null); })
+    .catch((e) => setFalla({ texto: mensajeError(e), faltaSql: Boolean(e.detalle?.faltaSql) })), []);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const filas = (cuentas || []).map((c) => {
+    const rol = ROL_PANEL[c.rol] || "vendedor";
+    return { ...c, rolPanel: rol, nombre: nombreVisible(c.nombres, c.apellido_paterno, c.apellido_materno) };
+  });
+  const esYo = (fila) => fila.correo?.toLowerCase() === String(user.correo || "").toLowerCase();
+
+  // ---------------------------------------------------------------------------------------------
+  // Formulario: agregar o editar una cuenta
+  // ---------------------------------------------------------------------------------------------
+  function abrir(fila) {
+    setErr({});
+    if (!fila) { setF(VACIO_REAL); setModal({}); return; }
+    setF({ nombres: fila.nombres || "", paterno: fila.apellido_paterno || "", materno: fila.apellido_materno || "", correo: fila.correo, rol: fila.rolPanel, activo: fila.activo, clave: "" });
+    setModal({ fila });
+  }
+  const set = (k) => (e) => { const v = e.target.type === "checkbox" ? e.target.checked : e.target.value; setF((x) => ({ ...x, [k]: v })); setErr((x) => ({ ...x, [k]: undefined, general: undefined })); };
+  const setNombre = (k) => (e) => { setF((x) => ({ ...x, [k]: soloLetrasNombre(e.target.value) })); setErr((x) => ({ ...x, [k]: undefined, general: undefined })); };
+
+  function validar() {
+    const x = {};
+    const fila = modal?.fila;
+    if (!esNombrePersona(f.nombres)) x.nombres = "Escribe sus nombres (solo letras y espacios).";
+    if (!esNombrePersona(f.paterno)) x.paterno = "Escribe el apellido paterno (solo letras).";
+    if (f.materno.trim() && !esNombrePersona(f.materno)) x.materno = "Solo letras, o déjalo vacío.";
+    if (!fila) {
+      const correo = f.correo.trim().toLowerCase();
+      if (!esCorreo(correo)) x.correo = MSJ.correo;
+      else if ((cuentas || []).some((c) => c.correo?.toLowerCase() === correo)) x.correo = "Ese correo ya tiene una cuenta.";
+    }
+    if (!fila || f.clave) { const m = claveEquipo(f.clave); if (m) x.clave = fila ? `${m} O déjala vacía para no cambiarla.` : m; }
+    if (fila && esYo(fila) && (f.rol !== fila.rolPanel || !f.activo)) x.rol = "No puedes cambiar tu propio rol ni quitarte el acceso.";
+    if (fila?.rolPanel === "gerente" && fila.activo && (f.rol !== "gerente" || !f.activo) && filas.filter((c) => c.rolPanel === "gerente" && c.activo).length === 1) x.rol = "Debe quedar al menos un gerente con acceso.";
+    setErr(x); return Object.keys(x).length === 0;
+  }
+
+  async function guardar(e) {
+    e.preventDefault();
+    if (!validar()) return;
+    const fila = modal.fila;
+    const correo = fila ? fila.correo.toLowerCase() : f.correo.trim().toLowerCase();
+    const base = { nombres: limpiarTexto(f.nombres), paterno: limpiarTexto(f.paterno), materno: limpiarTexto(f.materno), rol: ROL_BASE[f.rol], activo: fila ? f.activo : true };
+    const nombre = nombreVisible(base.nombres, base.paterno, base.materno);
+    setGuardando(true);
+    try {
+      if (fila) {
+        await equipoActualizarApi({ codusu: fila.codusu, ...base });
+        // La contraseña propia se cambia con la sesión; la de otra persona queda como temporal
+        if (f.clave && esYo(fila)) await cambiarClaveApi(f.clave);
+        else if (f.clave) await equipoReiniciarClaveApi(fila.codusu, f.clave);
+        toast(`Cuenta actualizada${f.clave && !esYo(fila) ? `. ${nombre.split(" ")[0]} entrará con la contraseña temporal y creará la suya` : f.clave ? ". Tu contraseña cambió" : ""}.`);
+      } else {
+        await equipoCrearApi({ correo, ...base, clave: f.clave });
+        toast(`${nombre} ya puede ingresar con ${correo} y la contraseña temporal.`);
+      }
+      setModal(null);
+      cargar();
+    } catch (er) { setErr({ general: mensajeError(er) }); } finally { setGuardando(false); }
+  }
+
+  // Quitar o devolver el acceso (las cuentas no se eliminan)
+  async function alternarAcceso(fila) {
+    if (esYo(fila)) return toast("No puedes quitarte tu propio acceso.", "error");
+    if (fila.activo && fila.rolPanel === "gerente" && filas.filter((c) => c.rolPanel === "gerente" && c.activo).length === 1) return toast("Debe quedar al menos un gerente con acceso.", "error");
+    if (fila.activo && !(await confirmar({ titulo: `Quitar acceso a ${fila.nombre}`, texto: "No podrá ingresar al panel. Su cuenta y su historial se conservan; puedes devolverle el acceso cuando quieras.", boton: "Quitar acceso" }))) return;
+    try {
+      await equipoActualizarApi({ codusu: fila.codusu, nombres: fila.nombres, paterno: fila.apellido_paterno, materno: fila.apellido_materno, rol: fila.rol, activo: !fila.activo });
+      toast(fila.activo ? "Acceso retirado." : "Acceso restituido.");
+      cargar();
+    } catch (er) { toast(mensajeError(er), "error"); }
+  }
+
+  const propia = modal?.fila && esYo(modal.fila);
+  return (
+    <div>
+      <PageHeader titulo="Equipo" subtitulo="Cuentas que ingresan al panel y el rol de cada persona.">
+        {gestiona && !falla && <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Agregar usuario</button>}
+      </PageHeader>
+      {!gestiona && <div className="mb-4"><Aviso tipo="aviso">Solo la gerencia agrega usuarios y administra accesos. Aquí puedes consultar el equipo.</Aviso></div>}
+
+      {falla ? (
+        <div className="space-y-4" data-equipo-falla>
+          <Aviso tipo={falla.faltaSql ? "aviso" : "error"}>{falla.faltaSql ? "La administración de cuentas todavía no está habilitada en el sistema. Mientras tanto, cada persona entra con su correo y su contraseña si su cuenta ya existe." : falla.texto}</Aviso>
+          {!falla.faltaSql && <button className="btn btn-secondary !py-2" onClick={cargar}>Reintentar</button>}
+        </div>
+      ) : !cuentas ? <p className="py-10 text-center text-[14px] text-slate-400">Cargando cuentas…</p> : (
+        <Tabla columnas={["Usuario", "Rol", "Acceso", ...(gestiona ? ["Acciones"] : [])]} vacio={filas.length ? null : <p className="px-4 py-8 text-center text-[14px] text-slate-400">Aún no hay cuentas.</p>}>
+          {filas.map((c) => (
+            <tr key={c.codusu} data-cuenta={c.correo}>
+              <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-marino-50 font-bold text-marino dark:bg-white/10 dark:text-white">{c.nombre[0]}</span><div className="min-w-0"><p className="whitespace-nowrap font-semibold text-marino dark:text-white">{c.nombre}{esYo(c) && <span className="ml-1.5 text-[12px] font-normal text-slate-400">(tú)</span>}</p><p className="whitespace-nowrap text-[12px] text-slate-500 dark:text-white/50" data-correo>{c.correo}</p></div></div></td>
+              <td className="px-4 py-3"><span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-semibold ${TONO_ROL[c.rolPanel]}`}>{ROLES[c.rolPanel]?.nombre}</span></td>
+              <td className="px-4 py-3"><div className="flex flex-col items-start gap-1.5">
+                <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-semibold ${c.activo ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`} data-acceso>{c.activo ? "Activo" : "Sin acceso"}</span>
+                <span className="flex items-center gap-1.5 whitespace-nowrap text-[11.5px] text-slate-500 dark:text-white/50">Contraseña {c.clave_temporal ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11.5px] font-semibold text-amber-800">Temporal</span> : <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11.5px] font-semibold text-emerald-700">Personal</span>}</span>
+                <span className="whitespace-nowrap text-[11.5px] text-slate-400">{c.ultimo_ingreso ? `Entró ${haceCuanto(c.ultimo_ingreso)}` : "Aún no ingresa"}</span>
+              </div></td>
+              {gestiona && (
+                <td className="min-w-[200px] px-4 py-3"><div className="flex flex-wrap gap-1.5 [&>button]:whitespace-nowrap">
+                  <button className={btnMini} onClick={() => abrir(c)}>Editar</button>
+                  {!esYo(c) && <button className={c.activo ? btnMiniPeligro : btnMini} onClick={() => alternarAcceso(c)}>{c.activo ? "Quitar acceso" : "Dar acceso"}</button>}
+                </div></td>
+              )}
+            </tr>
+          ))}
+        </Tabla>
+      )}
+      <p className="mt-3 text-[12.5px] text-slate-400">Las cuentas no se eliminan: se les quita el acceso y su historial se conserva.</p>
+
+      {/* Agregar / editar cuenta */}
+      <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.fila ? `Editar a ${modal.fila.nombre}` : "Agregar usuario"} ancho="max-w-xl"
+        confirmarGuardar={modal?.fila ? { titulo: "¿Guardar los cambios?", texto: `Se actualizará la cuenta de ${modal.fila.nombre}.${f.clave && !propia ? " Entrará con la nueva contraseña temporal." : ""}`, boton: "Guardar cambios", validar } : { titulo: "¿Crear esta cuenta?", texto: `${limpiarTexto(f.nombres).split(" ")[0] || "La persona"} podrá ingresar como ${ROLES[f.rol]?.nombre} con su correo y la contraseña temporal. Al entrar, creará la suya.`, boton: "Crear cuenta", validar }}
+        pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-eq-real" className="btn btn-primary !py-2" disabled={guardando}>{guardando ? "Guardando…" : modal?.fila ? "Guardar" : "Crear cuenta"}</button></>}>
+        <form id="f-eq-real" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
+          <Campo etiqueta="Nombres" error={err.nombres} className="sm:col-span-2"><input id="eqr-nombres" className="field-input" value={f.nombres} maxLength={60} onChange={setNombre("nombres")} autoComplete="off" /></Campo>
+          <Campo etiqueta="Apellido paterno" error={err.paterno}><input id="eqr-paterno" className="field-input" value={f.paterno} maxLength={60} onChange={setNombre("paterno")} autoComplete="off" /></Campo>
+          <Campo etiqueta="Apellido materno (opcional)" error={err.materno}><input id="eqr-materno" className="field-input" value={f.materno} maxLength={60} onChange={setNombre("materno")} autoComplete="off" /></Campo>
+          <Campo etiqueta="Correo (para ingresar)" error={err.correo} ayuda={modal?.fila ? "El correo de una cuenta no se cambia." : undefined}><input id="eqr-correo" type="email" maxLength={254} className="field-input" value={f.correo} onChange={set("correo")} disabled={!!modal?.fila} placeholder="nombre@empresa.com" autoComplete="off" /></Campo>
+          <Campo etiqueta="Rol" error={err.rol}><select id="eqr-rol" className="field-input" value={f.rol} onChange={set("rol")} disabled={propia}>{Object.entries(ROLES).map(([k, r]) => <option key={k} value={k}>{r.nombre}</option>)}</select></Campo>
+          <Campo etiqueta={propia ? "Nueva contraseña (opcional)" : modal?.fila ? "Nueva contraseña temporal (opcional)" : "Contraseña temporal"} error={err.clave} className="sm:col-span-2"
+            ayuda={`Mínimo ${MIN_CLAVE} caracteres, con letras y números, sin espacios.${propia ? " Es tu contraseña para entrar." : " Al ingresar, la persona crea la suya."}`}>
+            <input id="eqr-clave" type="text" autoComplete="off" className="field-input" value={f.clave} onChange={set("clave")} />
+          </Campo>
+          {modal?.fila && !propia && <label className="flex items-center gap-2 text-[13.5px] sm:col-span-2"><input type="checkbox" className="h-4 w-4 accent-[#0e2c52]" checked={f.activo} onChange={set("activo")} />Acceso activo</label>}
+          {err.general && <div className="sm:col-span-2"><Aviso tipo="error">{err.general}</Aviso></div>}
+        </form>
+      </Modal>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Sin conexión: equipo guardado en este navegador (modo demostración)
+// ---------------------------------------------------------------------
+function EquipoLocal() {
   const { equipo, agregar, actualizar, eliminar, leads, ventas, seguimientos } = useApp();
   const { puede, user } = useAuth();
   const toast = useToast(); const confirmar = useConfirm();

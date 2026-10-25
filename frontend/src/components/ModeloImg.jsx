@@ -4,6 +4,8 @@ import MotoIllustration from "./MotoIllustration";
 import { filtroEntre } from "../data/mockData";
 
 export function fotoDeColor(modelo, color) {
+  // HU-036: foto central subida o enlazada por HTTPS, tal cual (no se pinta otro color encima)
+  if (modelo.sinTinte) return { src: modelo.imagenApi || modelo.imagen, filtro: "" };
   const c = color || modelo.colorPortada || modelo.colores?.[0];
   const propia = c && modelo.fotosColor?.[c];
   if (propia) return { src: propia, filtro: "" };
@@ -11,6 +13,16 @@ export function fotoDeColor(modelo, color) {
   const src = conRoja || modelo.imagenApi || modelo.imagen;
   const colorDeLaFoto = conRoja ? "Rojo" : modelo.colorFoto || "Rojo";
   return { src, filtro: filtroEntre(colorDeLaFoto, c) };
+}
+
+// Hasta n modelos sin repetir la misma foto (primero uno por familia, para que haya variedad)
+export function motosConFotoDistinta(modelos = [], n = 3) {
+  const fotos = new Set();
+  const familias = new Set();
+  const elegir = (m) => { const src = fotoDeColor(m).src; if (!src || fotos.has(src)) return false; fotos.add(src); return true; };
+  const primero = modelos.filter((m) => !familias.has(m.familia) && familias.add(m.familia) && elegir(m));
+  const resto = modelos.filter((m) => !primero.includes(m) && elegir(m));
+  return [...primero, ...resto].slice(0, n);
 }
 
 export default function ModeloImg({ modelo, color, className = "", alt }) {
