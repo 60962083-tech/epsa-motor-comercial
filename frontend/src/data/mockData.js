@@ -7,6 +7,21 @@ export const TORITO_ICONOS = {
   dimensiones: `${TORITO}/2025/06/icono-dimesiones.svg`, electrico: `${TORITO}/2025/12/icono-sistema-electrico.svg`,
 };
 export const LOGO_TORITO = `${TORITO}/2026/01/logotipo-torito-bajaj-1.png`;
+export const FOTOS_FAMILIA = {
+  cuatroValvulas: `${TORITO}/2026/09/torito-4v-gsl-azul-02-34-frontal-der.png`,
+  dosTiempos: `${TORITO}/2025/10/Para-pasajeros-2-T.png`,
+  cargaPasajeros: `${TORITO}/2025/10/Para-carga-y-pasajeros.png`,
+  cromPlus: `${TORITO}/2025/10/Para-pasajeros-4-T.png`,
+  torito250: `${TORITO}/2026/09/torito_titanx_rojo_8-1.png`,
+};
+// Eventos de Torito Bajaj en el Perú (blog de torito.pe): fotos reales de la comunidad Torito
+export const EVENTOS_TORITO = [
+  { foto: `${TORITO}/2025/03/67336ee4a0342321917366.jpeg`, titulo: "Curso de Seguridad Vial en Mi Perú" },
+  { foto: `${TORITO}/2025/03/673e0421a17b3309949029-scaled.jpeg`, titulo: "Evento de Tuning de Motocarro" },
+  { foto: `${TORITO}/2025/03/image-29-min.jpg`, titulo: "Escuela de Ventas Torito Bajaj en Lima Norte" },
+  { foto: `${TORITO}/2025/03/672cd2d9704c7145862703.jpg`, titulo: "El Crom Plus en Ilave" },
+  { foto: `${TORITO}/2025/03/673208ffe0d70475384436-scaled.jpeg`, titulo: "Gran Campeonato Torito en Puno" },
+];
 export const SELLO_BAJAJ = `${TORITO}/2025/12/bajaj-favorita-en-100-paises-125x53-1.png`;
 
 // Catálogo de modelos
@@ -17,8 +32,8 @@ export const MODELOS = [
     id: "torito-4v-gsl", codmod: "1", nombre: "Torito 4V GSL", familia: "Motores 4 Válvulas",
     estado: "Publicado", tipoMotor: "4 tiempos", combustible: "Gasolina", uso: "Pasajeros", tipoTecho: "Clásico",
     precioDesde: 17899, badges: ["NUEVO MODELO", "PRECIO DE LANZAMIENTO"],
-    imagen: `${TORITO}/2025/04/1-5.png`, local: "/images/modelos/modelo-1.png",
-    colores: ["Rojo"],
+    imagen: `${TORITO}/2026/09/torito_hrv_azul_34frontal.png`, local: "/images/modelos/modelo-1.png",
+    colorFoto: "Azul", colores: ["Azul"],
     descripcion: "El Torito 4V GSL es el motocar a gasolina con motor de 4 válvulas: más potencia y torque para subir pendientes con carga completa, menor consumo y una conducción más estable. Pensado para el conductor que trabaja todos los días y necesita una herramienta confiable.",
     destacados: ["Motor 4 válvulas de 236.2 cc con 10.73 HP", "Torque de 20 Nm para pendientes y carga", "Velocidad máxima de 65 km/h", "Tanque de 8 litros de gasolina"],
     resumen: {"Motor": "4 tiempos, 4 válvulas", "Cilindrada": "236.2 cc", "Llantas": "Aro 8\" sin cámara", "Potencia": "10.73 HP", "Torque": "20 Nm"},
@@ -34,7 +49,7 @@ export const MODELOS = [
     id: "torito-4v-glp", codmod: "2", nombre: "Torito 4V GLP", familia: "Motores 4 Válvulas",
     estado: "Publicado", tipoMotor: "4 tiempos", combustible: "GLP", uso: "Pasajeros", tipoTecho: "Clásico",
     precioDesde: 17899, badges: ["NUEVO MODELO", "PRECIO DE LANZAMIENTO"],
-    imagen: `${TORITO}/2025/04/1-5.png`, local: "/images/modelos/modelo-2.png",
+    imagen: `${TORITO}/2026/09/torito_hrv_rojo_34frontal.png`, local: "/images/modelos/modelo-2.png",
     colores: ["Rojo"],
     descripcion: "El Torito 4V GLP combina el motor de 4 válvulas con un sistema dual GLP + gasolina. Ahorra en cada kilómetro con gas y conserva el respaldo de gasolina cuando lo necesites.",
     destacados: ["Sistema dual: tanque de GLP de 20.6 L + 3 L de gasolina", "Motor de 4 válvulas con 10.33 HP", "Torque de 18 Nm", "Ahorro diario frente a la gasolina"],
@@ -122,7 +137,7 @@ export const MODELOS = [
     id: "torito-crom-plus-gnv", codmod: "6", nombre: "Torito Crom Plus GNV", familia: "Motores Crom Plus",
     estado: "Publicado", tipoMotor: "4 tiempos", combustible: "GNV", uso: "Pasajeros", tipoTecho: "Especial",
     precioDesde: 17199, badges: [],
-    imagen: `${TORITO}/2025/04/8.png`, local: "/images/modelos/modelo-6.png",
+    imagen: `${TORITO}/2025/10/Para-pasajeros-4-T.png`, local: "/images/modelos/modelo-6.png", sinTinte: true,
     colores: ["Rojo"],
     descripcion: "El Crom Plus GNV es el motocar para quien quiere gastar menos: funciona con gas natural, el combustible más económico por kilómetro.",
     destacados: ["Motor de 198.88 cc", "Tanque de GNV de 30 L (4.5 kg)", "8.78 HP y 14.5 Nm", "El combustible más económico"],
@@ -262,11 +277,6 @@ export const EQUIPO = [
   { id: 5, nombre: "Michelle Fuentes Villaorduña", usuario: "michelle", correo: "61106576@mail.isil.pe", claveHash: "314d6b7d5b779aaa120d1509f684c59a3be3e721dbdd262a89f78359f10cae10", claveTemporal: true, celular: "", rol: "vendedor", cargo: "Vendedora", sede: "Ventanilla", activo: true, ausente: false, recibeLeads: true },
 ];
 
-export const CUENTAS_DEMO = [
-  { correo: "gerente.demo@epsamotor.test", claveHash: "d65f3e153803f34fdd1ef6182495282a73e89f1b8f5c1657e880cf7342684dd9", nombre: "Gerente Demo", rol: "gerente", cargo: "Gerente" },
-  { correo: "admin.demo@epsamotor.test", claveHash: "b10fc3456f38c210d557cd0573ddd30e2de07c79f5056c9f9fe35b066563e15f", nombre: "Admin Demo", rol: "administradora", cargo: "Administradora" },
-  { correo: "vendedor.demo@epsamotor.test", claveHash: "22178c0656a5765c2aa0d96abf5b8dc1a5a2d461152d9d2979433cfa7b1e9b53", nombre: "Vendedor Demo", rol: "vendedor", cargo: "Vendedor" },
-];
 
 // Registros de ejemplo
 const hoy = new Date();
@@ -315,23 +325,23 @@ export const UNIDADES = [
   unidad(4, "torito-250-4v-glp", "Rojo", "Comas", "Vendida", "Techo de fibra deportiva", "JAVICAR"),
   unidad(5, "torito-2t-ug-gsl", "Azul", "Ventanilla", "Vendida"),
   unidad(6, "torito-2t-ug-glp", "Verde", "Puente Piedra", "Disponible"),
-  unidad(7, "torito-4v-gnv", "Rojo", "Puente Piedra", "Disponible", "Sin techo", "", "Pendiente de techo"),
-  unidad(8, "torito-crom-plus-glp", "Azul", "Comas", "Disponible"),
+  unidad(7, "torito-4v-gnv", "Rojo", "JAVICAR", "No disponible", "Techo de fibra deportiva", "JAVICAR", "Pendiente de techo"),
+  unidad(8, "torito-crom-plus-glp", "Azul", "Comas", "Separada"),
   unidad(9, "torito-250-4v-glp", "Rojo", "Puente Piedra", "Disponible"),
 ];
 
 const IDENT_C2 = Array.from({ length: 3 }, (_, i) => ({ nummotuni: `CPG-${40100 + i * 7}`, chauni: `CPC-${77300 + i * 9}`, codmod: "6", coluni: "Rojo", fecreguni: dia(5) }));
 UNIDADES.push(...IDENT_C2.map((u, i) => ({
   id: `MC-${String(10 + i).padStart(3, "0")}`, codcom: "2", modelo: "torito-crom-plus-gnv", color: "Rojo",
-  ubicacion: i === 0 ? "Crossland Ancón" : "", preparacion: "Sin preparar", techo: "Sin techo", proveedorTecho: "", estadoTecho: "", observaciones: [],
+  ubicacion: i === 0 ? "Puente Piedra" : "", preparacion: "Sin preparar", techo: "Sin techo", proveedorTecho: "", estadoTecho: "", observaciones: [],
   disponibilidad: "No disponible", motor: u.nummotuni, chasis: u.chauni,
-  historial: [{ fecha: dia(5), detalle: "Identificada en la compra #2" }, ...(i === 0 ? [{ fecha: dia(3), detalle: "Recepción física en Crossland Ancón" }] : [])],
+  historial: [{ fecha: dia(5), detalle: "Identificada en la compra #2" }, ...(i === 0 ? [{ fecha: dia(3), detalle: "Recepción desde Crosland en Puente Piedra" }] : [])],
 })));
 
 UNIDADES.push(
   unidad(13, "torito-2t-ug-gsl", "Azul", "Comas", "Disponible"),
   unidad(14, "torito-crom-plus-gnv", "Rojo", "Comas", "Disponible", "Techo clásico de fibra"),
-  unidad(15, "torito-2t-ug-glp", "Rojo", "Ventanilla", "Disponible"),
+  unidad(15, "torito-2t-ug-glp", "Rojo", "Ventanilla", "Separada"),
   unidad(16, "torito-4v-gsl", "Rojo", "Puente Piedra", "Disponible", "Lona"),
 );
 
@@ -343,6 +353,107 @@ export const COMPRAS = [
     factura: { codfac: "2", emisor: "Crosland Perú S.A.C.", numero: "F001-004598", fecha_emision: dia(6), cantidad_motos: 5, archivo_adjuntado: false }, unidades: IDENT_C2 },
   { id: 3, codcom: "3", codmod: "4", nommod: "Torito 2T UG GLP", colcom: "Amarillo", cancom: 3, cantidad_pendiente: 3, estcom: "Pendiente de factura", feccom: dia(1), horcom: "09:20", codusu: "Jazmín Reinoso Rojas", factura: null, unidades: [] },
 ];
+
+// Sprint 2 · Reglas de movimientos, preparación y separaciones
+export const ORIGEN_RECEPCION = "Crossland Ancón";
+export const ESTADOS_MOVIMIENTO = ["En tránsito", "Finalizado", "Cancelado"];
+export const ESTADOS_SEPARACION = ["Activa", "Vencida", "Cancelada", "Convertida en venta"];
+export const MEDIOS_PAGO = ["Efectivo", "Transferencia", "Yape / Plin", "Depósito", "Tarjeta"];
+export const MEDIOS_CON_OPERACION = ["Transferencia", "Yape / Plin", "Depósito", "Tarjeta"];
+export const ADELANTO_MINIMO = 100;
+export const DIAS_SEPARACION = 7;
+export const MAX_EXTENSIONES = 2;
+export const MOTIVOS_CANCELACION = ["El cliente desistió", "No aprobó el crédito", "Cambió de modelo o color", "Error al registrar", "Otro motivo"];
+export const PASO_PREPARACION = {
+  "Sin preparar": "Recién llegada a la sede. Falta revisarla.",
+  "Pendiente de techo": "Espera que el proveedor instale el techo.",
+  "En preparación": "Revisión, limpieza, placa provisional y accesorios.",
+  "Lista para entrega": "Lista para vender. Ya aparece en Disponibilidad.",
+};
+export const CHECKLIST_RECEPCION = ["Llaves completas", "Manual y garantía", "Kit de herramientas", "Sin golpes ni rayones"];
+
+// Fechas de ejemplo con hora
+const instante = (n, h = 10, m = 0) => { const d = new Date(hoy.getTime() - n * 86400000); d.setHours(h, m, 0, 0); return d.toISOString(); };
+const haceMinutos = (min) => new Date(hoy.getTime() - min * 60000).toISOString();
+const unidadDe = (id) => UNIDADES.find((u) => u.id === id);
+const anotar = (id, fecha, detalle) => { const u = unidadDe(id); if (u) u.historial.push({ fecha: new Date(fecha).toLocaleDateString("en-CA"), detalle }); };
+
+// HU-003 · Movimientos de ubicación
+let nMov = 0;
+const mov = (unidad, tipo, origen, destino, n, h, extra = {}) => ({
+  id: ++nMov, unidad, tipo, origen, destino, estado: "Finalizado", salida: instante(n, h), llegada: instante(n, h + 2),
+  usuario: "Jazmín Reinoso Rojas", motivo: "", obs: "", ...extra,
+});
+export const MOVIMIENTOS = [
+  ...UNIDADES.filter((u) => u.ubicacion && !u.codcom).map((u) => mov(u.id, "Recepción", ORIGEN_RECEPCION, u.id === "MC-002" ? "Comas" : u.id === "MC-007" ? "Puente Piedra" : u.ubicacion, 20, 9, { obs: "Llaves completas, manual y garantía, kit de herramientas." })),
+  mov("MC-010", "Recepción", ORIGEN_RECEPCION, "Puente Piedra", 3, 9, { obs: "Llaves completas, manual y garantía. Falta el kit de herramientas." }),
+  mov("MC-002", "Traslado", "Comas", "FIVESA", 15, 9, { motivo: "Instalación del techo de fibra deportiva" }),
+  mov("MC-002", "Traslado", "FIVESA", "Ventanilla", 9, 14, { motivo: "Techo instalado", obs: "Techo revisado al llegar." }),
+  mov("MC-007", "Traslado", "Puente Piedra", "JAVICAR", 2, 10, { motivo: "Instalación del techo de fibra deportiva" }),
+  mov("MC-013", "Traslado", "Comas", "Ventanilla", 4, 11, { estado: "Cancelado", llegada: null, motivo: "Pedido de la sede Ventanilla", cancelacion: { fecha: instante(4, 12), motivo: "El cliente prefirió verla en Comas", usuario: "Harold Salazar Masgo" } }),
+  { id: ++nMov, unidad: "MC-006", tipo: "Traslado", origen: "Puente Piedra", destino: "Comas", estado: "En tránsito", salida: haceMinutos(95), llegada: null, usuario: "Adrián Dionicio Alcarraz", motivo: "Un cliente de Comas quiere verla", obs: "" },
+];
+anotar("MC-002", instante(15, 9), "Traslado Comas → FIVESA (Instalación del techo de fibra deportiva)");
+anotar("MC-002", instante(9, 16), "Traslado FIVESA → Ventanilla finalizado");
+anotar("MC-013", instante(4, 12), "Traslado a Ventanilla cancelado: el cliente prefirió verla en Comas");
+anotar("MC-006", haceMinutos(95), "Sale de Puente Piedra hacia Comas (en tránsito)");
+
+// HU-033 · Historial de preparación
+let nPrep = 0;
+const paso = (unidad, pasoNuevo, anterior, fecha, usuario = "Jazmín Reinoso Rojas", obs = "") => ({ id: ++nPrep, unidad, paso: pasoNuevo, anterior, fecha, usuario, obs });
+export const HISTORIAL_PREPARACION = [];
+for (const u of UNIDADES) {
+  if (!u.ubicacion) continue;
+  if (u.id === "MC-010") { HISTORIAL_PREPARACION.push(paso(u.id, "Sin preparar", "", instante(3, 11))); continue; }
+  HISTORIAL_PREPARACION.push(paso(u.id, "Sin preparar", "", instante(20, 11)));
+  if (u.id === "MC-007") { HISTORIAL_PREPARACION.push(paso(u.id, "Pendiente de techo", "Sin preparar", instante(17, 10), "Jazmín Reinoso Rojas", "Techo de fibra deportiva encargado a JAVICAR")); continue; }
+  const conTecho = u.techo && u.techo !== "Sin techo";
+  if (conTecho) HISTORIAL_PREPARACION.push(paso(u.id, "Pendiente de techo", "Sin preparar", instante(u.id === "MC-002" ? 16 : 19, 9)));
+  HISTORIAL_PREPARACION.push(paso(u.id, "En preparación", conTecho ? "Pendiente de techo" : "Sin preparar", instante(u.id === "MC-002" ? 9 : 18, 15)));
+  HISTORIAL_PREPARACION.push(paso(u.id, "Lista para entrega", "En preparación", instante(u.id === "MC-002" ? 8 : 17, 12), "Jazmín Reinoso Rojas", "Revisión completa"));
+}
+unidadDe("MC-007").estadoTecho = "Pendiente de instalación";
+anotar("MC-007", instante(17, 10), "Preparación: Pendiente de techo (fibra deportiva de JAVICAR)");
+anotar("MC-007", instante(2, 12), "Traslado Puente Piedra → JAVICAR (Instalación del techo de fibra deportiva)");
+
+// HU-005 · Clientes y separaciones
+export const CLIENTES = [
+  { id: 1, tipoDoc: "DNI", doc: "40007919", nombres: "Mario", apellidoPaterno: "Díaz", apellidoMaterno: "Ruiz", razonSocial: "", celular: "911137531", correo: "", registrado: dia(6) },
+  { id: 2, tipoDoc: "DNI", doc: "45219876", nombres: "Luis Alberto", apellidoPaterno: "Huamán", apellidoMaterno: "Quispe", razonSocial: "", celular: "956112233", correo: "", registrado: dia(5) },
+  { id: 3, tipoDoc: "CE", doc: "001234567", nombres: "Andrea", apellidoPaterno: "Morales", apellidoMaterno: "Pérez", razonSocial: "", celular: "934556677", correo: "", registrado: dia(8) },
+  { id: 4, tipoDoc: "RUC", doc: "20609812347", nombres: "", apellidoPaterno: "", apellidoMaterno: "", razonSocial: "Mototaxis Unidos del Norte S.A.C.", celular: "987112244", correo: "", registrado: dia(4) },
+];
+export const SEPARACIONES = [
+  { id: 1, unidad: "MC-003", cliente: 1, vendedor: "Michelle Fuentes Villaorduña", sede: "Ventanilla", monto: 5200, medio: "Transferencia", operacion: "OP558201", fechaPago: dia(6),
+    voucher: { nombre: "transferencia-OP558201.pdf", tipo: "application/pdf", tamano: 182400, ejemplo: true }, fecha: instante(6, 11), vence: dia(-1), extensiones: 0, estado: "Convertida en venta",
+    ventaId: 3, conversion: { fecha: instante(6, 12), usuario: "Michelle Fuentes Villaorduña" }, obs: "" },
+  { id: 2, unidad: "MC-008", cliente: 2, vendedor: "Didier Leguía Sandoval", sede: "Comas", monto: 500, medio: "Yape / Plin", operacion: "YP77120", fechaPago: dia(5),
+    voucher: { nombre: "yape-77120.jpg", tipo: "image/jpeg", tamano: 96300, ejemplo: true }, fecha: instante(5, 16), vence: dia(-2), extensiones: 0, estado: "Activa", obs: "Viene el sábado con su DNI para el crédito." },
+  { id: 3, unidad: "MC-015", cliente: 3, vendedor: "Michelle Fuentes Villaorduña", sede: "Ventanilla", monto: 300, medio: "Efectivo", operacion: "", fechaPago: dia(8),
+    voucher: null, fecha: instante(8, 10), vence: dia(1), extensiones: 0, estado: "Activa", obs: "Recibo de caja N° 0451." },
+  { id: 4, unidad: "MC-009", cliente: 4, vendedor: "Didier Leguía Sandoval", sede: "Puente Piedra", monto: 1000, medio: "Transferencia", operacion: "OP660019", fechaPago: dia(4),
+    voucher: { nombre: "transferencia-OP660019.png", tipo: "image/png", tamano: 140220, ejemplo: true }, fecha: instante(4, 12), vence: dia(-3), extensiones: 0, estado: "Cancelada",
+    cancelacion: { fecha: instante(2, 15), motivo: "No aprobó el crédito", detalle: "La financiera no aprobó la evaluación.", usuario: "Harold Salazar Masgo" }, obs: "" },
+];
+anotar("MC-008", instante(5, 16), "Separada para Luis Alberto Huamán Quispe (adelanto S/ 500, Yape / Plin)");
+anotar("MC-015", instante(8, 10), "Separada para Andrea Morales Pérez (adelanto S/ 300, efectivo)");
+anotar("MC-009", instante(4, 12), "Separada para Mototaxis Unidos del Norte S.A.C. (adelanto S/ 1,000)");
+anotar("MC-009", instante(2, 15), "Separación cancelada: No aprobó el crédito. Vuelve a estar disponible");
+for (const u of UNIDADES) u.historial.sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+// HU-036 · Fotos de cada modelo (las oficiales de torito.pe)
+let nImg = 0;
+export const IMAGENES_MODELO = [];
+for (const m of MODELOS) {
+  const vistas = new Set();
+  const agregarFoto = (url, color, principal) => {
+    if (!url || vistas.has(url)) return;
+    vistas.add(url);
+    IMAGENES_MODELO.push({ id: ++nImg, modelo: m.id, url, archivo: "", orden: vistas.size, principal, color: color || "", activa: true, origen: "Oficial", fecha: dia(30), usuario: "Sistema" });
+  };
+  agregarFoto(m.imagen, m.colorFoto || (m.colores?.length === 1 ? m.colores[0] : "Rojo"), true);
+  for (const [c, url] of Object.entries(m.fotosColor || {})) agregarFoto(url, c, false);
+}
 
 // Opiniones
 export const ETIQUETAS_OPINION = ["Pasajeros", "Inicio de negocio", "Carga", "Financiamiento", "Ahorro", "Logística"];
@@ -361,20 +472,20 @@ export const OPINIONES = [
 export const ROLES = {
   gerente: {
     nombre: "Gerente",
-    puede: ["resumen", "leads", "seguimiento", "ventas", "facturas", "metas", "modelos", "opiniones", "inventario", "ubicaciones", "compras", "equipo"],
+    puede: ["resumen", "leads", "seguimiento", "disponibilidad", "separaciones", "ventas", "facturas", "metas", "modelos", "opiniones", "inventario", "movimientos", "preparacion", "ubicaciones", "compras", "facturasRecibidas", "equipo", "permisos"],
     permisos: ["*"],
     descripcion: "Acceso total: crea, edita, desactiva y elimina. Administra sedes, usuarios y metas, y emite comprobantes.",
   },
   administradora: {
     nombre: "Administradora",
-    puede: ["resumen", "leads", "seguimiento", "ventas", "facturas", "metas", "modelos", "opiniones", "inventario", "ubicaciones", "compras", "equipo"],
-    permisos: ["ver", "crear", "editar", "mover", "modelos.editar", "modelos.publicar", "compras.registrar", "compras.factura", "unidades.gestionar", "unidades.trasladar", "leads.ausencia", "comprobantes.emitir", "ubicaciones.gestionar"],
-    descripcion: "Gestiona modelos, compras, facturas de proveedor, inventario y comprobantes de venta. No elimina ni administra sedes ni usuarios.",
+    puede: ["resumen", "leads", "seguimiento", "disponibilidad", "separaciones", "ventas", "facturas", "metas", "modelos", "opiniones", "inventario", "movimientos", "preparacion", "ubicaciones", "compras", "facturasRecibidas", "equipo"],
+    permisos: ["ver", "crear", "editar", "mover", "modelos.editar", "modelos.publicar", "compras.registrar", "compras.factura", "unidades.gestionar", "unidades.trasladar", "leads.ausencia", "leads.asignar", "comprobantes.emitir", "ubicaciones.gestionar", "separaciones.registrar", "separaciones.gestionar"],
+    descripcion: "Gestiona modelos, compras, facturas de proveedor, inventario, movimientos, preparación, separaciones y comprobantes de venta. No elimina ni administra usuarios.",
   },
   vendedor: {
     nombre: "Vendedor",
-    puede: ["resumen", "leads", "seguimiento", "ventas", "inventario"],
-    permisos: ["ver", "crear", "unidades.observar"],
-    descripcion: "Atiende leads, seguimiento, separaciones y ventas, y consulta el stock. No ve compras, ubicaciones ni facturación.",
+    puede: ["resumen", "leads", "seguimiento", "disponibilidad", "separaciones", "ventas", "inventario"],
+    permisos: ["ver", "crear", "unidades.observar", "separaciones.registrar"],
+    descripcion: "Atiende leads y seguimiento, consulta la disponibilidad, separa motos con adelanto y registra ventas. No ve compras, ubicaciones ni facturación.",
   },
 };

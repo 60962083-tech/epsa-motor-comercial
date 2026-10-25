@@ -1,4 +1,4 @@
-// Ventas a clientes
+// Ventas a clientes · Sprint 2: las separaciones (HU-005) se registran y se convierten en venta
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
@@ -6,6 +6,8 @@ import { useAuth } from "../../context/AuthContext";
 import { CANALES, SEDES_ATENCION, OPCIONES_TECHO, SIN_TECHO, formatoSoles } from "../../data/mockData";
 import { soloDigitos, soloLetras, soloMonto, esNombre, esCelular, esRuc, hoyLocal, limpiarTexto, MSJ } from "../../lib/validar";
 import { descargarComprobante, numeroComprobante } from "../../lib/voucher";
+import { numeroSeparacion, useSeparaciones } from "../../servicios/separaciones";
+import { nombreCliente } from "../../lib/sprint2";
 import { Aviso, Campo, Card, Modal, PageHeader, Stat, Tabla, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
 
 const ETAPA_TONO = { "Solicitud web": "bg-amber-100 text-amber-800", Cotización: "bg-slate-200 text-slate-700", "Pedido registrado": "bg-sky-100 text-sky-700", Entregado: "bg-emerald-100 text-emerald-700" };
@@ -32,7 +34,8 @@ function validarDoc(tipo, num) {
 
 // Página de ventas
 export default function Ventas() {
-  const { ventas, modelos, equipo, unidades, leads, agregar, actualizar, eliminar, publicos = [] } = useApp();
+  const { ventas, modelos, equipo, unidades, leads, agregar, actualizar, eliminar, publicos = [], separaciones = [], clientes = [] } = useApp();
+  const sepS = useSeparaciones();
   const { user, puede } = useAuth();
   const { state } = useLocation();
   const toast = useToast(); const confirmar = useConfirm();
@@ -41,12 +44,20 @@ export default function Ventas() {
   const [q, setQ] = useState(""); const [etapa, setEtapa] = useState(""); const [sedeF, setSedeF] = useState("");
   const nombreModelo = (id) => (modelos.find((m) => m.id === id) || publicos.find((m) => m.id === id))?.nombre || "—";
 
-  const base = () => { const mod = publicados.find((m) => m.id === state?.lead?.modelo) || publicados[0]; return { cliente: state?.lead?.contacto || "", celular: state?.lead?.telefono || "", modelo: mod?.id || "", color: mod?.colores?.includes(state?.lead?.color) ? state.lead.color : mod?.colores?.[0] || "", techo: "", tipoDoc: "DNI", doc: "", canal: "WhatsApp", origen: "Pasó por la sede", vendedor: user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre || "", sede: state?.lead?.sede || "Comas", pago: "", accion: "cotizar", medio: "Transferencia", adelanto: "", operacion: "" }; };
+  // HU-005: venta que nace de una separación activa
+  const desdeSep = state?.desdeSeparacion ? separaciones.find((x) => x.id === state.desdeSeparacion && x.estado === "Activa") : null;
+  const base = () => {
+    if (desdeSep) {
+      const u = unidades.find((x) => x.id === desdeSep.unidad); const c = clientes.find((x) => x.id === desdeSep.cliente);
+      const mod = modelos.find((m) => m.id === u?.modelo);
+      return { cliente: nombreCliente(c), celular: c?.celular || "", modelo: mod?.id || "", color: u?.color || mod?.colores?.[0] || "", techo: "", tipoDoc: c?.tipoDoc || "DNI", doc: c?.doc || "", canal: "Visita a sede", origen: "Pasó por la sede", vendedor: desdeSep.vendedor, sede: desdeSep.sede, pago: "", accion: "pedido", medio: desdeSep.medio, adelanto: String(desdeSep.monto), operacion: desdeSep.operacion, desdeSeparacion: desdeSep.id };
+    }
+    const mod = publicados.find((m) => m.id === state?.lead?.modelo) || publicados[0]; return { cliente: state?.lead?.contacto || "", celular: state?.lead?.telefono || "", modelo: mod?.id || "", color: mod?.colores?.includes(state?.lead?.color) ? state.lead.color : mod?.colores?.[0] || "", techo: "", tipoDoc: "DNI", doc: "", canal: "WhatsApp", origen: "Pasó por la sede", vendedor: user.rol === "vendedor" ? user.nombre : vendedores[0]?.nombre || "", sede: state?.lead?.sede || "Comas", pago: "", accion: "cotizar", medio: "Transferencia", adelanto: "", operacion: "" }; };
   const unidadPara = (modelo, sede, color) => {
     const libres = unidades.filter((u) => u.modelo === modelo && u.disponibilidad === "Disponible" && (!color || u.color === color));
     return libres.find((u) => u.ubicacion === sede) || libres[0];
   };
-  const [nueva, setNueva] = useState(state?.lead || state?.nueva ? { paso: 1, f: base() } : null);
+  const [nueva, setNueva] = useState(state?.lead || state?.nueva || desdeSep ? { paso: 1, f: base() } : null);
   const [err, setErr] = useState({});
   const [atender, setAtender] = useState(null); const [vendAt, setVendAt] = useState("");
   const [comp, setComp] = useState(null); const [cf, setCf] = useState({}); const [cerr, setCerr] = useState({});
@@ -95,6 +106,7 @@ export default function Ventas() {
   }
   async function crear() {
     const f = nueva.f; const m = modelos.find((x) => x.id === f.modelo); const e = {};
+    if (f.desdeSeparacion) return crearDesdeSeparacion(f, m);
     let unidad = null;
     if (f.accion === "separar") {
       unidad = unidadPara(f.modelo, f.sede, f.color);
@@ -118,11 +130,27 @@ export default function Ventas() {
     const datos = { fecha: hoy, cliente: f.cliente.trim().replace(/\s+/g, " "), celular: f.celular, documento: `${f.tipoDoc} ${f.doc}`, modelo: f.modelo, color: f.color, techo: tSel?.precio ? tSel.nombre : "", techoPrecio: tSel?.precio || 0, pago: f.pago, etapa: unidad ? "Pedido registrado" : "Cotización", vendedor: f.vendedor, sede: f.sede, adelanto: unidad ? Number(f.adelanto) : 0, total: totalDe(f), unidad: unidad?.id || null, canal: f.canal, origen: f.origen, ...(unidad ? { medioPago: f.medio, operacion: limpiaOperacion(f.operacion), fechaPago: hoy } : {}) };
     const id = ventas.reduce((mx, v) => Math.max(mx, Number(v.id) || 0), 0) + 1;
     agregar("ventas", { id, ...datos }, `Venta registrada: ${f.cliente} · ${m.nombre}`);
+    if (unidad) sepS.registrarDesdeVenta({ unidadId: unidad.id, ventaId: id, cliente: datos.cliente, documento: datos.documento, celular: datos.celular, monto: datos.adelanto, medio: datos.medioPago, operacion: datos.operacion, fechaPago: hoy, vendedor: datos.vendedor });
     const lead = leads.find((l) => l.telefono === f.celular && ABIERTO(l));
     if (lead) actualizar("leads", lead.id, { estado: "Cotizado" });
     toast(unidad ? `Unidad ${unidad.id} separada para ${f.cliente.trim()}` : "Cliente registrado y cotización creada");
     setNueva(null);
     if (f.accion === "pedido") abrirPedido({ id, ...datos });
+  }
+
+  // HU-005: la separación pasa a pedido con su moto y su adelanto
+  async function crearDesdeSeparacion(f, m) {
+    const s = separaciones.find((x) => x.id === f.desdeSeparacion);
+    if (!s || s.estado !== "Activa") { setErr({ general: "Esa separación ya no está activa." }); return; }
+    if (!(await confirmar({ titulo: "¿Registrar el pedido?", texto: `${f.cliente.trim()} · ${m?.nombre} ${f.color} · unidad ${s.unidad} · total ${formatoSoles(totalDe(f))} · el adelanto de ${formatoSoles(s.monto)} de la separación ${numeroSeparacion(s)} cuenta como pago.`, boton: "Registrar pedido" }))) return;
+    const hoy = hoyLocal();
+    const tSel = TECHOS.find((t) => t.id === f.techo);
+    const id = ventas.reduce((mx, v) => Math.max(mx, Number(v.id) || 0), 0) + 1;
+    agregar("ventas", { id, fecha: hoy, cliente: f.cliente.trim().replace(/\s+/g, " "), celular: f.celular, documento: `${f.tipoDoc} ${f.doc}`, modelo: f.modelo, color: f.color, techo: tSel?.precio ? tSel.nombre : "", techoPrecio: tSel?.precio || 0, pago: f.pago, etapa: "Pedido registrado", vendedor: f.vendedor, sede: f.sede, adelanto: s.monto, total: totalDe(f), unidad: s.unidad, canal: f.canal, origen: f.origen, medioPago: s.medio, operacion: s.operacion, fechaPago: s.fechaPago, separacionId: s.id }, `Pedido registrado desde ${numeroSeparacion(s)}: ${f.cliente}`);
+    sepS.convertir(s, id);
+    actualizar("unidades", s.unidad, (u) => ({ historial: [...(u.historial || []), { fecha: hoy, detalle: `Pedido registrado para ${f.cliente.trim()} (desde ${numeroSeparacion(s)})` }] }));
+    toast(`Pedido registrado. La separación ${numeroSeparacion(s)} pasó a venta.`);
+    setNueva(null);
   }
 
   // Pedido con adelanto
@@ -161,6 +189,7 @@ export default function Ventas() {
     if (pf.separar && !unidad) {
       const u = unidadPara(pedido.modelo, pedido.sede, pedido.color); unidad = u.id;
       actualizar("unidades", u.id, (x) => ({ disponibilidad: "Separada", historial: [...x.historial, { fecha: hoy, detalle: `Separada para ${pedido.cliente} (adelanto ${formatoSoles(monto)})` }] }));
+      sepS.registrarDesdeVenta({ unidadId: u.id, ventaId: pedido.id, cliente: pedido.cliente, documento: `${pf.tipoDoc} ${pf.doc}`, celular: pf.celular, monto, medio: pf.medio, operacion: pf.operacion, fechaPago: pf.fecha, vendedor: pedido.vendedor });
     }
     const conPago = pf.conAdelanto || pf.separar;
     actualizar("ventas", pedido.id, { etapa: "Pedido registrado", unidad, total: pedido.total, adelanto: conPago ? monto : 0, fechaPago: conPago ? pf.fecha : "", documento: `${pf.tipoDoc} ${pf.doc}`, celular: pf.celular, medioPago: conPago ? pf.medio : "", operacion: conPago ? limpiaOperacion(pf.operacion) : "", voucherPago: conPago ? pf.archivo : "", obs: limpiarTexto(pf.obs) }, `Pedido registrado: ${pedido.cliente}`);
@@ -242,6 +271,7 @@ export default function Ventas() {
     if (v.comprobante || (v.comprobantesAnulados || []).length) return toast("Una venta con comprobante emitido o anulado no se elimina: su numeración debe quedar registrada.", "error");
     if (await confirmar({ titulo: "Eliminar venta", texto: `¿Eliminar la venta de ${v.cliente}?${v.unidad ? ` La unidad ${v.unidad} volverá a estar disponible.` : ""} Esta acción no se puede deshacer.`, boton: "Eliminar", peligro: true })) {
       if (v.unidad) actualizar("unidades", v.unidad, { disponibilidad: "Disponible" });
+      sepS.anularPorVenta(v.id);
       eliminar("ventas", v.id, `Venta eliminada: ${v.cliente}`); toast("Venta eliminada");
     }
   }
@@ -293,10 +323,10 @@ export default function Ventas() {
       )}
 
       {/* Nueva venta */}
-      <Modal abierto={!!nueva} onClose={() => setNueva(null)} titulo="Nueva venta" ancho="max-w-2xl"
+      <Modal abierto={!!nueva} onClose={() => setNueva(null)} titulo={nueva?.f?.desdeSeparacion ? `Venta desde la separación ${numeroSeparacion({ id: nueva.f.desdeSeparacion })}` : "Nueva venta"} ancho="max-w-2xl"
         pie={nueva && <>
           {nueva.paso > 1 && <button className="btn btn-secondary !py-2" onClick={() => setNueva({ ...nueva, paso: nueva.paso - 1 })}>Atrás</button>}
-          {nueva.paso < 3 ? <button className="btn btn-primary !py-2" onClick={siguiente}>Siguiente</button> : <button className="btn btn-primary !py-2" onClick={crear}>{f.accion === "separar" ? "Registrar cliente y separar" : f.accion === "pedido" ? "Registrar cliente y pedido" : "Registrar cliente y cotizar"}</button>}
+          {nueva.paso < 3 ? <button className="btn btn-primary !py-2" onClick={siguiente}>Siguiente</button> : <button className="btn btn-primary !py-2" onClick={crear}>{f.desdeSeparacion ? "Registrar pedido" : f.accion === "separar" ? "Registrar cliente y separar" : f.accion === "pedido" ? "Registrar cliente y pedido" : "Registrar cliente y cotizar"}</button>}
         </>}>
         {nueva && <>
           <ol className="mb-5 flex gap-2 text-[12.5px]">{pasos.map((p, i) => <li key={p} className={`flex-1 rounded-lg px-3 py-2 text-center font-semibold ${nueva.paso === i + 1 ? "bg-marino text-white" : nueva.paso > i + 1 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500 dark:bg-white/10"}`}>{i + 1}. {p}</li>)}</ol>
@@ -307,8 +337,8 @@ export default function Ventas() {
                 <div className="flex gap-2"><select className="field-input !w-24" value={f.tipoDoc} onChange={(e) => setN("tipoDoc", e.target.value)}>{Object.keys(DOCS).map((d) => <option key={d}>{d}</option>)}</select><input id="v-doc" className="field-input" inputMode="numeric" maxLength={DOCS[f.tipoDoc][1]} placeholder={`${DOCS[f.tipoDoc][1]} dígitos`} value={f.doc} onChange={(e) => setN("doc", soloDigitos(e.target.value, DOCS[f.tipoDoc][1]))} /></div>
               </Campo>
               <Campo etiqueta="Celular" error={err.celular}><input id="v-celular" className="field-input" type="tel" inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" value={f.celular} onChange={(e) => setN("celular", soloDigitos(e.target.value, 9))} /></Campo>
-              <Campo etiqueta="Moto que compra" error={err.modelo}><select id="v-modelo" className="field-input" value={f.modelo} onChange={(e) => setN("modelo", e.target.value)}>{publicados.map((m) => <option key={m.id} value={m.id}>{m.nombre} · {formatoSoles(m.precioDesde)}</option>)}</select></Campo>
-              <Campo etiqueta="Color" error={err.color}><select id="v-color" className="field-input" value={f.color} onChange={(e) => setN("color", e.target.value)}>{(modelos.find((m) => m.id === f.modelo)?.colores || []).map((c) => <option key={c}>{c}</option>)}</select></Campo>
+              <Campo etiqueta="Moto que compra" error={err.modelo}><select id="v-modelo" className="field-input" disabled={!!f.desdeSeparacion} value={f.modelo} onChange={(e) => setN("modelo", e.target.value)}>{publicados.map((m) => <option key={m.id} value={m.id}>{m.nombre} · {formatoSoles(m.precioDesde)}</option>)}</select></Campo>
+              <Campo etiqueta="Color" error={err.color}><select id="v-color" className="field-input" disabled={!!f.desdeSeparacion} value={f.color} onChange={(e) => setN("color", e.target.value)}>{(modelos.find((m) => m.id === f.modelo)?.colores || []).map((c) => <option key={c}>{c}</option>)}</select></Campo>
               <Campo etiqueta="Techo (adicional)" error={err.techo}><select id="v-techo" className="field-input" value={f.techo} onChange={(e) => setN("techo", e.target.value)}><option value="">Elige…</option>{TECHOS.map((t) => <option key={t.id} value={t.id}>{t.precio ? `${t.nombre} · + ${formatoSoles(t.precio)}` : "Sin techo (solo la moto)"}</option>)}</select></Campo>
               <p className="rounded-lg bg-marino-50 px-3 py-2 text-[13.5px] dark:bg-white/5 sm:col-span-2">Total de la venta: <b className="cifra">{formatoSoles(totalDe(f))}</b> <span className="text-slate-500">(moto {formatoSoles(modelos.find((m) => m.id === f.modelo)?.precioDesde || 0)}{TECHOS.find((t) => t.id === f.techo)?.precio ? ` + techo ${formatoSoles(TECHOS.find((t) => t.id === f.techo).precio)}` : ""})</span></p>
               <Campo etiqueta="Canal de contacto"><select className="field-input" value={f.canal} onChange={(e) => setN("canal", e.target.value)}>{CANALES.map((c) => <option key={c}>{c}</option>)}</select></Campo>
@@ -326,7 +356,13 @@ export default function Ventas() {
               {err.pago && <p className="text-[12.5px] font-medium text-acento sm:col-span-2" data-error-pago>{err.pago}</p>}
             </div>
           )}
-          {nueva.paso === 3 && (
+          {nueva.paso === 3 && f.desdeSeparacion && (
+            <div className="space-y-3" data-desde-separacion>
+              <Aviso tipo="ok">Se registrará el pedido con la moto <b>{separaciones.find((x) => x.id === f.desdeSeparacion)?.unidad}</b> que ya está separada. El adelanto de <b>{formatoSoles(Number(f.adelanto))}</b> ({f.medio}{f.operacion ? `, op. ${f.operacion}` : ""}) cuenta como pago y la separación pasa a «Convertida en venta».</Aviso>
+              {err.general && <Aviso tipo="error">{err.general}</Aviso>}
+            </div>
+          )}
+          {nueva.paso === 3 && !f.desdeSeparacion && (
             <div className="space-y-3">
               {[["cotizar", "Preparar cotización", "Registra al cliente y deja la cotización lista."], ["pedido", "Registrar pedido", "Pasa directo a registrar adelanto y documentos."], ["separar", "Separar una unidad", "Reserva una unidad disponible de este modelo."]].map(([k, t, d]) => (
                 <label key={k} className={`flex cursor-pointer items-start gap-3 rounded-xl2 border-2 p-4 ${f.accion === k ? "border-marino-700 bg-marino-50 dark:bg-white/10" : "border-slate-200 dark:border-white/15"}`}>

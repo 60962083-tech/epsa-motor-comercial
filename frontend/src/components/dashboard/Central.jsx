@@ -1,0 +1,152 @@
+// Sprint 2 · Piezas de las vistas conectadas a la base central
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { haceCuanto } from "../../lib/validar";
+import { mensajeError } from "../../lib/errores";
+import { REFRESCO_MS } from "../../servicios/central";
+import { TONO_COMERCIAL, preparacionDe, techoDe, ubicacionDe } from "../../servicios/inventarioCentral";
+import { Aviso, btnMini } from "../ui";
+import { ColorPunto, Pill } from "./Sprint2";
+
+// Vuelve a pintar los textos «hace X min»
+export function useReloj(ms = 15000) {
+  const [, setN] = useState(0);
+  useEffect(() => { const t = setInterval(() => setN((x) => x + 1), ms); return () => clearInterval(t); }, [ms]);
+}
+
+export const hora = (iso) => (iso ? new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false }) : "");
+
+// Última actualización y botón Actualizar
+export function BarraActualizacion({ consulta }) {
+  useReloj();
+  return (
+    <>
+      <span className="self-center text-[12.5px] text-slate-400" data-actualizado={consulta.actualizado || ""} title={`Se actualiza sola cada ${REFRESCO_MS / 1000} segundos y al volver a esta pestaña.`}>
+        {consulta.actualizado ? `Actualizado ${haceCuanto(consulta.actualizado)}, a las ${hora(consulta.actualizado)}` : consulta.cargando ? "Cargando…" : "Sin datos todavía"}
+      </span>
+      <button className="btn btn-secondary !py-2.5" onClick={() => consulta.refrescar()} disabled={consulta.cargando} data-actualizar>{consulta.cargando ? "Actualizando…" : "Actualizar"}</button>
+    </>
+  );
+}
+
+// Error de carga o datos que pueden estar desactualizados (sin prometer tiempo real)
+// La ruta todavía no existe en el servidor publicado (y no hay datos previos): la pantalla muestra solo el aviso
+export const sinApi = (consulta) => Boolean(consulta?.error?.detalle?.sinRuta && !consulta?.data);
+
+export function AvisoConexion({ consulta, que = "la información" }) {
+  if (consulta.error && !consulta.data) {
+    const reintentar = <button className="ml-1 font-semibold underline" onClick={() => consulta.refrescar()}>Reintentar</button>;
+    // La sección aún no está habilitada en el servidor publicado. La persona ve un mensaje de negocio;
+    // la ruta que falta queda en data-sin-api y en la consola, solo para el equipo técnico.
+    if (consulta.error.detalle?.sinRuta) {
+      return (
+        <div className="mb-4" data-error-carga data-sin-api={consulta.error.detalle.endpoint}>
+          <Aviso tipo="aviso">
+            <b>Esta sección todavía no está disponible.</b> Estamos terminando de habilitarla; mientras tanto puedes seguir usando el resto del panel. {reintentar}
+          </Aviso>
+        </div>
+      );
+    }
+    return (
+      <div className="mb-4" data-error-carga>
+        <Aviso tipo="error">No se {/^(los|las) /.test(que) ? "pudieron" : "pudo"} cargar {que}: {mensajeError(consulta.error)} {reintentar}</Aviso>
+      </div>
+    );
+  }
+  if (consulta.fallo && consulta.data) {
+    return (
+      <div className="mb-4" data-desactualizado role="status">
+        <Aviso tipo="aviso">
+          <b>No se pudo actualizar{consulta.fallo.status === 0 ? ": no hay conexión" : ""}.</b> Lo que ves puede estar desactualizado; es la información de las {hora(consulta.actualizado)}.
+          Se vuelve a intentar sola cada {REFRESCO_MS / 1000} segundos, o usa Actualizar.
+        </Aviso>
+      </div>
+    );
+  }
+  return null;
+}
+
+// Mientras el inventario central no esté publicado: llegar a una moto desde su compra o por su número
+export function AbrirPorNumero({ texto }) {
+  const navigate = useNavigate();
+  const [tipo, setTipo] = useState("compra"); const [n, setN] = useState(""); const [err, setErr] = useState("");
+  function ir(e) {
+    e.preventDefault();
+    const v = n.trim();
+    if (!/^[1-9]\d{0,9}$/.test(v)) { setErr("Escribe solo el número, por ejemplo 5."); return; }
+    navigate(tipo === "compra" ? `/admin/compras/${v}` : `/admin/inventario/${v}`);
+  }
+  return (
+    <form onSubmit={ir} className="rounded-xl2 border border-slate-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#121a2b]" data-abrir-numero noValidate>
+      <p className="text-[13.5px] text-slate-600 dark:text-white/70">{texto}</p>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <div><label className="field-label" htmlFor="abrir-tipo">Abrir</label><select id="abrir-tipo" className="field-input !py-2" value={tipo} onChange={(e) => { setTipo(e.target.value); setErr(""); }}><option value="compra">Compra N°</option><option value="unidad">Moto N°</option></select></div>
+        <div><label className="field-label" htmlFor="abrir-numero">Número</label><input id="abrir-numero" className="field-input !w-32 !py-2" inputMode="numeric" maxLength={10} value={n} onChange={(e) => { setN(e.target.value); setErr(""); }} placeholder="Ej: 5" /></div>
+        <button className="btn btn-primary !py-2.5">Abrir</button>
+      </div>
+      {err && <p className="mt-1 text-[12px] font-medium text-acento">{err}</p>}
+    </form>
+  );
+}
+
+// Situación comercial (separada de la ubicación y la preparación)
+export function PillComercial({ comercial }) {
+  return <Pill tono={TONO_COMERCIAL[comercial] || "gris"}>{comercial === "Libre" ? "Libre para vender" : comercial || "Sin dato"}</Pill>;
+}
+
+export function PillPreparacion({ preparacion }) {
+  const p = preparacionDe(preparacion);
+  return <Pill tono={p.tono}>{p.etapa}</Pill>;
+}
+
+// Ubicación con su tránsito o traslado programado
+export function TextoUbicacion({ unidad, conDetalle = true }) {
+  const x = ubicacionDe(unidad);
+  return (
+    <span className="block min-w-0">
+      <span className={`block font-semibold ${x.transito ? "text-sky-700 dark:text-sky-300" : x.sin ? "text-amber-700 dark:text-amber-300" : "text-marino dark:text-white"}`}>{x.texto}</span>
+      {conDetalle && x.detalle && <span className={`block text-[12px] ${x.programado ? "font-semibold text-sky-700 dark:text-sky-300" : "text-slate-400"}`}>{x.detalle}</span>}
+    </span>
+  );
+}
+
+// Techo: configuración y avance
+export function TextoTecho({ preparacion }) {
+  const t = techoDe(preparacion);
+  return (
+    <span className="block">
+      <span className={`block ${t.config === "Por definir" ? "text-slate-400" : ""}`}>{t.config}{t.proveedor ? <span className="text-slate-400">, {t.proveedor}</span> : null}</span>
+      {t.requiereInstalacion && <span className={`mt-0.5 block w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${t.avance === "Instalado" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{t.avance === "Instalado" ? "Instalado" : t.avance === "En proceso" ? "Instalación en proceso" : "Falta instalar"}</span>}
+    </span>
+  );
+}
+
+export function ColorUnidad({ color }) {
+  return <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><ColorPunto color={capital(color)} className="h-2.5 w-2.5" />{capital(color)}</span>;
+}
+
+// «AZUL» del XML se muestra como «Azul»
+export const capital = (t) => { const s = String(t || "").trim().toLowerCase(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ""; };
+
+// Paginación sencilla
+export function Paginador({ total, limite, offset, onCambio }) {
+  if (!total || total <= limite) return null;
+  const pagina = Math.floor(offset / limite) + 1;
+  const paginas = Math.ceil(total / limite);
+  return (
+    <div className="mt-4 flex items-center justify-between text-[13px] text-slate-500">
+      <span>{total} en total, página {pagina} de {paginas}</span>
+      <div className="flex gap-2">
+        <button className={btnMini} disabled={pagina <= 1} onClick={() => onCambio(Math.max(0, offset - limite))}>Anterior</button>
+        <button className={btnMini} disabled={pagina >= paginas} onClick={() => onCambio(offset + limite)}>Siguiente</button>
+      </div>
+    </div>
+  );
+}
+
+// Fecha y hora completas para trazabilidad
+export function fechaCompleta(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("es-PE", { day: "numeric", month: "short", year: "numeric" }).replace(".", "")}, ${hora(iso)}`;
+}

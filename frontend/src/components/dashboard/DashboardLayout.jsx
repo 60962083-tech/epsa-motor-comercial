@@ -5,6 +5,7 @@ import { IconMenu, IconClose, IconSun, IconMoon } from "../Icons";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../ThemeContext";
 import { ROLES } from "../../data/mockData";
+import { GRUPOS_PANEL } from "../../data/secciones";
 import Login from "../../pages/dashboard/Login.HU-007";
 
 // Íconos del menú
@@ -21,33 +22,19 @@ const IC = {
   equipo: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm9 0a3 3 0 1 0 0-6M2 19a6 6 0 0 1 12 0m1-5a5 5 0 0 1 7 5",
   opiniones: "M4 5h16v11H9l-5 4V5Zm4 4h8M8 12h5",
   facturas: "M7 3h10a1 1 0 0 1 1 1v17l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1Zm2 5h6M9 12h6M9 16h3",
+  disponibilidad: "M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9.5 3.5 2 2 4-4",
+  separaciones: "M7 3h10a1 1 0 0 1 1 1v17l-6-4-6 4V4a1 1 0 0 1 1-1Zm2.5 7.5 2 2 3.5-3.5",
+  movimientos: "M4 8h14m-4-4 4 4-4 4M20 16H6m4-4-4 4 4 4",
+  preparacion: "M14.5 5.5a4 4 0 0 0-5 5L4 16v4h4l5.5-5.5a4 4 0 0 0 5-5l-2.6 2.6-2.4-.6-.6-2.4 2.6-2.6Z",
+  facturasRecibidas: "M3 6h18v12H3V6Zm0 0 9 7 9-7M14 14h4",
+  permisos: "M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6l-7-3Zm-3 9 2 2 4-4",
 };
 const Ico = ({ n }) => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={IC[n]} /></svg>
 );
 
-// Secciones del menú
-const GRUPOS = [
-  { titulo: "Inicio", items: [{ to: "/admin", label: "Resumen", seccion: "resumen", end: true }] },
-  { titulo: "Comercial", items: [
-    { to: "/admin/leads", label: "Leads", seccion: "leads" },
-    { to: "/admin/seguimiento", label: "Seguimiento", seccion: "seguimiento" },
-    { to: "/admin/ventas", label: "Ventas a clientes", seccion: "ventas" },
-    { to: "/admin/facturas", label: "Facturas y clientes", seccion: "facturas" },
-    { to: "/admin/metas", label: "Metas", seccion: "metas" },
-  ] },
-  { titulo: "Operaciones", items: [
-    { to: "/admin/modelos", label: "Modelos", seccion: "modelos" },
-    { to: "/admin/opiniones", label: "Opiniones de clientes", seccion: "opiniones" },
-    { to: "/admin/inventario", label: "Inventario", seccion: "inventario" },
-    { to: "/admin/ubicaciones", label: "Ubicaciones", seccion: "ubicaciones" },
-    { to: "/admin/compras", label: "Compras a proveedor", seccion: "compras" },
-  ] },
-  { titulo: "Administración", items: [{ to: "/admin/equipo", label: "Equipo", seccion: "equipo" }] },
-];
-
 export default function DashboardLayout() {
-  const { user, logout, puedeVer } = useAuth();
+  const { user, logout, puedeVer, permisos } = useAuth();
   const { dark, toggle } = useTheme();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -55,6 +42,8 @@ export default function DashboardLayout() {
   useEffect(() => setOpen(false), [pathname]);
 
   if (!user) return <Login />;
+  // Antes de mostrar el menú se leen los permisos del rol (así no aparece por un instante una sección desactivada)
+  if (!permisos.listo) return <div className="grid min-h-screen place-items-center bg-slate-50 text-[14px] text-slate-400 dark:bg-[#0b1220]">Cargando tu panel…</div>;
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-[#0b1220]">
@@ -71,7 +60,7 @@ export default function DashboardLayout() {
             <span className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-[14px] font-bold">{user.nombre?.[0]}</span>
             <span className="leading-tight"><span className="block text-[14px] font-semibold">{String(user.nombre).split(" ").slice(0, 2).join(" ")}</span><span className="block text-[12px] text-white/60">{user.cargo || ROLES[user.rol]?.nombre}</span></span>
           </div>
-          <Link to="/" className="hidden rounded-lg px-3 py-1.5 text-[13.5px] text-white/80 transition hover:bg-white/10 hover:text-white md:block">Ver web</Link>
+          <Link to="/" className="hidden rounded-lg px-3 py-1.5 text-[13.5px] text-white/80 transition hover:bg-white/10 hover:text-white md:block">Visitar sitio web</Link>
           <button onClick={() => { logout(); navigate("/admin"); }} className="rounded-lg border border-white/20 px-3 py-1.5 text-[13.5px] transition hover:bg-white/10">Salir</button>
         </div>
       </header>
@@ -80,13 +69,13 @@ export default function DashboardLayout() {
         {open && <div className="fixed inset-0 top-16 z-20 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />}
         {/* Menú lateral */}
         <aside className={`${open ? "translate-x-0" : "-translate-x-full"} fixed bottom-0 top-16 z-30 w-64 overflow-y-auto border-r border-slate-200 bg-white transition-transform dark:border-white/10 dark:bg-[#0f1830] lg:static lg:translate-x-0`}>
-          <nav className="flex min-h-full flex-col px-3 py-4">
-            {GRUPOS.map((g) => {
+          <nav className="flex min-h-full flex-col px-3 py-4" aria-label="Secciones del panel">
+            {GRUPOS_PANEL.map((g) => {
               const items = g.items.filter((i) => puedeVer(i.seccion));
               if (!items.length) return null;
               return (
                 <div key={g.titulo} className="mb-5">
-                  <p className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">{g.titulo}</p>
+                  <p className="px-3 pb-1.5 text-[11.5px] font-semibold text-slate-400">{g.titulo}</p>
                   {items.map((it) => (
                     <NavLink key={it.to} to={it.to} end={it.end}
                       className={({ isActive }) => `mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium transition-colors ${isActive ? "bg-marino text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"}`}>
@@ -96,6 +85,11 @@ export default function DashboardLayout() {
                 </div>
               );
             })}
+            {/* Acceso a la web pública (en celular la barra superior no lo muestra) */}
+            <Link to="/" className="group mt-auto flex items-center gap-3 overflow-hidden rounded-xl bg-marino p-3 text-white transition hover:bg-marino-700" data-ver-web>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white/10"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 10.5 4.5 5h15L21 10.5M3 10.5h18M3 10.5c0 1.4 1.1 2.5 2.5 2.5S8 11.9 8 10.5c0 1.4 1.1 2.5 2.5 2.5s2.5-1.1 2.5-2.5c0 1.4 1.1 2.5 2.5 2.5s2.5-1.1 2.5-2.5c0 1.4 1.1 2.5 2.5 2.5M5 13v6h14v-6M10 19v-4h4v4" /></svg></span>
+              <span className="min-w-0 leading-tight"><span className="block text-[13.5px] font-semibold">Visitar sitio web</span><span className="block truncate text-[12px] text-white/60">La web de clientes</span></span>
+            </Link>
           </nav>
         </aside>
         {/* Contenido */}

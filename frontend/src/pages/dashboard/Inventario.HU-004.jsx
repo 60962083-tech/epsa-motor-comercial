@@ -1,23 +1,28 @@
-// HU-004 · Inventario de unidades
+// HU-004 · Inventario de unidades · Sprint 2: recepción y traslados (HU-003) y preparación (HU-033)
 import { useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { Link } from "../../components/dashboard/LinkPanel";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { COLORES } from "../../data/mockData";
-import { Aviso, Campo, Card, Modal, PageHeader, Stat, Tabla, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
+import { Card, Modal, PageHeader, Stat, Tabla, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
+import { useMovimientos } from "../../servicios/movimientos";
+import { usePreparacion } from "../../servicios/preparacion";
+import { ModalRecibir, ModalTraslado } from "../../components/dashboard/MovimientoModales";
 
 const DISP = { "No disponible": "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-white/70", Disponible: "bg-emerald-100 text-emerald-700", Separada: "bg-amber-100 text-amber-700", Vendida: "bg-slate-200 text-slate-600" };
 const POR_PAGINA = 15;
 
 export default function Inventario() {
-  const { unidades, modelos, ubicaciones, ventas = [], actualizar, eliminar } = useApp();
+  const { unidades, modelos, ubicaciones, ventas = [], eliminar } = useApp();
   const { state } = useLocation();
-  const { puede, user } = useAuth();
+  const { puede } = useAuth();
   const toast = useToast(); const confirmar = useConfirm();
   const [f, setF] = useState({ q: "", disp: "", modelo: "", ubic: state?.ubic || "", color: "" });
   const [pag, setPag] = useState(1);
   const [modal, setModal] = useState(null);
-  const [d, setD] = useState({}); const [err, setErr] = useState({});
+  const { transitoDe } = useMovimientos();
+  const prep = usePreparacion();
   const nombreModelo = (u) => modelos.find((m) => m.id === u.modelo)?.nombre || u.nombreModelo || u.modelo || "—";
   const activas = ubicaciones.filter((u) => u.activo);
 
@@ -29,45 +34,15 @@ export default function Inventario() {
   const paginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
   const visibles = lista.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
   const setFiltro = (k, v) => { setF({ ...f, [k]: v }); setPag(1); };
-  const hoy = () => new Date().toLocaleDateString("en-CA");
-  const texto = (t) => String(t || "").trim().replace(/\s+/g, " ");
-  const log = (u, detalle) => [...u.historial, { fecha: hoy(), detalle: `${detalle} · ${user.nombre}` }];
 
-  // Traslado, recepción y liberación
-  function abrir(tipo, u) {
-    setErr({});
-    if (tipo === "trasladar") setD({ destino: activas.find((a) => a.nombre !== u.ubicacion)?.nombre || "", motivo: "" });
-    if (tipo === "recibir") setD({ destino: activas.find((a) => a.tipo !== "Proveedor de techo")?.nombre || "", detalle: "" });
-    setModal({ tipo, u });
-  }
-  function guardarTraslado(e) {
-    e.preventDefault(); const u = modal.u;
-    if (!d.destino) return setErr({ destino: "Elige la ubicación de destino." });
-    if (d.destino === u.ubicacion) return setErr({ destino: "El destino debe ser distinto a la ubicación actual." });
-    if (u.disponibilidad === "Vendida") return setErr({ destino: "Una unidad vendida ya no se traslada." });
-    const motivo = texto(d.motivo);
-    if (motivo.length > 200) return setErr({ motivo: "Máximo 200 caracteres." });
-    const aProveedor = ubicaciones.find((a) => a.nombre === d.destino)?.tipo === "Proveedor de techo";
-    const retirar = aProveedor && u.disponibilidad === "Disponible";
-    actualizar("unidades", u.id, { ubicacion: d.destino, ...(retirar ? { disponibilidad: "No disponible" } : {}), historial: log(u, `Traslado ${u.ubicacion || "sin ubicación"} → ${d.destino}${motivo ? ` (${motivo})` : ""}${retirar ? " · sale de la venta hasta volver a liberarla" : ""}`) }, `${u.id} trasladada a ${d.destino}`);
-    toast(retirar ? `${u.id} trasladada a ${d.destino}. Sale del stock de la web hasta que vuelva y la liberes.` : `${u.id} trasladada a ${d.destino}`); setModal(null);
-  }
-  function guardarRecepcion(e) {
-    e.preventDefault(); const u = modal.u;
-    if (!d.destino) return setErr({ destino: "Elige dónde se recibe la unidad." });
-    const detalle = texto(d.detalle);
-    if (detalle.length > 200) return setErr({ detalle: "Máximo 200 caracteres." });
-    actualizar("unidades", u.id, { ubicacion: d.destino, historial: log(u, `Recepción física en ${d.destino}${detalle ? ` · ${detalle}` : ""}`) }, `${u.id} recibida en ${d.destino}`);
-    toast(`${u.id} recibida en ${d.destino}`); setModal(null);
-  }
+  // Recepción y traslado: ventanas compartidas (HU-003)
+  const abrir = (tipo, u) => setModal({ tipo, u });
+  // HU-033: solo se libera una moto lista, en una sede y con el techo instalado
   async function liberar(u) {
-    if (!u.ubicacion) return toast(`${u.id} aún no tiene recepción física: recíbela en una sede o almacén antes de liberarla.`, "error");
-    if (ubicaciones.find((a) => a.nombre === u.ubicacion)?.tipo === "Proveedor de techo") return toast(`${u.id} está en el proveedor de techo (${u.ubicacion}). Trasládala a una sede antes de liberarla.`, "error");
-    if (u.estadoTecho === "Pendiente de instalación") return toast(`${u.id} tiene el techo pendiente de instalación. Confírmalo en «Ficha y techo» antes de liberarla.`, "error");
-    if (u.preparacion !== "Lista para entrega" && !(await confirmar({ titulo: "Liberar sin preparación completa", texto: `${u.id} figura como «${u.preparacion}». ¿Igual quieres marcarla como disponible para la venta?`, boton: "Sí, liberar" }))) return;
-    if (u.preparacion === "Lista para entrega" && !(await confirmar({ titulo: "Liberar para la venta", texto: `${u.id} quedará disponible y se contará en el stock de la web pública.`, boton: "Liberar" }))) return;
-    actualizar("unidades", u.id, { disponibilidad: "Disponible", historial: log(u, "Liberada para la venta") }, `${u.id} liberada para la venta`);
-    toast(`${u.id} ya está disponible para la venta`);
+    const motivo = prep.bloqueoLiberar(u);
+    if (motivo) return toast(`${u.id}: ${motivo}`, "error");
+    if (!(await confirmar({ titulo: "Liberar para la venta", texto: `${u.id} quedará disponible y se contará en el stock de la web pública.`, boton: "Liberar" }))) return;
+    toast(prep.liberar(u));
   }
   async function borrar(u) {
     if (u.disponibilidad === "Vendida") return toast("Una unidad vendida no se elimina: forma parte del historial de ventas.", "error");
@@ -92,7 +67,10 @@ export default function Inventario() {
         <Stat etiqueta="Sin recepción" valor={cuenta((u) => !u.ubicacion)} nota="En camino desde Crosland" tono="rojo" />
       </div>
       <Card className="mb-5">
-        <h2 className="text-[15px] font-extrabold uppercase text-marino dark:text-white">Disponibilidad por sede</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-[15px] font-extrabold uppercase text-marino dark:text-white">Disponibilidad por sede</h2>
+          <Link to="/admin/disponibilidad" className="text-[13px] font-semibold text-marino-700 hover:underline dark:text-white">Ver disponibilidad compartida</Link>
+        </div>
         <p className="mb-3 text-[12.5px] text-slate-400">Unidades disponibles por modelo y ubicación. Toca una celda para filtrar el inventario.</p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-[13px]">
@@ -134,7 +112,7 @@ export default function Inventario() {
               <tr key={u.id}>
                 <td className="px-4 py-3"><p className="font-semibold text-marino dark:text-white">{u.id}</p><p className="text-[11.5px] text-slate-400">{u.motor}</p></td>
                 <td className="px-4 py-3">{nombreModelo(u)}<span className="block text-[12px] text-slate-400">{u.color}</span></td>
-                <td className="px-4 py-3">{u.ubicacion || <span className="text-amber-600">Sin recepción</span>}</td>
+                <td className="px-4 py-3">{u.ubicacion || <span className="text-amber-600">Sin recepción</span>}{transitoDe(u.id) && <span className="block text-[12px] font-semibold text-sky-700 dark:text-sky-300">En camino a {transitoDe(u.id).destino}</span>}</td>
                 <td className="px-4 py-3">{u.preparacion}</td>
                 <td className="px-4 py-3" data-techo={u.techo}><span className={`rounded-md px-2 py-0.5 text-[12.5px] font-semibold ${u.techo && u.techo !== "Sin techo" ? "bg-sky-50 text-sky-800 dark:bg-sky-500/10 dark:text-sky-200" : "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-white/60"}`}>{u.techo || "Sin techo"}</span>{u.proveedorTecho && <span className="text-slate-400"> · {u.proveedorTecho}</span>}{u.estadoTecho && <span className={`mt-1 block w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${u.estadoTecho === "Instalado" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{u.estadoTecho}</span>}</td>
                 <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${DISP[u.disponibilidad]}`}>{u.disponibilidad}</span></td>
@@ -142,7 +120,7 @@ export default function Inventario() {
                   {puede("unidades.gestionar") && !u.ubicacion && <button className={btnMini} onClick={() => abrir("recibir", u)}>Recibir</button>}
                   <Link className={btnMini} to={`/admin/inventario/${u.id}`}>Ficha y techo</Link>
                   {puede("unidades.gestionar") && u.ubicacion && u.disponibilidad === "No disponible" && <button className={btnMini} onClick={() => liberar(u)}>Liberar</button>}
-                  {puede("unidades.trasladar") && u.ubicacion && u.disponibilidad !== "Vendida" && <button className={btnMini} onClick={() => abrir("trasladar", u)}>Trasladar</button>}
+                  {puede("unidades.trasladar") && u.ubicacion && u.disponibilidad !== "Vendida" && !transitoDe(u.id) && <button className={btnMini} onClick={() => abrir("trasladar", u)}>Trasladar</button>}
                   <button className={btnMini} onClick={() => abrir("historial", u)}>Historial</button>
                   {puede("eliminar") && <button className={btnMiniPeligro} onClick={() => borrar(u)}>Eliminar</button>}
                 </div></td>
@@ -156,30 +134,14 @@ export default function Inventario() {
         </>
       )}
 
-      {/* Trasladar */}
-      <Modal abierto={modal?.tipo === "trasladar"} onClose={() => setModal(null)} titulo={`Trasladar ${modal?.u?.id}`} confirmarGuardar ancho="max-w-md" pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-tr" className="btn btn-primary !py-2">Trasladar</button></>}>
-        <form id="f-tr" onSubmit={guardarTraslado} className="grid gap-4">
-          <p className="text-[13.5px] text-slate-500">Ubicación actual: <b>{modal?.u?.ubicacion}</b></p>
-          <Campo etiqueta="Destino" error={err.destino}><select className="field-input" value={d.destino} onChange={(e) => setD({ ...d, destino: e.target.value })}>{activas.map((a) => <option key={a.id}>{a.nombre}</option>)}</select></Campo>
-          <Campo etiqueta="Motivo (opcional)" error={err.motivo}><input className="field-input" maxLength={220} value={d.motivo} onChange={(e) => setD({ ...d, motivo: e.target.value })} /></Campo>
-          <Aviso tipo="aviso">Solo se muestran ubicaciones activas.</Aviso>
-        </form>
-      </Modal>
       {/* Historial */}
       <Modal abierto={modal?.tipo === "historial"} onClose={() => setModal(null)} titulo={`Historial · ${modal?.u?.id}`} ancho="max-w-md">
         <ol className="space-y-3 border-l-2 border-slate-200 pl-4 dark:border-white/15">
           {[...(modal?.u?.historial || [])].reverse().map((h, i) => <li key={i}><p className="text-[12px] text-slate-400">{h.fecha}</p><p className="text-[14px]">{h.detalle}</p></li>)}
         </ol>
       </Modal>
-      {/* Recibir */}
-      <Modal abierto={modal?.tipo === "recibir"} onClose={() => setModal(null)} titulo={`Recibir ${modal?.u?.id}`} confirmarGuardar ancho="max-w-md" pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-rc" className="btn btn-primary !py-2">Registrar recepción</button></>}>
-        <form id="f-rc" onSubmit={guardarRecepcion} className="grid gap-4" noValidate>
-          <p className="text-[13.5px] text-slate-500">Motor <b>{modal?.u?.motor}</b> · chasis <b>{modal?.u?.chasis}</b></p>
-          <Campo etiqueta="Ubicación donde llegó" error={err.destino}><select className="field-input" value={d.destino} onChange={(e) => setD({ ...d, destino: e.target.value })}>{activas.map((a) => <option key={a.id}>{a.nombre}</option>)}</select></Campo>
-          <Campo etiqueta="Observación (opcional)" error={err.detalle}><input className="field-input" maxLength={220} value={d.detalle || ""} onChange={(e) => setD({ ...d, detalle: e.target.value })} placeholder="Llegó sin observaciones" /></Campo>
-          <Aviso>La unidad sigue «No disponible» hasta que la liberes para la venta.</Aviso>
-        </form>
-      </Modal>
+      <ModalTraslado abierto={modal?.tipo === "trasladar"} unidad={modal?.u} onClose={() => setModal(null)} />
+      <ModalRecibir unidad={modal?.tipo === "recibir" ? modal.u : null} onClose={() => setModal(null)} />
     </div>
   );
 }

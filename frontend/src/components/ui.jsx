@@ -136,8 +136,8 @@ export function PageHeader({ titulo, subtitulo, children }) {
 }
 
 // Tarjeta
-export function Card({ children, className = "" }) {
-  return <div className={`rounded-xl2 border border-slate-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#121a2b] sm:p-5 ${className}`}>{children}</div>;
+export function Card({ children, className = "", ...resto }) {
+  return <div className={`rounded-xl2 border border-slate-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#121a2b] sm:p-5 ${className}`} {...resto}>{children}</div>;
 }
 
 // Indicador

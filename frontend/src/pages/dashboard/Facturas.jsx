@@ -1,6 +1,7 @@
 // Facturas y clientes
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { Link } from "../../components/dashboard/LinkPanel";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { formatoSoles } from "../../data/mockData";
