@@ -1,0 +1,73 @@
+// HU-001 · Lectura del inventario central: textos, estados y filtros de cada unidad
+// Ubicación, preparación y situación comercial se muestran por separado: ninguna se deduce de otra.
+
+export const TIPO_LUGAR = { Sede: "Sede", Almacen: "Almacén", Proveedor: "Fibrera o proveedor" };
+export const GRUPOS_LUGAR_API = [
+  { tipo: "Sede", titulo: "Sedes" },
+  { tipo: "Almacen", titulo: "Almacenes" },
+  { tipo: "Proveedor", titulo: "Fibreras y proveedores de techo" },
+];
+export const SITUACIONES_COMERCIALES = ["Libre", "No disponible", "Separada", "Vendida"];
+export const TONO_COMERCIAL = { Libre: "verde", "No disponible": "gris", Separada: "ambar", Vendida: "oscuro" };
+
+// Dónde está la moto (y si va en camino o tiene un traslado programado)
+export function ubicacionDe(u) {
+  const mov = u?.movimiento_activo;
+  if (mov?.estado === "En transito") return { texto: `En tránsito a ${mov.destino?.nomubi || "otra ubicación"}`, detalle: `Salió de ${mov.origen?.nomubi || "su ubicación"}`, transito: true, lugar: u.ubicacion };
+  if (!u?.ubicacion) return { texto: "Sin ubicación registrada", detalle: "Falta registrar dónde está", sin: true };
+  if (mov?.estado === "Pendiente") return { texto: u.ubicacion.nomubi, detalle: `Traslado programado a ${mov.destino?.nomubi}`, programado: true, lugar: u.ubicacion };
+  return { texto: u.ubicacion.nomubi, detalle: TIPO_LUGAR[u.ubicacion.tipubi] || u.ubicacion.tipubi, lugar: u.ubicacion };
+}
+
+// Techo: configuración (HU-004) y avance de su instalación (HU-033), por separado
+export function techoDe(p) {
+  const t = p?.techo || {};
+  const config = t.configuracion || "Por definir";
+  const avance = t.avance || "Por definir";
+  return {
+    config, proveedor: t.proveedor || "", detalle: t.detalle || "", avance,
+    requiereInstalacion: !["Por definir", "No requiere"].includes(avance),
+    conTecho: Boolean(t.configuracion && t.configuracion !== "Sin techo"),
+  };
+}
+
+// Etapa de preparación visible
+export function preparacionDe(p) {
+  if (!p) return { etapa: "Sin datos", tono: "gris", nota: "" };
+  // Inventario central: el estado de preparación viene tal cual de la base (HU-004)
+  if (p.central) return p.estado ? { etapa: p.estado, tono: p.lista_para_entrega ? "verde" : "celeste", nota: "" } : { etapa: "Sin registrar", tono: "gris", nota: "" };
+  if (p.lista_para_entrega) return { etapa: "Lista para entrega", tono: "verde", nota: "Preparación terminada. No equivale a entregada al comprador." };
+  if (p.armado !== "Armado terminado") return { etapa: "Pendiente de armado", tono: "ambar", nota: (p.pendientes || []).join(". ") };
+  const t = techoDe(p);
+  if (t.avance === "Por definir") return { etapa: "Techo por definir", tono: "ambar", nota: "Armado terminado. Falta elegir la configuración de techo." };
+  if (t.avance === "Pendiente" || t.avance === "En proceso") return { etapa: t.avance === "Pendiente" ? "Falta instalar techo" : "Techo en proceso", tono: "celeste", nota: `${t.config}${t.proveedor ? ` (${t.proveedor})` : ""}` };
+  if (p.condiciones_cumplidas) return { etapa: "Por confirmar entrega", tono: "celeste", nota: "Cumple las condiciones: falta marcarla lista para entrega." };
+  return { etapa: p.etapa || "Pendiente", tono: "gris", nota: (p.pendientes || []).join(". ") };
+}
+
+export const ETAPAS_FILTRO = ["Pendiente de armado", "Techo por definir", "Falta instalar techo", "Techo en proceso", "Por confirmar entrega", "Lista para entrega"];
+
+export const FILTRO_INICIAL = { color: "", techo: "", prep: "", comercial: "activas", q: "" };
+
+// Filtros que se aplican sobre la lectura central (ubicación y modelo se piden al servidor)
+export function filtrarUnidades(lista = [], f = FILTRO_INICIAL) {
+  const q = String(f.q || "").trim().toLowerCase();
+  return lista.filter((u) => {
+    const t = techoDe(u.preparacion);
+    if (f.color && String(u.coluni).toLowerCase() !== f.color.toLowerCase()) return false;
+    if (f.techo === "sin" && t.config !== "Sin techo") return false;
+    if (f.techo === "con" && !t.conTecho) return false;
+    if (f.techo === "definir" && t.config !== "Por definir") return false;
+    if (f.prep && preparacionDe(u.preparacion).etapa !== f.prep) return false;
+    if (f.comercial === "activas" && u.comercial === "Vendida") return false;
+    if (f.comercial && f.comercial !== "activas" && u.comercial !== f.comercial) return false;
+    if (q && !`${u.coduni} ${u.nummotuni} ${u.chauni} ${u.nommod}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+// Conteo por clave
+export const contar = (lista, fn) => lista.reduce((o, x) => { const k = fn(x); o[k] = (o[k] || 0) + 1; return o; }, {});
+
+// Nombre corto de la moto: modelo y motor
+export const nombreUnidad = (u) => `${u?.nommod || "Moto"} · motor ${u?.nummotuni || "—"}`;

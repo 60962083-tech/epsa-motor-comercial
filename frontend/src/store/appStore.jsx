@@ -1,27 +1,69 @@
 // Datos de la web y del panel (compartidos)
-import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
+import useAutoRefresco from "../hooks/useAutoRefresco";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import * as D from "../data/mockData";
 import { MODO_REAL } from "../lib/config";
 import { modelosPublicos, sedesPublicasApi } from "../lib/api";
 import { emparejarModelos, modeloDesdeApi } from "../lib/modelos";
+import { aplicarFotosCentrales, aplicarGaleria } from "../lib/galeria";
+import { useArchivosLocales } from "../hooks/useArchivoLocal";
 
 const Ctx = createContext(null);
-const CLAVE = "epsa-datos-v7";
-try { ["epsa-datos-v4", "epsa-datos-v5", "epsa-datos-v6"].forEach((k) => localStorage.removeItem(k)); } catch {}
+// Con la base conectada se usa otra clave: lo que quedó de la vista de ejemplo en este navegador no se mezcla
+const CLAVE = MODO_REAL ? "epsa-datos-real-v1" : "epsa-datos-v7";
+try { ["epsa-datos-v4", "epsa-datos-v5", "epsa-datos-v6", ...(MODO_REAL ? ["epsa-datos-v7"] : [])].forEach((k) => localStorage.removeItem(k)); } catch {}
+
+// Con la base conectada no hay datos de ejemplo: todo viene de la API o se registra en el panel.
+// Solo se conserva la ficha técnica oficial de cada modelo (torito.pe), que completa lo que trae la API.
+const SIN_EJEMPLOS = {
+  ubicaciones: [], leads: [], seguimientos: [], ventas: [], metas: [], equipo: [], unidades: [], compras: [], opiniones: [],
+  movimientos: [], separaciones: [], clientes: [], historialPreparacion: [], imagenes: [],
+};
 
 // Datos iniciales
 const BASE = () => ({
   modelos: D.MODELOS, ubicaciones: D.UBICACIONES, leads: D.LEADS, seguimientos: D.SEGUIMIENTOS,
   ventas: D.VENTAS, metas: D.METAS, equipo: D.EQUIPO, unidades: D.UNIDADES, compras: D.COMPRAS, opiniones: D.OPINIONES, actividad: [],
-  config: { modoAusencia: false },
+  // Sprint 2
+  movimientos: D.MOVIMIENTOS, separaciones: D.SEPARACIONES, clientes: D.CLIENTES, historialPreparacion: D.HISTORIAL_PREPARACION, imagenes: D.IMAGENES_MODELO,
+  config: { modoAusencia: false, galeriaEditada: {} },
+  sprint2: 1,
+  ...(MODO_REAL ? SIN_EJEMPLOS : {}),
 });
+
+// Sprint 2: agrega los datos nuevos sin borrar lo que ya estaba guardado en este navegador
+const DATOS_SPRINT2 = ["movimientos", "separaciones", "clientes", "historialPreparacion", "imagenes"];
+function migrarSprint2(d) {
+  if (d.sprint2 >= 1) return d;
+  const b = BASE();
+  const n = { ...d, sprint2: 1, config: { ...b.config, ...d.config } };
+  DATOS_SPRINT2.forEach((k) => { if (!Array.isArray(d[k])) n[k] = b[k]; });
+  // Unidades de ejemplo que cambian con el Sprint 2: solo si siguen como venían de fábrica
+  const antes = { "MC-007": { disponibilidad: "Disponible", techo: "Sin techo" }, "MC-008": { disponibilidad: "Disponible" }, "MC-015": { disponibilidad: "Disponible" }, "MC-010": { ubicacion: "Crossland Ancón" } };
+  const nuevas = Object.fromEntries(b.unidades.map((u) => [u.id, u]));
+  const ajustadas = new Set();
+  n.unidades = (d.unidades || []).map((u) => {
+    const a = antes[u.id];
+    if (!a || !Object.entries(a).every(([k, v]) => u[k] === v)) return u;
+    ajustadas.add(u.id);
+    const x = nuevas[u.id];
+    return { ...u, disponibilidad: x.disponibilidad, ubicacion: x.ubicacion, techo: x.techo, proveedorTecho: x.proveedorTecho, estadoTecho: x.estadoTecho, historial: x.historial };
+  });
+  // Ejemplos que dependen de esas unidades: se quitan si la unidad ya cambió
+  const sigue = (id) => ["MC-007", "MC-008", "MC-015", "MC-010"].includes(id) ? ajustadas.has(id) : (d.unidades || []).some((u) => u.id === id);
+  n.separaciones = n.separaciones.filter((x) => sigue(x.unidad) && (x.estado !== "Activa" || ajustadas.has(x.unidad)));
+  const unidadLocal = (id) => n.unidades.find((u) => u.id === id);
+  n.movimientos = n.movimientos.filter((x) => sigue(x.unidad) && (x.estado !== "En tránsito" || (unidadLocal(x.unidad)?.ubicacion === x.origen && unidadLocal(x.unidad)?.disponibilidad !== "Vendida")));
+  return n;
+}
 
 // Cargar lo guardado en el navegador
 function cargar() {
   try {
     const g = localStorage.getItem(CLAVE);
     if (g) {
-      const d = { ...BASE(), ...JSON.parse(g) };
+      const crudo = JSON.parse(g);
+      const d = migrarSprint2({ ...BASE(), ...crudo, sprint2: crudo.sprint2 || 0 });
       d.ventas = (d.ventas || []).map((v) => (typeof v.comprobante === "string" ? { ...v, voucherPago: v.comprobante, comprobante: null } : v));
       d.unidades = (d.unidades || []).map((u) => { const techo = D.normalizarTecho(u.techo, u.proveedorTecho); return techo === u.techo ? u : { ...u, techo, proveedorTecho: D.TECHO_REQUIERE_PROVEEDOR(techo) ? u.proveedorTecho : "" }; });
       return d;
@@ -77,12 +119,16 @@ export function AppProvider({ children }) {
     return () => window.removeEventListener("storage", alCambiar);
   }, []);
 
-  // Catálogo y sedes desde la API
-  useEffect(() => {
-    if (!MODO_REAL) return;
-    modelosPublicos().then((r) => setApiModelos(r.data)).catch(() => setApiModelos(null));
-    sedesPublicasApi().then((r) => setApiSedes(Array.isArray(r.data) ? r.data : null)).catch(() => setApiSedes(null));
+  // Catálogo y sedes desde la API: al abrir, cada 30 s y al volver a la pestaña
+  const refrescarWeb = useCallback(() => {
+    if (!MODO_REAL) return Promise.resolve();
+    return Promise.all([
+      modelosPublicos().then((r) => setApiModelos(r.data)).catch(() => {}),
+      sedesPublicasApi().then((r) => setApiSedes(Array.isArray(r.data) ? r.data : null)).catch(() => {}),
+    ]);
   }, []);
+  useEffect(() => { refrescarWeb(); }, [refrescarWeb]);
+  useAutoRefresco(refrescarWeb, 30000, MODO_REAL);
 
   // Agregar, editar y eliminar registros
   const registrar = useCallback((detalle, quien = "Sistema") => {
@@ -116,21 +162,30 @@ export function AppProvider({ children }) {
     setS(BASE());
   }, []);
 
-  // Catálogo público (modelos publicados)
-  let publicos = s.modelos.filter((m) => m.estado === "Publicado");
+  // HU-036 · Fotos de cada modelo (galería del panel)
+  const urlsFotos = useArchivosLocales((s.imagenes || []).map((i) => i.archivo));
+  // Con la API conectada no se aplica la galería guardada en este navegador: mandan las fotos centrales
+  const modelosConFotos = useMemo(() => (MODO_REAL ? s.modelos : aplicarGaleria(s.modelos, s.imagenes || [], urlsFotos, s.config?.galeriaEditada || {})), [s.modelos, s.imagenes, urlsFotos, s.config?.galeriaEditada]);
+
+  // Catálogo público (modelos publicados). Con la API conectada, manda la base de datos.
+  let publicos = modelosConFotos.filter((m) => m.estado === "Publicado");
   let sinFicha = [];
   if (apiModelos) {
-    const par = emparejarModelos(apiModelos, s.modelos);
+    const par = emparejarModelos(apiModelos, modelosConFotos);
     sinFicha = par.sinFicha;
-    publicos = publicos
+    publicos = modelosConFotos
       .map((m) => {
         const a = par.porLocal.get(m.id);
-        if (!a) return m.creadoEnPanel ? m : null;
-        return { ...m, codmodApi: String(a.codmod), descripcion: m.editadoEnPanel ? m.descripcion : a.desmod || m.descripcion, imagenApi: m.fotoPropia ? undefined : a.imagenes?.[0]?.urlimo };
+        if (!a) return null;
+        return aplicarFotosCentrales({
+          ...m, estado: "Publicado", codmodApi: String(a.codmod), descripcion: a.desmod || m.descripcion,
+          precioDesde: a.premod == null ? null : Number(a.premod), // precio y colores: solo los de la base
+          colores: Array.isArray(a.colores) ? a.colores : [],
+        }, a.imagenes);
       })
       .filter(Boolean);
-    const ocupados = new Set(s.modelos.map((m) => m.id));
-    publicos = publicos.concat(par.sinFicha.map((a) => { const m = modeloDesdeApi(a, ocupados); ocupados.add(m.id); return m; }));
+    const ocupados = new Set(modelosConFotos.map((m) => m.id));
+    publicos = publicos.concat(par.sinFicha.map((a) => { const m = modeloDesdeApi(a, ocupados); ocupados.add(m.id); return aplicarFotosCentrales(m, a.imagenes); }));
   }
 
   // Sedes de la web
@@ -139,7 +194,7 @@ export function AppProvider({ children }) {
   const api = {
     ...s, publicos, apiModelos, sinFicha, apiSedes,
     agregar, actualizar, eliminar, reemplazar, restablecer, registrar, configurar,
-    sedes,
+    sedes, refrescarWeb, modelosConFotos, urlsFotos,
     modelo: (id) => s.modelos.find((m) => m.id === id),
     togglePublicadoModelo: (id) => actualizar("modelos", id, (m) => ({ estado: m.estado === "Publicado" ? "Borrador" : "Publicado" })),
     toggleActivoUbicacion: (id) => actualizar("ubicaciones", id, (u) => ({ activo: !u.activo })),

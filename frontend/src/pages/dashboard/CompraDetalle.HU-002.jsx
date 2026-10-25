@@ -1,10 +1,12 @@
 // HU-002 · Factura e identificación de unidades
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { Link } from "../../components/dashboard/LinkPanel";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { MODO_REAL } from "../../lib/config";
 import * as api from "../../lib/api";
+import { recordarCompra } from "../../servicios/comprasRecientes";
 import { mensajeError } from "../../lib/errores";
 import { Aviso, Campo, Card, PageHeader, Tabla, useConfirm, useToast } from "../../components/ui";
 import { Progreso } from "../../components/charts";
@@ -12,6 +14,7 @@ import { ESTADO_COMPRA } from "./Compras.HU-034";
 import { adjuntoRecordado, buscarPdfFactura, recordarAdjunto, subirPdfFactura, urlPdfFactura, validarPdf, validarPdfContenido } from "../../lib/archivos";
 import { soloDigitos } from "../../lib/validar";
 import { claveModelo } from "../../lib/modelos";
+import { abrirBlob, archivoDocumentoApi, pedidoCompraApi } from "../../servicios/central";
 
 const FILA = () => ({ nummotuni: "", chauni: "" });
 const norm = (t) => String(t || "").trim().replace(/\s+/g, " ");
@@ -35,6 +38,7 @@ export default function CompraDetalle() {
   const [pdf, setPdf] = useState(null); const [pdfErr, setPdfErr] = useState(""); const [subiendo, setSubiendo] = useState(false);
   const inputPdf = useRef(null); const inputPdf2 = useRef(null);
   const [adjReal, setAdjReal] = useState(null);
+  const [pedido, setPedido] = useState(""); const [pedidoErr, setPedidoErr] = useState(""); const [guardandoPedido, setGuardandoPedido] = useState(false);
 
   // Cargar la compra
   async function cargar() {
@@ -42,7 +46,8 @@ export default function CompraDetalle() {
     try {
       if (MODO_REAL) {
         const c = (await api.obtenerCompra(id)).data;
-        setCompra(c);
+        recordarCompra(c?.codcom || id);
+        setCompra(c); setPedido(c?.refcom || "");
         if (gestiona) {
           try {
             const d = (await api.listarUnidadesCompra(id)).data;
@@ -70,11 +75,9 @@ export default function CompraDetalle() {
   const bloqueada = det.requiere_revision;
   const modeloLocal = modelos.find((m) => claveModelo(m.nombre) === claveModelo(compra.nommod))
     || (MODO_REAL ? publicos.find((m) => m.codmodApi === String(compra.codmod)) : modelos.find((m) => m.codmod === compra.codmod)) || null;
-  const faltanEnInventario = MODO_REAL ? det.unidades.filter((u) => !inv.some((v) => serie(v.motor) === serie(u.nummotuni))) : [];
-  function pasarAlInventario(lista) {
-    const base = inv.reduce((m, u) => Math.max(m, Number(String(u.id).replace(/\D/g, "")) || 0), 0);
-    lista.forEach((r, i) => agregar("unidades", { id: `MC-${String(base + i + 1).padStart(3, "0")}`, coduni: r.coduni, codcom: String(compra.codcom), modelo: modeloLocal?.id || "", nombreModelo: compra.nommod, color: r.coluni || compra.colcom, ubicacion: "", preparacion: "Sin preparar", techo: "Sin techo", disponibilidad: "No disponible", motor: r.nummotuni, chasis: r.chauni, observaciones: [], historial: [{ fecha: hoyISO(), detalle: `Identificada en compra #${compra.codcom} · ${user.nombre}` }] }));
-  }
+  // HU-001 y HU-030: con la base central las unidades no se copian a este navegador
+  const automatica = MODO_REAL && (compra.origen === "Automático" || det.origen === "Automático" || Boolean(det.factura?.coddoc));
+  const coddoc = det.factura?.coddoc || compra.coddoc || null;
 
   const adjunto = MODO_REAL ? adjReal : (det.factura?.adjunto || adjuntoRecordado(compra.codcom));
 
@@ -110,6 +113,26 @@ export default function CompraDetalle() {
       if (descargar) { const a = document.createElement("a"); a.href = url; a.download = nombre; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
       else if (ventana) ventana.location.href = url; else window.open(url, "_blank");
     } catch (er) { ventana?.close(); toast(mensajeError(er), "error"); }
+  }
+
+  // HU-030 · PDF del documento importado (privado: se pide con la sesión)
+  async function abrirPdfDocumento(descargar) {
+    try { abrirBlob(await archivoDocumentoApi(coddoc, "pdf"), descargar); }
+    catch (er) { toast(mensajeError(er), "error"); }
+  }
+  // HU-030 · N° de pedido de Asiri: permite vincular la factura que llegue por correo sin duplicar la compra
+  async function guardarPedido(e) {
+    e.preventDefault();
+    const v = pedido.trim();
+    if (v && !/^[A-Za-z0-9-]{1,40}$/.test(v)) { setPedidoErr("Usa solo letras, números o guiones (máximo 40), tal como figura en Asiri."); return; }
+    if ((compra.refcom || "") === v) { setPedidoErr(v ? "Ese pedido ya está registrado." : "No hay pedido que quitar."); return; }
+    setPedidoErr(""); setGuardandoPedido(true);
+    try {
+      const r = await pedidoCompraApi(compra.codcom, v || null);
+      setCompra((c) => ({ ...c, refcom: r.data?.refcom ?? (v || null) }));
+      toast(v ? "N° de pedido guardado" : "N° de pedido quitado");
+    } catch (er) { setPedidoErr(mensajeError(er)); }
+    finally { setGuardandoPedido(false); }
   }
 
   // Registrar la factura (PUT /api/compras/:id/factura)
@@ -185,9 +208,7 @@ export default function CompraDetalle() {
     try {
       const cuerpo = rows.map((r) => ({ ...r, codmod: String(compra.codmod), coluni: compra.colcom }));
       if (MODO_REAL) {
-        const r = await api.vincularUnidades(id, cuerpo);
-        const nuevas = (r.data?.unidades || []).filter((u) => cuerpo.some((c) => c.nummotuni === serie(u.nummotuni)));
-        pasarAlInventario(nuevas.length ? nuevas : cuerpo.map((c) => ({ ...c, coduni: "" })));
+        await api.vincularUnidades(id, cuerpo);
       } else {
         const base = inv.reduce((m, u) => Math.max(m, Number(String(u.id).replace(/\D/g, "")) || 0), 0);
         cuerpo.forEach((r, i) => agregar("unidades", { id: `MC-${String(base + i + 1).padStart(3, "0")}`, codcom: id, modelo: modeloLocal?.id || "", nombreModelo: compra.nommod, color: compra.colcom, ubicacion: "", preparacion: "Sin preparar", techo: "Sin techo", disponibilidad: "No disponible", motor: r.nummotuni, chasis: r.chauni, historial: [{ fecha: hoyISO(), detalle: `Identificada en compra #${id} · ${user.nombre}` }] }));
@@ -195,7 +216,7 @@ export default function CompraDetalle() {
         const pend = compra.cancom - nuevas.length;
         actualizar("compras", compra.id, { unidades: nuevas, cantidad_pendiente: pend, estcom: pend === 0 ? "Identificada" : "Pendiente de identificación" }, `${cuerpo.length} unidades identificadas (compra #${id})`);
       }
-      toast(`${cuerpo.length} unidad(es) identificada(s). Siguiente paso: recíbelas y libéralas en Inventario para que la web muestre stock.`); setFilas([FILA()]); cargar();
+      toast(MODO_REAL ? `${cuerpo.length} unidad(es) identificada(s). Ya figuran en el inventario central; registra su ubicación inicial en Movimientos.` : `${cuerpo.length} unidad(es) identificada(s). Siguiente paso: recíbelas y libéralas en Inventario para que la web muestre stock.`); setFilas([FILA()]); cargar();
     } catch (er) {
       setConflicto({ texto: er.detalle?.conflicto ? er.message : mensajeError(er), detalle: er.detalle?.conflicto || null });
       toast(mensajeError(er), "error");
@@ -205,13 +226,13 @@ export default function CompraDetalle() {
   const f = det.factura;
   return (
     <div>
-      <PageHeader titulo={`Compra #${compra.codcom} · ${compra.nommod}`} subtitulo={`${compra.colcom} · ${compra.cancom} motos · registrada el ${compra.feccom} a las ${String(compra.horcom).slice(0, 5)}`}>
+      <PageHeader titulo={`Compra #${compra.codcom} · ${compra.nommod}`} subtitulo={`${compra.colcom} · ${compra.cancom} motos · ${automatica ? "registrada por la factura recibida por correo" : "registrada"} el ${compra.feccom} a las ${String(compra.horcom).slice(0, 5)}`}>
         <Link to="/admin/compras" className="btn btn-secondary !py-2.5">← Compras</Link>
         {hechas > 0 && <Link to="/admin/inventario" className="btn btn-secondary !py-2.5">Ver en inventario</Link>}
       </PageHeader>
 
       <ol className="mb-6 grid gap-3 sm:grid-cols-3">
-        {[["Compra registrada", `${compra.feccom}`, true], ["Factura recibida", tieneFactura ? (adjunto ? "Con PDF adjunto" : "Falta adjuntar el PDF") : "Pendiente", tieneFactura], ["Unidades identificadas", `${hechas} de ${compra.cancom}`, completa]].map(([t, hu, ok], i) => (
+        {[["Compra registrada", `${compra.feccom}`, true], ["Factura recibida", automatica ? (det.factura?.archivo_adjuntado ? "Importada del correo, con PDF" : "Importada del correo") : tieneFactura ? (adjunto ? "Con PDF adjunto" : "Falta adjuntar el PDF") : "Pendiente", tieneFactura || automatica], ["Unidades identificadas", `${hechas} de ${compra.cancom}`, completa]].map(([t, hu, ok], i) => (
           <li key={t} className={`flex items-center gap-3 rounded-xl2 border p-4 ${ok ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-[#121a2b]"}`}>
             <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[14px] font-bold ${ok ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500 dark:bg-white/10"}`}>{ok ? "✓" : i + 1}</span>
             <div><p className="font-semibold text-marino dark:text-white">{t}</p><p className="text-[12px] text-slate-400">{hu}</p></div>
@@ -233,7 +254,23 @@ export default function CompraDetalle() {
 
         <Card className="xl:col-span-2">
           <h2 className="font-bold text-marino dark:text-white">1 · Factura recibida de Crosland</h2>
-          {tieneFactura ? (
+          {automatica && f ? (
+            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 dark:border-white/10" data-factura-importada>
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-marino px-5 py-3 text-white">
+                <span className="text-[12px] font-semibold text-white/70">Factura electrónica importada del correo</span>
+                <span className="font-mono text-[15px] font-bold">{f.numero}</span>
+              </div>
+              <dl className="grid gap-x-6 gap-y-3 p-5 text-[13.5px] sm:grid-cols-2">
+                <div><dt className="text-slate-400">Emisor</dt><dd className="font-semibold text-marino dark:text-white">{f.emisor}</dd></div>
+                <div><dt className="text-slate-400">Fecha de emisión</dt><dd className="font-semibold text-marino dark:text-white">{f.fecha_emision}</dd></div>
+                <div><dt className="text-slate-400">Origen</dt><dd className="font-semibold text-marino dark:text-white">Factura recibida por correo</dd></div>
+                <div><dt className="text-slate-400">PDF</dt><dd>{f.archivo_adjuntado ? (
+                  <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-secondary !px-3 !py-1.5 !text-[12.5px]" onClick={() => abrirPdfDocumento(false)}>Ver</button><button type="button" className="btn btn-secondary !px-3 !py-1.5 !text-[12.5px]" onClick={() => abrirPdfDocumento(true)}>Descargar</button></div>
+                ) : <span className="text-slate-500">El correo no trajo PDF</span>}</dd></div>
+              </dl>
+              {coddoc && <div className="border-t border-slate-100 px-5 py-3 text-[13px] dark:border-white/10"><Link className="font-semibold text-marino-700 hover:underline dark:text-white" to={`/admin/facturas-recibidas/${coddoc}`}>Ver el documento recibido: líneas, unidades y su historial</Link></div>}
+            </div>
+          ) : tieneFactura ? (
             f ? (
               <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 dark:border-white/10">
                 <div className="flex flex-wrap items-center justify-between gap-2 bg-marino px-5 py-3 text-white">
@@ -287,13 +324,24 @@ export default function CompraDetalle() {
               <div className="sm:col-span-2"><button className="btn btn-primary !py-2.5" disabled={enviandoFactura}>{enviandoFactura ? "Registrando…" : `Registrar factura${pdf ? " con PDF" : ""}`}</button></div>
             </form>
           ) : <p className="mt-2 text-[14px] text-slate-500">Aún sin factura registrada. Solo gerente y administradora la registran.</p>}
+          {MODO_REAL && gestiona && !automatica && !tieneFactura && (
+            <form onSubmit={guardarPedido} className="mt-5 rounded-xl border border-dashed border-slate-300 p-4 dark:border-white/15" noValidate data-pedido-asiri>
+              <p className="text-[13.5px] font-semibold text-marino dark:text-white">N° de pedido de Asiri (opcional)</p>
+              <p className="mt-0.5 text-[12.5px] text-slate-500">Si la factura llega por correo con este mismo pedido y la misma cantidad, completa esta compra en lugar de crear otra.</p>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <input id="compra-pedido" className="field-input sm:max-w-xs" maxLength={40} value={pedido} onChange={(e) => { setPedido(e.target.value.replace(/\s/g, "")); setPedidoErr(""); }} placeholder="0002010750" />
+                <button className="btn btn-secondary !py-2.5" disabled={guardandoPedido}>{guardandoPedido ? "Guardando…" : pedido.trim() ? "Guardar pedido" : "Quitar pedido"}</button>
+              </div>
+              {pedidoErr && <p className="mt-1 text-[12px] font-medium text-acento">{pedidoErr}</p>}
+            </form>
+          )}
         </Card>
       </div>
 
       {/* Identificación de unidades */}
       <Card className="mt-6">
         <h2 className="font-bold text-marino dark:text-white">2 · Identificar unidades (motor y chasis)</h2>
-        {completa ? <p className="mt-2 text-[14px] text-emerald-700">✓ Todas las unidades de esta compra están identificadas. Continúa en Inventario: recíbelas y libéralas para que la web muestre stock.</p>
+        {completa ? <p className="mt-2 text-[14px] text-emerald-700">{MODO_REAL ? `✓ Todas las unidades de esta compra están identificadas${automatica ? " desde el XML de la factura" : ""} y ya figuran en el inventario central. Su ubicación, preparación y situación comercial se registran por separado.` : "✓ Todas las unidades de esta compra están identificadas. Continúa en Inventario: recíbelas y libéralas para que la web muestre stock."}</p>
           : !tieneFactura ? <p className="mt-2 text-[14px] text-slate-500">Registra primero la factura para identificar unidades.</p>
           : bloqueada ? <div className="mt-3"><Aviso tipo="error">La cantidad de la factura no coincide con la compra. La identificación queda bloqueada hasta que la gerencia revise el dato.</Aviso></div>
           : !gestiona ? <p className="mt-2 text-[14px] text-slate-500">Solo gerente y administradora identifican unidades.</p> : (
@@ -325,12 +373,9 @@ export default function CompraDetalle() {
             <button className="btn btn-primary mt-4" disabled={enviando}>{enviando ? "Identificando…" : `Identificar ${filas.length} unidad(es)`}</button>
           </form>
         )}
-        {faltanEnInventario.length > 0 && gestiona && (
-          <div className="mt-4"><Aviso tipo="aviso">{faltanEnInventario.length} unidad(es) de esta compra aún no están en el inventario del panel. <button type="button" className="font-semibold underline" onClick={() => { pasarAlInventario(faltanEnInventario); toast("Unidades agregadas al inventario"); }}>Agregarlas al inventario</button></Aviso></div>
-        )}
         {det.unidades.length > 0 && (
           <div className="mt-6"><h3 className="mb-2 text-[14px] font-semibold text-marino dark:text-white">Unidades ya identificadas ({det.unidades.length})</h3>
-            <Tabla columnas={["#", "N° de motor", "N° de chasis", "Color", "Fecha"]}>{det.unidades.map((u, i) => <tr key={u.coduni || u.nummotuni}><td className="px-4 py-2 text-slate-400">{i + 1}</td><td className="px-4 py-2 font-mono">{u.nummotuni}</td><td className="px-4 py-2 font-mono">{u.chauni}</td><td className="px-4 py-2">{u.coluni || compra.colcom}</td><td className="px-4 py-2 text-slate-500">{String(u.fecreguni || "").slice(0, 10)}</td></tr>)}</Tabla></div>
+            <Tabla columnas={["#", "N° de motor", "N° de chasis", "Color", "Fecha"]}>{det.unidades.map((u, i) => <tr key={u.coduni || u.nummotuni}><td className="px-4 py-2 text-slate-400">{i + 1}</td><td className="px-4 py-2 font-mono">{MODO_REAL && u.coduni ? <Link className="text-marino-700 hover:underline dark:text-white" to={`/admin/inventario/${u.coduni}`} state={{ unidad: { coduni: String(u.coduni), nummotuni: u.nummotuni, chauni: u.chauni, coluni: u.coluni || compra.colcom, nommod: compra.nommod, codcom: String(compra.codcom) } }}>{u.nummotuni}</Link> : u.nummotuni}</td><td className="px-4 py-2 font-mono">{u.chauni}</td><td className="px-4 py-2">{u.coluni || compra.colcom}</td><td className="px-4 py-2 text-slate-500">{String(u.fecreguni || "").slice(0, 10)}</td></tr>)}</Tabla></div>
         )}
       </Card>
     </div>

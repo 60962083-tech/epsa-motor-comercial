@@ -1,4 +1,4 @@
-// HU-007 · Ruta protegida por rol
+// HU-007 · Ruta protegida por rol y por los permisos que define el gerente
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 

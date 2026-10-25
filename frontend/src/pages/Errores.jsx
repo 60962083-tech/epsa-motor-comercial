@@ -33,7 +33,7 @@ const ERRORES = {
   401: ["401", "Tu sesión venció", "Por seguridad cerramos tu sesión. Ingresa nuevamente para continuar."],
   403: ["403", "No tienes permiso", "Tu rol no puede realizar esta operación. Si crees que es un error, consulta con el gerente."],
   500: ["500", "Algo salió mal de nuestro lado", "Tuvimos un problema al procesar tu solicitud. Inténtalo otra vez en unos minutos."],
-  offline: ["", "Sin conexión", "No pudimos comunicarnos con el servidor. Revisa tu internet e inténtalo de nuevo."],
+  offline: ["", "Sin conexión", "No pudimos conectarnos. Revisa tu internet e inténtalo de nuevo."],
 };
 
 export function ErrorPorCodigo() {
@@ -49,12 +49,3 @@ export function ErrorPorCodigo() {
   );
 }
 
-export function SinStockAviso({ nombre, onAvisar }) {
-  return (
-    <div className="rounded-xl2 border border-amber-200 bg-amber-50 p-5 dark:border-amber-500/30 dark:bg-amber-500/10">
-      <h3 className="font-semibold text-amber-800 dark:text-amber-200">Sin stock por ahora</h3>
-      <p className="mt-1 text-[13.5px] text-amber-800/80 dark:text-amber-200/80">No tenemos unidades listas del {nombre}. Déjanos tus datos y te avisamos apenas llegue la próxima compra.</p>
-      <button onClick={onAvisar} className="btn btn-primary mt-3 !py-2">Avísame cuando haya stock</button>
-    </div>
-  );
-}

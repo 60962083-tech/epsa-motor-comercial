@@ -1,6 +1,6 @@
 // HU-008 · Catálogo de modelos
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { FILTROS_CATALOGO, FAMILIAS, COLOR_HEX, formatoSoles } from "../data/mockData";
 import { useApp } from "../store/appStore.jsx";
 import { useCotizar } from "../components/CotizarModal";
@@ -10,7 +10,7 @@ import { numero } from "../components/FichaTecnica";
 import { IconBuscar, IconClose, IconFiltros } from "../components/Icons";
 
 // Tarjeta de modelo
-export function TarjetaModelo({ m, stock, colores = true, colorInicial }) {
+export function TarjetaModelo({ m, colores = true, colorInicial }) {
   const cotizar = useCotizar();
   const [color, setColor] = useState(colorInicial || m.colorPortada || m.colores?.[0]);
   const badge = (m.badges || [])[0];
@@ -21,7 +21,6 @@ export function TarjetaModelo({ m, stock, colores = true, colorInicial }) {
         {badge && <span className={`absolute left-3 top-3 z-10 rounded-md px-2 py-0.5 text-[10.5px] font-bold tracking-wide text-white ${badge.startsWith("NUEVO") ? "bg-acento" : "bg-marino-700"}`}>{badge}</span>}
         {(m.colores || []).length > 1 && <span className="absolute right-3 top-3 z-10 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-marino dark:bg-[#101c33] dark:text-white">{m.colores.length} colores</span>}
         <ModeloImg modelo={m} color={color} className="aspect-[4/3] w-full object-contain p-6 transition duration-300 group-hover:scale-[1.03]" />
-        {stock === 0 && <span className="absolute bottom-3 left-3 rounded-md bg-amber-500 px-2 py-0.5 text-[10.5px] font-bold text-white">SIN STOCK</span>}
       </Link>
       <div className="flex flex-1 flex-col pt-4">
         <div className="flex items-center justify-between gap-3">
@@ -116,15 +115,19 @@ function PanelFiltros({ grupos, sel, alternar, conteo, precio, setPrecio, rango 
 }
 
 // Página del catálogo
+// Tres motos para la vitrina del encabezado (distintas fotos), con respaldo en los primeros publicados
+const VITRINA = [["torito-2t-ug-gsl", "Azul"], ["torito-crom-plus-gsl", ""], ["torito-250-4v-glp", ""]];
+
 export default function Modelos() {
-  const { publicos, unidades } = useApp();
-  const [sel, setSel] = useState(VACIO);
+  const { publicos } = useApp();
+  const [params] = useSearchParams();
+  // Desde el inicio se puede llegar con un combustible elegido (?combustible=GLP)
+  const [sel, setSel] = useState(() => ({ ...VACIO, combustible: params.get("combustible") ? [params.get("combustible")] : [] }));
   const [q, setQ] = useState("");
   const [precio, setPrecio] = useState(null);
   const [orden, setOrden] = useState("precio-asc");
   const [panel, setPanel] = useState(false);
 
-  const stockDe = (id) => unidades.filter((u) => u.modelo === id && u.disponibilidad === "Disponible").length;
 
   const rango = useMemo(() => {
     const precios = publicos.map((m) => m.precioDesde).filter(Boolean);
@@ -172,10 +175,21 @@ export default function Modelos() {
 
   return (
     <div className="fade-in">
-      {/* Encabezado */}
-      <section className="wrap pb-8 pt-10 lg:pb-10 lg:pt-14">
-        <h1 className="font-display text-[3rem] font-bold uppercase leading-[0.9] tracking-tight text-marino sm:text-[4rem] dark:text-white">Modelos Torito</h1>
-        <p className="bajada mt-4">Compara motores, combustible y precios de la línea oficial Torito Bajaj. Todos se pueden financiar con crédito directo.</p>
+      {/* Encabezado con vitrina de motos */}
+      <section className="relative overflow-hidden">
+        <div className="pointer-events-none absolute -right-40 -top-24 h-[420px] w-[620px] rounded-full bg-escenario blur-2xl dark:bg-escenario-oscuro" aria-hidden="true" />
+        <div className="wrap relative grid items-center gap-6 pb-8 pt-10 lg:grid-cols-[1fr_minmax(0,.95fr)] lg:pb-10 lg:pt-14">
+          <div>
+            <h1 className="font-display text-[3rem] font-bold uppercase leading-[0.9] tracking-tight text-marino sm:text-[4rem] dark:text-white">Modelos Torito</h1>
+            <p className="bajada mt-4">Compara motores, combustible y precios de la línea oficial Torito Bajaj. Todos se pueden financiar con crédito directo.</p>
+            <ul className="mt-5 flex flex-wrap gap-2 text-[13px] font-semibold text-marino dark:text-white/85">
+              {[publicos.length ? nModelos(publicos.length) : "Línea oficial", "Crédito directo", "Trámite de placa acompañado"].map((t) => (
+                <li key={t} className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 dark:border-white/15 dark:bg-white/5">{t}</li>
+              ))}
+            </ul>
+          </div>
+          <VitrinaMotos publicos={publicos} />
+        </div>
       </section>
 
       <div className="wrap grid gap-10 pb-16 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-14 lg:pb-24">
@@ -230,7 +244,7 @@ export default function Modelos() {
             </div>
           ) : (
             <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 xl:grid-cols-3">
-              {lista.map((m) => <TarjetaModelo key={m.id} m={m} stock={stockDe(m.id)} />)}
+              {lista.map((m) => <TarjetaModelo key={m.id} m={m} />)}
             </div>
           )}
           <p className="mt-14 text-[12.5px] text-slate-400">Precios de la moto sin techo: el techo de fibra es un adicional que eliges en la ficha o al cotizar. No incluyen matrícula ni SOAT. Fotos referenciales.</p>
@@ -254,6 +268,33 @@ export default function Modelos() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Tres motos de la línea, una delante y dos detrás (solo decorativo)
+function VitrinaMotos({ publicos }) {
+  const usadas = new Set();
+  const trio = VITRINA.map(([id, color]) => {
+    const m = publicos.find((x) => x.id === id && !usadas.has(x.id));
+    if (m) usadas.add(m.id);
+    return m ? { m, color } : null;
+  });
+  for (let i = 0; i < trio.length; i++) {
+    if (!trio[i]) { const m = publicos.find((x) => !usadas.has(x.id)); if (m) { usadas.add(m.id); trio[i] = { m, color: "" }; } }
+  }
+  if (trio.some((x) => !x)) return null;
+  const pos = [
+    "left-[2%] top-[6%] w-[40%] opacity-90",
+    "right-[0%] top-[2%] w-[38%] opacity-90",
+    "left-1/2 bottom-0 w-[54%] -translate-x-1/2",
+  ];
+  return (
+    <div className="relative hidden h-[250px] lg:block" aria-hidden="true" data-vitrina-modelos>
+      <div className="absolute inset-x-[18%] bottom-1 h-6 rounded-[50%] bg-marino/15 blur-lg dark:bg-black/50" />
+      {trio.map(({ m, color }, i) => (
+        <ModeloImg key={m.id} modelo={m} color={color || undefined} alt="" className={`absolute h-auto max-h-[78%] object-contain drop-shadow-[0_18px_22px_rgba(7,30,61,.18)] ${pos[i]}`} />
+      ))}
     </div>
   );
 }

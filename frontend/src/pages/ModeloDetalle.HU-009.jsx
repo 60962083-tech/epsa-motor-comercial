@@ -1,5 +1,5 @@
-// HU-009 · Ficha del modelo
-import { useEffect, useMemo, useState } from "react";
+// HU-009 · Ficha del modelo · HU-036: fotos de la galería
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useApp } from "../store/appStore.jsx";
 import { useCotizar } from "../components/CotizarModal";
@@ -8,17 +8,17 @@ import ModeloImg from "../components/ModeloImg";
 import FichaTecnica from "../components/FichaTecnica";
 import WhatsAppButton from "../components/WhatsAppButton.HU-013";
 import { IconCheck, IconLlanta, IconMedidor, IconMotor, IconPiston, IconRayo } from "../components/Icons";
-import { ProductoNoDisponible, SinStockAviso } from "./Errores";
+import { ProductoNoDisponible } from "./Errores";
 import { TarjetaModelo } from "./Modelos.HU-008";
 import { MODO_REAL } from "../lib/config";
 import { modeloPublicadoApi } from "../lib/api";
 
 const TECHOS = [SIN_TECHO, ...OPCIONES_TECHO];
 const INCLUYE = [
-  ["Garantía oficial", "Respaldo de Bajaj y Crosland en motor y componentes."],
+  ["Garantía oficial", "Unidad nueva con la garantía de la marca."],
   ["Trámite de placa", "Te acompañamos con la placa y la tarjeta de propiedad."],
-  ["Crédito directo", "Cuotas a tu medida, con evaluación rápida en sede."],
-  ["Asesoría postventa", "Te orientamos en el primer mantenimiento en taller autorizado."],
+  ["Crédito directo", "Cuotas a tu medida; evaluamos tu crédito con tu DNI y un recibo de servicios."],
+  ["Techo a tu elección", "Lo eliges al cotizar y se instala antes de la entrega."],
 ];
 const CLAVES = [["Motor", IconMotor], ["Cilindrada", IconPiston], ["Llantas", IconLlanta], ["Potencia", IconRayo], ["Torque", IconMedidor]];
 
@@ -29,20 +29,20 @@ export default function ModeloDetalleRuta() {
 
 // Página del modelo
 function ModeloDetalle({ id }) {
-  const { modelo: buscar, publicos, unidades } = useApp();
+  const { modelo: buscar, publicos } = useApp();
   const cotizar = useCotizar();
   const m = publicos.find((x) => x.id === id);
   const retirado = !m ? buscar(id) : null;
   const [color, setColor] = useState("");
+  const [foto, setFoto] = useState(null);
   const [techo, setTecho] = useState(SIN_TECHO.id);
   const [inicial, setInicial] = useState(30);
   const [plazo, setPlazo] = useState(24);
-  const stock = useMemo(() => unidades.filter((u) => u.modelo === id && u.disponibilidad === "Disponible").length, [unidades, id]);
   const [ficha, setFicha] = useState(null); const [despublicado, setDespublicado] = useState(false);
   useEffect(() => {
     if (!MODO_REAL || !m?.codmodApi) return undefined;
     let vivo = true;
-    modeloPublicadoApi(m.codmodApi).then((r) => vivo && setFicha(r.data || null)).catch((e) => { if (vivo && e.status === 404) setDespublicado(true); });
+    modeloPublicadoApi(m.codmodApi).then((r) => vivo && setFicha(r.data || null)).catch((e) => { if (vivo && e.status === 404 && !e.detalle?.sinRuta) setDespublicado(true); });
     return () => { vivo = false; };
   }, [m?.codmodApi]); // eslint-disable-line
 
@@ -72,13 +72,24 @@ function ModeloDetalle({ id }) {
             <div className="min-w-0">
               <div className="relative overflow-hidden rounded-3xl bg-escenario p-4 sm:p-8 dark:bg-escenario-oscuro">
                 <div className="pointer-events-none absolute inset-x-[15%] bottom-[10%] h-[12%] rounded-[50%] bg-marino/10 blur-2xl dark:bg-black/40" aria-hidden="true" />
-                <ModeloImg modelo={m} color={colorSel} className="relative mx-auto aspect-[4/3] w-full object-contain" />
+                {foto ? <img src={foto.src} alt={`${m.nombre}${foto.color ? ` color ${foto.color}` : ""}`} referrerPolicy="no-referrer" className="relative mx-auto aspect-[4/3] w-full object-contain" />
+                  : <ModeloImg modelo={m} color={colorSel} className="relative mx-auto aspect-[4/3] w-full object-contain" />}
               </div>
+              {(m.galeria || []).length > 1 && (
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="list" aria-label="Más fotos" data-galeria-web>
+                  {m.galeria.map((g, i) => (
+                    <button key={g.id || g.src} role="listitem" onClick={() => setFoto(foto?.src === g.src ? null : g)} aria-pressed={foto?.src === g.src} aria-label={`Ver foto ${i + 1}${g.color ? ` en ${g.color}` : ""}`}
+                      className={`grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-escenario p-1 ring-2 transition dark:bg-escenario-oscuro ${foto?.src === g.src ? "ring-marino-700 dark:ring-white" : "ring-transparent hover:ring-slate-300"}`}>
+                      <img src={g.src} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-contain" />
+                    </button>
+                  ))}
+                </div>
+              )}
               {colores.length > 0 && <div className="mt-5 flex flex-wrap items-center gap-4">
                 <p className="text-[14px] text-slate-500">{colores.length > 1 ? "Color" : "Disponible en"} <span className="font-semibold text-marino dark:text-white">{colorSel}</span></p>
                 <div className="flex flex-wrap gap-2.5" role="radiogroup" aria-label="Colores disponibles">
                   {colores.map((c) => (
-                    <button key={c} role="radio" onClick={() => setColor(c)} aria-label={`Color ${c}`} aria-checked={colorSel === c} title={c} disabled={colores.length === 1}
+                    <button key={c} role="radio" onClick={() => { setColor(c); setFoto(null); }} aria-label={`Color ${c}`} aria-checked={colorSel === c} title={c} disabled={colores.length === 1}
                       className={`h-9 w-9 rounded-full border-2 transition disabled:cursor-default ${colorSel === c ? "scale-110 border-white ring-2 ring-marino-700 dark:ring-white" : "border-white/70 ring-1 ring-slate-300 hover:scale-105 dark:ring-white/20"}`} style={{ background: COLOR_HEX[c] || "#94a3b8" }} />
                   ))}
                 </div>
@@ -121,11 +132,6 @@ function ModeloDetalle({ id }) {
                 <button onClick={pedir} className="btn btn-acento">Quiero que me contacten</button>
                 <WhatsAppButton mensaje={`Hola, quisiera información sobre el ${m.nombre}${colorSel ? ` en color ${colorSel}` : ""}${t?.precio ? ` con techo ${t.nombre}` : ""}.`} />
               </div>
-              <p className="mt-4 text-[13.5px]">
-                {stock > 0
-                  ? <span className="inline-flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-400"><span className="h-2 w-2 rounded-full bg-emerald-500" />{stock} {stock === 1 ? "unidad disponible" : "unidades disponibles"} en nuestras sedes</span>
-                  : <span className="inline-flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-400"><span className="h-2 w-2 rounded-full bg-amber-500" />Sin stock por ahora</span>}
-              </p>
 
               <dl className="mt-8 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-slate-200 pt-6 sm:grid-cols-4 dark:border-white/10">
                 {CLAVES.filter(([k]) => k !== "Motor").map(([k, Icono]) => (
@@ -204,16 +210,13 @@ function ModeloDetalle({ id }) {
         </div>
       </section>
 
-      {/* Sin stock */}
-      {stock === 0 && <section className="wrap pb-14"><SinStockAviso nombre={m.nombre} onAvisar={pedir} /></section>}
-
       {/* Modelos relacionados */}
       {relacionados.length > 0 && (
         <section className="border-t border-slate-200 bg-escenario/60 py-14 dark:border-white/10 dark:bg-transparent">
           <div className="wrap">
             <h2 className="titulo">También te puede interesar</h2>
             <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-              {relacionados.map((r) => <TarjetaModelo key={r.id} m={r} stock={unidades.filter((u) => u.modelo === r.id && u.disponibilidad === "Disponible").length} />)}
+              {relacionados.map((r) => <TarjetaModelo key={r.id} m={r} />)}
             </div>
           </div>
         </section>

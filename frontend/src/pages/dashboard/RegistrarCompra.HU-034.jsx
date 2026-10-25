@@ -1,6 +1,7 @@
 // HU-034 · Registrar compra pendiente de factura
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { Link } from "../../components/dashboard/LinkPanel";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { MODO_REAL } from "../../lib/config";
@@ -12,6 +13,7 @@ import { ESTADO_COMPRA } from "./Compras.HU-034";
 import { COLOR_HEX } from "../../data/mockData";
 import { fechaLocal, soloDigitos } from "../../lib/validar";
 import { emparejarModelos } from "../../lib/modelos";
+import { pedidoCompraApi } from "../../servicios/central";
 
 const PALETA = Object.keys(COLOR_HEX);
 
@@ -23,12 +25,12 @@ export default function RegistrarCompra() {
   const par = MODO_REAL ? emparejarModelos(apiModelos || [], modelosLocales) : null;
   const localDe = (a) => { for (const [id, x] of par.porLocal) if (x === a) return modelosLocales.find((m) => m.id === id); return null; };
   const modelos = par
-    ? (apiModelos || []).map((a) => { const l = localDe(a); return { ...l, id: l?.id || `api-${a.codmod}`, codmod: String(a.codmod), nombre: a.nommod, colores: l?.colores?.length ? l.colores : PALETA, sinFicha: !l, imagenApi: a.imagenes?.[0]?.urlimo }; })
+    ? (apiModelos || []).map((a) => { const l = localDe(a); return { ...l, id: l?.id || `api-${a.codmod}`, codmod: String(a.codmod), nombre: a.nommod, colores: a.colores?.length ? a.colores : l?.colores?.length ? l.colores : PALETA, sinFicha: !l, imagenApi: a.imagenes?.[0]?.urlimo }; })
     : modelosLocales;
   const { puede, user } = useAuth();
   const toast = useToast(); const confirmar = useConfirm(); const navigate = useNavigate();
   const [pendientes, setPendientes] = useState(MODO_REAL ? [] : locales.filter((c) => c.estcom !== "Identificada"));
-  const [f, setF] = useState({ codmod: modelos[0]?.codmod || "", colcom: modelos[0]?.colores?.length === 1 ? modelos[0].colores[0] : "", cancom: 1 });
+  const [f, setF] = useState({ codmod: modelos[0]?.codmod || "", colcom: modelos[0]?.colores?.length === 1 ? modelos[0].colores[0] : "", cancom: 1, pedido: "" });
   const [err, setErr] = useState({});
   const [reviso, setReviso] = useState(false);
   const [enviando, setEnviando] = useState(false); const [reintento, setReintento] = useState(false);
@@ -63,6 +65,7 @@ export default function RegistrarCompra() {
     const n = Number(f.cancom);
     if (!Number.isInteger(n) || n < 1 || n > 9999) x.cancom = "La cantidad debe ser un número entero entre 1 y 9999.";
     if (!reviso) x.reviso = "Confirma que revisaste las compras pendientes.";
+    if (MODO_REAL && f.pedido.trim() && !/^[A-Za-z0-9-]{1,40}$/.test(f.pedido.trim())) x.pedido = "Usa solo letras, números o guiones (máximo 40), tal como figura en Asiri.";
     setErr(x); return Object.keys(x).length === 0;
   }
 
@@ -87,10 +90,15 @@ export default function RegistrarCompra() {
     setEnviando(true);
     try {
       const r = MODO_REAL ? await api.crearCompra(cuerpo, clave.current) : registrarLocal(cuerpo);
-      toast(r.status === 200 ? "Esa compra ya estaba registrada (mismo reintento): se muestra la misma." : "Compra registrada. Siguiente paso: registrar la factura y adjuntar el PDF.");
+      // HU-030: el pedido de Asiri permite vincular la factura que llegue por correo sin duplicar la compra
+      if (MODO_REAL && f.pedido.trim() && r.data?.codcom) {
+        try { await pedidoCompraApi(r.data.codcom, f.pedido.trim()); }
+        catch (er) { toast(`Compra registrada, pero el N° de pedido no se guardó: ${mensajeError(er)} Agrégalo desde la compra.`, "error"); }
+      }
+      toast(r.status === 200 ? "Esa compra ya estaba registrada (mismo reintento): se muestra la misma." : MODO_REAL ? "Compra registrada como respaldo. Cuando llegue la factura por correo se completará sola si coincide el pedido y la cantidad." : "Compra registrada. Siguiente paso: registrar la factura y adjuntar el PDF.");
       navigate(`/admin/compras/${r.data?.codcom}`);
     } catch (er) {
-      if (er.status === 0 || er.status >= 500) { setReintento(true); toast("No hubo respuesta clara del servidor. Presiona «Reintentar»: se usa la misma clave y no se duplica.", "error"); }
+      if (er.status === 0 || er.status >= 500) { setReintento(true); toast("No recibimos la confirmación. Presiona «Reintentar»: la compra no se registrará dos veces.", "error"); }
       else { clave.current = uuid(); setReintento(false); setErr({ general: mensajeError(er) }); toast(mensajeError(er), "error"); }
     } finally { setEnviando(false); }
   }
@@ -100,6 +108,7 @@ export default function RegistrarCompra() {
       <PageHeader titulo="Registrar compra pendiente de factura" subtitulo="Después de cotizar y pagar a Crosland, registra qué modelo, color y cuántas motos se compraron. La factura y las series se completan después.">
         <Link to="/admin/compras" className="btn btn-secondary !py-2.5">← Compras</Link>
       </PageHeader>
+      {MODO_REAL && <div className="mb-5"><Aviso>Registrarla a mano es opcional: cuando la factura de Crosland llega por correo, la compra y sus motos se registran solas. Úsalo como respaldo si quieres dejar constancia antes de que llegue la factura.</Aviso></div>}
 
       {/* Formulario de compra */}
       <form onSubmit={enviar} noValidate className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
@@ -130,9 +139,14 @@ export default function RegistrarCompra() {
                 <button type="button" disabled={reintento} aria-label="Sumar una" className="grid h-11 w-11 place-items-center rounded-lg border border-slate-300 text-xl dark:border-white/15" onClick={() => setF({ ...f, cancom: Math.min(9999, Number(f.cancom || 0) + 1) })}>+</button>
               </div>
             </Campo>
+            {MODO_REAL && (
+              <Campo etiqueta="N° de pedido de Asiri (opcional)" error={err.pedido} ayuda="Si la factura llega por correo con este pedido y la misma cantidad, completa esta compra en lugar de crear otra.">
+                <input id="compra-pedido" disabled={reintento} className="field-input sm:max-w-xs" maxLength={40} value={f.pedido} onChange={(e) => setF({ ...f, pedido: e.target.value.replace(/\s/g, "") })} placeholder="0002010750" />
+              </Campo>
+            )}
             {similares.length > 0 && <Aviso tipo="aviso">Ya hay {similares.length} compra(s) pendiente(s) de {modelo?.nombre} en {color} (#{similares.map((c) => c.codcom).join(", #")}). Confirma con la gerencia que no sea la misma antes de registrar otra.</Aviso>}
             {err.general && <Aviso tipo="error">{err.general}</Aviso>}
-            {reintento && <Aviso>Sin respuesta clara del servidor. Los datos quedan bloqueados y se reutilizará la misma clave: si la compra sí se creó, no se duplicará. <button type="button" className="font-semibold underline" onClick={() => { clave.current = uuid(); setReintento(false); }}>Empezar una compra distinta</button></Aviso>}
+            {reintento && <Aviso>No recibimos la confirmación. Los datos quedan fijos para reintentar: si la compra ya se registró, no se duplicará. <button type="button" className="font-semibold underline" onClick={() => { clave.current = uuid(); setReintento(false); }}>Empezar una compra distinta</button></Aviso>}
           </div>
         </Card>
 
