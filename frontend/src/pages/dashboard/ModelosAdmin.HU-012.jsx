@@ -14,7 +14,6 @@ import { mensajeError } from "../../lib/errores";
 import { emparejarModelos, modeloDesdeApi } from "../../lib/modelos";
 import useAutoRefresco from "../../hooks/useAutoRefresco";
 import GaleriaModelo from "../../components/dashboard/GaleriaModelo";
-import SincronizarTorito from "../../components/dashboard/SincronizarTorito";
 import GaleriaCentral from "../../components/dashboard/GaleriaCentral";
 import { aplicarFotosCentrales } from "../../lib/galeria";
 
@@ -70,7 +69,6 @@ export default function ModelosAdmin() {
 
   // Lista desde la base: GET /api/modelos/admin (se actualiza sola)
   const [admin, setAdmin] = useState(null);
-  const [torito, setTorito] = useState(false); // HU-036: traer precios, colores y fotos oficiales de torito.pe
   const [errorApi, setErrorApi] = useState("");
   const [guardando, setGuardando] = useState(false);
   async function cargarAdmin(silencioso = false) {
@@ -243,10 +241,8 @@ export default function ModelosAdmin() {
   return (
     <div>
       <PageHeader titulo="Modelos" subtitulo="Lo que publiques, edites o elimines aquí cambia al instante en la web de clientes.">
-        {enBase && admin && <button className="btn btn-secondary !py-2.5" onClick={() => setTorito(true)} data-abrir-torito>Traer datos de torito.pe</button>}
         {editar && <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Nuevo modelo</button>}
       </PageHeader>
-      <SincronizarTorito abierto={torito} modelos={admin} onClose={() => setTorito(false)} onHecho={() => Promise.all([cargarAdmin(true), refrescarWeb()])} />
       {/* Estado del catálogo */}
       {MODO_REAL && (
         <div className="mb-4 space-y-2" data-diagnostico-modelos>
