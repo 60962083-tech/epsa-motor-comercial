@@ -13,6 +13,8 @@ import { ESTADO_COMPRA } from "./Compras.HU-034";
 import { COLOR_HEX } from "../../data/mockData";
 import { fechaLocal, soloDigitos } from "../../lib/validar";
 import { emparejarModelos } from "../../lib/modelos";
+import useAutoRefresco from "../../hooks/useAutoRefresco";
+import { REFRESCO_MS } from "../../servicios/central";
 import { pedidoCompraApi } from "../../servicios/central";
 
 const PALETA = Object.keys(COLOR_HEX);
@@ -40,6 +42,8 @@ export default function RegistrarCompra() {
     if (!MODO_REAL) return;
     api.listarCompras(100, 0).then((r) => setPendientes(r.data || [])).catch((e) => toast(mensajeError(e), "error"));
   }, []); // eslint-disable-line
+  // Lista de pendientes al día: se actualiza sola (otra sesión pudo registrar o identificar una compra)
+  useAutoRefresco(() => api.listarCompras(100, 0).then((r) => setPendientes(r.data || [])).catch(() => {}), REFRESCO_MS, MODO_REAL);
 
   const codigos = modelos.map((m) => m.codmod).join("|");
   useEffect(() => {

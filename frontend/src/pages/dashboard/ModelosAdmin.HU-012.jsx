@@ -16,13 +16,15 @@ import useAutoRefresco from "../../hooks/useAutoRefresco";
 import GaleriaModelo from "../../components/dashboard/GaleriaModelo";
 import GaleriaCentral from "../../components/dashboard/GaleriaCentral";
 import { aplicarFotosCentrales } from "../../lib/galeria";
+import { fichaATexto } from "../../lib/fichaModelo";
+import InformacionTorito from "../../components/dashboard/InformacionTorito";
+import { REFRESCO_MS } from "../../servicios/central";
 
 // Conexión con la base (HU-012)
 const CODTMO = { "Motores 2 Tiempos": "2", "Motores 4 Válvulas": "3", "Motores Crom Plus": "4" };
 const estadoPanel = (e) => (e === "Publicado" ? "Publicado" : "Borrador");
-const carmodDe = (resumen, combustible) => Object.entries({ ...resumen, Combustible: combustible }).map(([k, v]) => [k, String(v || "").trim()]).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(" · ");
 const urlParaBase = (u) => { const t = String(u || "").trim(); return /^\/images\/[\w./-]+\.(png|jpe?g|webp|svg|gif)$/i.test(t) || /^https:\/\/[^\s]+$/i.test(t) ? t : ""; };
-const fotoActiva = (m) => (m?.imagenesApi || []).find((i) => i.estimo);
+const fotoActiva = (m) => [...(m?.imagenesApi || [])].filter((i) => i.estimo).sort((a, b) => (a.ordimo ?? 0) - (b.ordimo ?? 0))[0];
 
 const slug = (t) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const TABS = [{ id: "motor", t: "Motor" }, { id: "chasis", t: "Chasis" }, { id: "consumo", t: "Consumo y rendimiento" }, { id: "dimensiones", t: "Dimensiones" }, { id: "electrico", t: "Sistema eléctrico" }];
@@ -62,6 +64,7 @@ function imagenValida(v) {
 export default function ModelosAdmin() {
   const { modelos: locales, apiModelos, unidades, agregar, actualizar, eliminar, refrescarWeb, modelosConFotos = [], imagenes = [] } = useApp();
   const [galeria, setGaleria] = useState(null);
+  const [torito, setTorito] = useState(false);
   // HU-036: si se editaron sus fotos, la miniatura usa la foto principal de la galería
   const conFotos = (m) => { if (MODO_REAL) return m; const x = modelosConFotos.find((y) => y.id === m.id); return x?.fotoPropia && x.galeria ? { ...m, imagen: x.imagen, fotosColor: x.fotosColor, colorFoto: x.colorFoto, fotoPropia: true, imagenApi: undefined } : m; };
   const { puede } = useAuth();
@@ -77,21 +80,27 @@ export default function ModelosAdmin() {
     catch (e) { if (!silencioso) setErrorApi(mensajeError(e)); }
   }
   useEffect(() => { cargarAdmin(); }, []); // eslint-disable-line
-  useAutoRefresco(() => cargarAdmin(true), 30000, enBase);
+  useAutoRefresco(() => cargarAdmin(true), REFRESCO_MS, enBase);
 
   // Ficha del panel + datos reales de la base
   const modelos = useMemo(() => {
     if (!enBase || !admin) return locales;
     const par = emparejarModelos(admin, locales);
     const ocupados = new Set(locales.map((m) => m.id));
-    const deBase = (a, m) => aplicarFotosCentrales({
-      ...m, codmodApi: String(a.codmod), codtmo: a.codtmo, estmod: a.estmod, estado: estadoPanel(a.estmod), nombre: a.nommod,
-      descripcion: a.desmod || m.descripcion, precioDesde: a.premod == null ? m.precioDesde : Number(a.premod),
-      colores: a.colores?.length ? COLORES.filter((c) => a.colores.includes(c)) : m.colores || [],
-      imagenesApi: a.imagenes || [],
-    }, a.imagenes);
+    // HU-036: toda la información sale de la base (precio, colores, descripción, ficha de carmod y fotos), igual
+    // que en la web. La ficha oficial de torito.pe solo se propone al editar si la base todavía no la tiene.
+    const deBase = (a, m) => {
+      const b = modeloDesdeApi(a, ocupados);
+      if (!m) ocupados.add(b.id);
+      return aplicarFotosCentrales({
+        ...b, id: m?.id || b.id, codtmo: a.codtmo, estmod: a.estmod, estado: estadoPanel(a.estmod), carmod: a.carmod || "",
+        colores: COLORES.filter((c) => (a.colores || []).includes(c)),
+        precioSugerido: m?.precioDesde ?? null, coloresSugeridos: m?.colores || [], fichaSugerida: m || null,
+        imagenesApi: a.imagenes || [],
+      }, a.imagenes);
+    };
     const conFicha = locales.flatMap((m) => { const a = par.porLocal.get(m.id); return a ? [deBase(a, m)] : []; });
-    const soloBase = par.sinFicha.map((a) => { const m = modeloDesdeApi(a, ocupados); ocupados.add(m.id); return deBase(a, m); });
+    const soloBase = par.sinFicha.map((a) => deBase(a, null));
     const soloNavegador = locales.filter((m) => !par.porLocal.has(m.id)).map((m) => ({ ...m, estado: "Borrador", soloLocal: true }));
     return [...conFicha, ...soloBase, ...soloNavegador];
   }, [enBase, admin, locales]);
@@ -107,16 +116,20 @@ export default function ModelosAdmin() {
 
   const faltantes = (m) => enBase ? [!fotoActiva(m) ? "foto (enlace https://)" : null, !m.descripcion?.trim() ? "descripción" : null].filter(Boolean) : [!m.descripcion || m.descripcion.trim().length < 40 ? "descripción (mín. 40 caracteres)" : null, !m.precioDesde ? "precio" : null, !m.imagen && !m.local ? "imagen" : null, !m.colores?.length ? "al menos un color" : null].filter(Boolean);
 
-  function abrir(m) {
+  function abrir(modelo) {
     setErr({});
+    // Si la base todavía no tiene la ficha completa, se propone la de torito.pe para completarla al guardar
+    const s = modelo?.fichaSugerida && !modelo.fichaCompleta ? modelo.fichaSugerida : null;
+    const m = s ? { ...modelo, familia: s.familia, tipoMotor: s.tipoMotor, combustible: s.combustible, uso: s.uso, tipoTecho: s.tipoTecho, badges: s.badges, destacados: s.destacados, resumen: s.resumen, specs: s.specs, colorFoto: s.colorFoto || modelo.colorFoto, descripcion: modelo.descripcion || s.descripcion } : modelo;
     setF(m ? {
-      ...m, badges: (m.badges || []).join(", "), precioDesde: String(m.precioDesde ?? ""),
+      ...m, badges: (m.badges || []).join(", "), precioDesde: String(m.precioDesde ?? m.precioSugerido ?? ""),
+      colores: m.colores?.length ? m.colores : m.coloresSugeridos || m.colores || [],
       destacadosTxt: (m.destacados || []).join("\n"),
       cilindrada: m.resumen?.Cilindrada || "", potencia: m.resumen?.Potencia || "", torque: m.resumen?.Torque || "", llantas: m.resumen?.Llantas || "",
       ...Object.fromEntries(TABS.map((t) => [`spec_${t.id}`, aTexto(m.specs?.[t.id])])),
     } : NUEVO);
     setPublicarYa(true);
-    setModal({ m });
+    setModal({ m: modelo });
   }
   async function subirFoto(e) {
     const file = e.target.files?.[0]; if (!file) return;
@@ -152,7 +165,8 @@ export default function ModelosAdmin() {
   function guardar(e) {
     e.preventDefault();
     if (!validarModelo()) return;
-    const resumen = Object.fromEntries([["Motor", f.tipoMotor], ["Cilindrada", f.cilindrada], ["Llantas", f.llantas], ["Potencia", f.potencia], ["Torque", f.torque]].filter(([, v]) => String(v).trim()));
+    const motorResumen = String(f.resumen?.Motor || "").startsWith(f.tipoMotor) ? f.resumen.Motor : f.tipoMotor;
+    const resumen = Object.fromEntries([["Motor", motorResumen], ["Cilindrada", f.cilindrada], ["Llantas", f.llantas], ["Potencia", f.potencia], ["Torque", f.torque]].filter(([, v]) => String(v).trim()));
     const specs = Object.fromEntries(TABS.map((t) => [t.id, aFilas(f[`spec_${t.id}`] || "")]));
     if (!specs.motor.length) specs.motor = [["Tipo de motor", f.tipoMotor], ["Combustible", f.combustible]];
     const limpio = Object.fromEntries(Object.entries(f).filter(([k]) => !k.startsWith("spec_") && !["destacadosTxt", "cilindrada", "potencia", "torque", "llantas", "fotoNueva", "imagenApi"].includes(k)));
@@ -180,7 +194,8 @@ export default function ModelosAdmin() {
   // Guardar en la base: crear o editar, foto y publicación
   async function guardarEnBase(datos) {
     const m = modal.m;
-    const cuerpo = { codtmo: CODTMO[datos.familia] || datos.codtmo || "3", nommod: datos.nombre, marmod: "Bajaj", desmod: datos.descripcion, carmod: carmodDe(datos.resumen, datos.combustible), premod: datos.precioDesde, colores: datos.colores };
+    // HU-036: la ficha completa (familia, motor, combustible, uso, destacados, resumen, pestañas y fotos por color) va en carmod
+    const cuerpo = { codtmo: CODTMO[datos.familia] || datos.codtmo || "3", nommod: datos.nombre, marmod: "Bajaj", desmod: datos.descripcion, carmod: fichaATexto(datos), premod: datos.precioDesde, colores: datos.colores };
     const url = urlParaBase(datos.imagen) || (datos.local && urlParaBase(datos.local)) || "";
     const ficha = { ...datos }; delete ficha.codmodApi; delete ficha.imagenesApi; delete ficha.estmod; delete ficha.soloLocal; delete ficha.soloBackend;
     setGuardando(true);
@@ -191,9 +206,10 @@ export default function ModelosAdmin() {
         codmod = String((await api.crearModeloApi(cuerpo)).data.codmod);
         setModal((x) => (x ? { m: { ...datos, id: m?.id, codmodApi: codmod, imagenesApi: [], estado: "Borrador" } } : x));
       }
+      // La foto principal solo se toca si se cambió en este formulario (las demás se manejan en «Fotos»)
       const actual = fotoActiva(m);
       if (url && !actual) await api.agregarImagenModeloApi(codmod, url);
-      else if (url && actual.urlimo !== url) await api.editarImagenModeloApi(codmod, actual.codimo, url);
+      else if (url && datos.imagen !== m?.imagen && actual.urlimo !== url) await api.editarImagenModeloApi(codmod, actual.codimo, url);
       const publicar = !m?.codmodApi && publicarYa && publica;
       if (publicar) await api.estadoModeloApi(codmod, "Publicado");
       // Ficha extendida del panel (pestañas, etiquetas, destacados)
@@ -241,8 +257,10 @@ export default function ModelosAdmin() {
   return (
     <div>
       <PageHeader titulo="Modelos" subtitulo="Lo que publiques, edites o elimines aquí cambia al instante en la web de clientes.">
+        {enBase && <button className="btn btn-secondary !py-2.5" onClick={() => setTorito(true)} disabled={!admin} data-abrir-torito>Traer información de torito.pe</button>}
         {editar && <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Nuevo modelo</button>}
       </PageHeader>
+      <InformacionTorito abierto={torito} modelos={admin || []} onClose={() => setTorito(false)} onHecho={() => { cargarAdmin(true); refrescarWeb(); }} />
       {/* Estado del catálogo */}
       {MODO_REAL && (
         <div className="mb-4 space-y-2" data-diagnostico-modelos>
@@ -264,7 +282,7 @@ export default function ModelosAdmin() {
               <td className="px-4 py-3"><div className="flex items-center gap-3"><ModeloImg modelo={conFotos(m)} className="h-12 w-16 shrink-0 rounded-md bg-marino-50 object-contain" /><div><p className="font-semibold text-marino dark:text-white">{m.nombre}</p><p className="max-w-[240px] truncate text-[12px] text-slate-400">{m.descripcion}</p></div></div></td>
               <td className="px-4 py-3">{m.familia}</td>
               <td className="px-4 py-3">{m.tipoMotor} · {m.combustible}</td>
-              <td className="whitespace-nowrap px-4 py-3">{formatoSoles(m.precioDesde)}</td>
+              <td className="whitespace-nowrap px-4 py-3">{m.precioDesde ? formatoSoles(m.precioDesde) : <span className="text-[12.5px] font-semibold text-amber-700 dark:text-amber-300" title="En la web sale «A consultar». Ponlo con Editar.">Sin precio</span>}</td>
               <td className="px-4 py-3">{unidades.filter((u) => u.modelo === m.id).length}</td>
               <td className="px-4 py-3"><Badge estado={m.estado} />{m.soloLocal && <p className="mt-1 text-[11.5px] text-slate-400">Sin guardar</p>}</td>
               <td className="px-4 py-3"><div className="flex flex-wrap gap-1.5">

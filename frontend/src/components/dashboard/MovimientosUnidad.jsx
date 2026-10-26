@@ -28,7 +28,7 @@ export function RutaMov({ m }) {
 }
 
 export default function MovimientosUnidad({ unidad, gestiona, ubicaciones = [], onCambio }) {
-  const consulta = useConsultaCentral(() => movimientosUnidadApi(unidad.coduni), [unidad.coduni]);
+  const consulta = useConsultaCentral(() => movimientosUnidadApi(unidad.coduni), [unidad.coduni], { clave: `movimientos:${unidad.coduni}` });
   const [modal, setModal] = useState(null);
   const [todos, setTodos] = useState(false);
   const d = consulta.data;

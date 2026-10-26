@@ -153,7 +153,7 @@ export const MODELOS = [
   {
     id: "torito-crom-plus-glp", codmod: "7", nombre: "Torito Crom Plus GLP", familia: "Motores Crom Plus",
     estado: "Publicado", tipoMotor: "4 tiempos", combustible: "GLP", uso: "Pasajeros", tipoTecho: "Especial",
-    precioDesde: 16999, badges: [],
+    precioDesde: 17199, badges: [],
     imagen: `${TORITO}/2025/04/646c02f5bcb15589337055.png`, local: "/images/modelos/modelo-7.png",
     colorFoto: "Azul", colores: ["Azul"],
     descripcion: "Crom Plus con GLP: equilibrio entre potencia y ahorro, con 9.32 HP y 16 Nm para el trabajo diario.",

@@ -13,8 +13,11 @@ export const GRUPOS_PANEL = [
     // HU-005 no es del Sprint 2: con la base conectada no se muestra
     ...(MODO_REAL ? [] : [{ to: "/admin/separaciones", label: "Separaciones", seccion: "separaciones", descripcion: "Motos separadas con adelanto." }]),
     { to: "/admin/ventas", label: "Ventas a clientes", seccion: "ventas", descripcion: "Pedidos, adelantos y entregas a clientes." },
-    { to: "/admin/facturas", label: "Facturas y clientes", seccion: "facturas", descripcion: "Comprobantes de venta y datos de los clientes." },
-    { to: "/admin/metas", label: "Metas", seccion: "metas", descripcion: "Metas de venta del mes por sede." },
+    // Facturas y clientes y Metas no tienen tablas en la base: con la base conectada no se muestran
+    ...(MODO_REAL ? [] : [
+      { to: "/admin/facturas", label: "Facturas y clientes", seccion: "facturas", descripcion: "Comprobantes de venta y datos de los clientes." },
+      { to: "/admin/metas", label: "Metas", seccion: "metas", descripcion: "Metas de venta del mes por sede." },
+    ]),
   ] },
   { titulo: "Motos", items: [
     { to: "/admin/disponibilidad", label: "Disponibilidad", seccion: "disponibilidad", descripcion: "Motos libres por modelo y ubicación, igual para todo el equipo." },
@@ -28,7 +31,6 @@ export const GRUPOS_PANEL = [
   ] },
   { titulo: "Web y catálogo", items: [
     { to: "/admin/modelos", label: "Modelos", seccion: "modelos", descripcion: "Modelos, precios y fotos que se ven en la web." },
-    { to: "/admin/opiniones", label: "Opiniones de clientes", seccion: "opiniones", descripcion: "Opiniones que se publican en la web." },
   ] },
   { titulo: "Configuración", items: [
     { to: "/admin/ubicaciones", label: "Ubicaciones", seccion: "ubicaciones", descripcion: "Sedes, almacenes y talleres, con su número de contacto." },

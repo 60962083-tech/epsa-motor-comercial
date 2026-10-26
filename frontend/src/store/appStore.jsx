@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, useCal
 import * as D from "../data/mockData";
 import { MODO_REAL } from "../lib/config";
 import { modelosPublicos, sedesPublicasApi } from "../lib/api";
-import { emparejarModelos, modeloDesdeApi } from "../lib/modelos";
+import { modeloDesdeApi, ordenCatalogo } from "../lib/modelos";
 import { aplicarFotosCentrales, aplicarGaleria } from "../lib/galeria";
 import { useArchivosLocales } from "../hooks/useArchivoLocal";
 
@@ -119,7 +119,7 @@ export function AppProvider({ children }) {
     return () => window.removeEventListener("storage", alCambiar);
   }, []);
 
-  // Catálogo y sedes desde la API: al abrir, cada 30 s y al volver a la pestaña
+  // Catálogo y sedes desde la API: al abrir, cada 10 s y al volver a la pestaña
   const refrescarWeb = useCallback(() => {
     if (!MODO_REAL) return Promise.resolve();
     return Promise.all([
@@ -128,7 +128,7 @@ export function AppProvider({ children }) {
     ]);
   }, []);
   useEffect(() => { refrescarWeb(); }, [refrescarWeb]);
-  useAutoRefresco(refrescarWeb, 30000, MODO_REAL);
+  useAutoRefresco(refrescarWeb, 10000, MODO_REAL);
 
   // Agregar, editar y eliminar registros
   const registrar = useCallback((detalle, quien = "Sistema") => {
@@ -167,25 +167,15 @@ export function AppProvider({ children }) {
   // Con la API conectada no se aplica la galería guardada en este navegador: mandan las fotos centrales
   const modelosConFotos = useMemo(() => (MODO_REAL ? s.modelos : aplicarGaleria(s.modelos, s.imagenes || [], urlsFotos, s.config?.galeriaEditada || {})), [s.modelos, s.imagenes, urlsFotos, s.config?.galeriaEditada]);
 
-  // Catálogo público (modelos publicados). Con la API conectada, manda la base de datos.
+  // Catálogo público (modelos publicados). Con la API conectada, toda la información sale de la base (HU-036):
+  // precio, colores, descripción, ficha técnica (carmod) y fotos de GET /api/modelos, sin datos guardados en el front.
   let publicos = modelosConFotos.filter((m) => m.estado === "Publicado");
-  let sinFicha = [];
+  const sinFicha = [];
   if (apiModelos) {
-    const par = emparejarModelos(apiModelos, modelosConFotos);
-    sinFicha = par.sinFicha;
-    publicos = modelosConFotos
-      .map((m) => {
-        const a = par.porLocal.get(m.id);
-        if (!a) return null;
-        return aplicarFotosCentrales({
-          ...m, estado: "Publicado", codmodApi: String(a.codmod), descripcion: a.desmod || m.descripcion,
-          precioDesde: a.premod == null ? null : Number(a.premod), // precio y colores: solo los de la base
-          colores: Array.isArray(a.colores) ? a.colores : [],
-        }, a.imagenes);
-      })
-      .filter(Boolean);
-    const ocupados = new Set(modelosConFotos.map((m) => m.id));
-    publicos = publicos.concat(par.sinFicha.map((a) => { const m = modeloDesdeApi(a, ocupados); ocupados.add(m.id); return aplicarFotosCentrales(m, a.imagenes); }));
+    const ocupados = new Set();
+    publicos = apiModelos
+      .map((a) => { const m = modeloDesdeApi(a, ocupados); ocupados.add(m.id); return aplicarFotosCentrales({ ...m, estado: "Publicado" }, a.imagenes); })
+      .sort(ordenCatalogo);
   }
 
   // Sedes de la web

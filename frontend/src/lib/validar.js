@@ -50,6 +50,15 @@ export function validarContacto(v) {
   return { valor, error: "" };
 }
 
+// EMT-97 · Mientras se escribe el contacto: solo deja números, espacios, guiones, paréntesis y un + al inicio,
+// sin espacios dobles y hasta 15 dígitos (así no se puede tipear una letra ni pasarse del largo, ni al pegar)
+export const MAX_CONTACTO = 20;
+export function filtrarContacto(v) {
+  let digitos = 0;
+  const t = String(v ?? "").replace(/[^0-9+() -]/g, "").replace(/^\s+/, "").replace(/(?!^)\+/g, "").replace(/ {2,}/g, " ");
+  return [...t].filter((c) => !/\d/.test(c) || ++digitos <= 15).join("").slice(0, MAX_CONTACTO);
+}
+
 // Documento de identidad: DNI (8), carné de extranjería (9) o RUC (11 con dígito verificador)
 export const DOCUMENTOS = { DNI: 8, CE: 9, RUC: 11 };
 export function validarDocumento(tipo, num) {

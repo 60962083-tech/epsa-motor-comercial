@@ -14,7 +14,8 @@ import { ESTADO_COMPRA } from "./Compras.HU-034";
 import { adjuntoRecordado, buscarPdfFactura, recordarAdjunto, subirPdfFactura, urlPdfFactura, validarPdf, validarPdfContenido } from "../../lib/archivos";
 import { soloDigitos } from "../../lib/validar";
 import { claveModelo } from "../../lib/modelos";
-import { abrirBlob, archivoDocumentoApi, pedidoCompraApi } from "../../servicios/central";
+import { REFRESCO_MS, abrirBlob, archivoDocumentoApi, pedidoCompraApi } from "../../servicios/central";
+import useAutoRefresco from "../../hooks/useAutoRefresco";
 
 const FILA = () => ({ nummotuni: "", chauni: "" });
 const norm = (t) => String(t || "").trim().replace(/\s+/g, " ");
@@ -65,6 +66,17 @@ export default function CompraDetalle() {
     } catch (e) { setErrorCarga(mensajeError(e)); } finally { setCargando(false); }
   }
   useEffect(() => { cargar(); }, [id, compras]); // eslint-disable-line
+  // Se actualiza sola (otra sesión pudo registrar la factura o identificar motos) sin tocar lo que se escribe
+  useAutoRefresco(async () => {
+    if (!MODO_REAL || !compra || enviando || enviandoFactura) return;
+    try {
+      const c = (await api.obtenerCompra(id)).data;
+      if (!gestiona) { setCompra((x) => ({ ...x, ...c })); return; }
+      const d = (await api.listarUnidadesCompra(id)).data;
+      setDet({ factura: d?.factura || null, unidades: d?.unidades || [], requiere_revision: !!(d?.factura && d.factura.cantidad_motos !== d.cantidad_comprada) });
+      setCompra((x) => ({ ...x, ...c, cantidad_pendiente: d?.cantidad_pendiente ?? c.cantidad_pendiente, estcom: d?.estcom || c.estcom }));
+    } catch { /* se reintenta en el siguiente ciclo */ }
+  }, REFRESCO_MS, MODO_REAL);
 
   if (cargando && !compra) return <p className="py-10 text-center text-slate-400">Cargando compra…</p>;
   if (errorCarga) return <div className="space-y-3"><Aviso tipo="error">{errorCarga}</Aviso><Link className="btn btn-secondary" to="/admin/compras">Volver a compras</Link></div>;

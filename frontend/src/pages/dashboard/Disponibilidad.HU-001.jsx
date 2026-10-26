@@ -6,7 +6,6 @@ import { useAuth } from "../../context/AuthContext";
 import { COLORES, formatoSoles } from "../../data/mockData";
 import { ESTADOS_STOCK, GRUPOS_LUGAR, useDisponibilidad } from "../../servicios/disponibilidad";
 import { usePreparacion } from "../../servicios/preparacion";
-import { haceCuanto } from "../../lib/validar";
 import ModeloImg from "../../components/ModeloImg";
 import { Card, PageHeader, Stat, Tabla, btnMini } from "../../components/ui";
 import { ColorPunto, EstadoConexion, Pestanas, Pill, TONO_DISPONIBILIDAD, fechaCorta } from "../../components/dashboard/Sprint2";
@@ -73,7 +72,6 @@ export default function Disponibilidad() {
     <div>
       <PageHeader titulo="Disponibilidad" subtitulo="Stock compartido de sedes, fibreras y el almacén de Crossland. Cada moto muestra su estado, color y techo. Todos los vendedores ven la misma información.">
         <EstadoConexion hu="HU-001" />
-        <span className="self-center text-[12.5px] text-slate-400" data-actualizado>Actualizado {haceCuanto(disp.actualizado)}</span>
         <button className="btn btn-secondary !py-2.5" onClick={disp.refrescar}>Actualizar</button>
       </PageHeader>
 

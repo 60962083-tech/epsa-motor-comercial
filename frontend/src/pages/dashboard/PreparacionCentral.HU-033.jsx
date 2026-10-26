@@ -26,7 +26,7 @@ export default function PreparacionCentral() {
   const [conVendidas, setConVendidas] = useState(false);
   const [q, setQ] = useState("");
   const [modal, setModal] = useState(null);
-  const consulta = useConsultaCentral(() => inventarioApi(), []);
+  const consulta = useConsultaCentral(() => inventarioApi(), [], { clave: "inventario::" });
   const todas = useMemo(() => (consulta.data?.unidades || []).filter((u) => conVendidas || u.comercial !== "Vendida"), [consulta.data, conVendidas]);
   const lista = todas.filter(VISTAS[vista]).filter((u) => !q.trim() || `${u.nummotuni} ${u.chauni} ${u.nommod} ${u.coduni}`.toLowerCase().includes(q.trim().toLowerCase()));
   const n = (k) => todas.filter(VISTAS[k]).length;
