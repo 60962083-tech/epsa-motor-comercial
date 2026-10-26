@@ -11,7 +11,11 @@ export function leerSesion() {
 function guardarSesion(s) {
   try { if (s) sessionStorage.setItem(CLAVE, JSON.stringify(s)); else sessionStorage.removeItem(CLAVE); } catch {}
 }
-export const cerrarSesionApi = () => guardarSesion(null);
+// Últimos datos de cada pantalla (solo en memoria y de la sesión actual): al volver a una pantalla se ven al
+// instante mientras se actualizan. Se vacía al entrar y al salir para que otra cuenta nunca vea datos ajenos.
+export const cacheConsultas = new Map();
+export const cerrarSesionApi = () => { cacheConsultas.clear(); guardarSesion(null); };
+
 
 // Código de error de Supabase Auth (formato nuevo y antiguo)
 const codigoAuth = (j) => j?.error_code || j?.code || j?.error || "";
@@ -44,7 +48,7 @@ async function authFetch(grant, cuerpo) {
 export async function iniciarSesion(correo, clave) {
   const j = await authFetch("password", { email: correo, password: clave });
   const sesion = { access_token: j.access_token, refresh_token: j.refresh_token };
-  guardarSesion(sesion);
+  cacheConsultas.clear(); guardarSesion(sesion);
   const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/hu007_usuario_actual`, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${j.access_token}` },
@@ -106,19 +110,19 @@ export async function cambiarClaveApi(nueva) {
 // Datos dentro del token de sesión (por ejemplo, cuándo vence)
 const datosToken = (t) => { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); } catch { return {}; } };
 
-// Equipo: cuentas reales (funciones de docs/supabase-login-equipo.sql)
-async function rpc(nombre, cuerpo = {}, reintento = true) {
+// Funciones SQL de Supabase (docs/*.sql). Con «publica» se llama como visitante de la web, sin sesión.
+async function rpc(nombre, cuerpo = {}, { reintento = true, publica = false } = {}) {
   if (!MODO_REAL) throw new ApiError(0, "Esta función necesita conexión.");
   let r;
   try {
     r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${nombre}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${leerSesion()?.access_token || ""}` },
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${publica ? SUPABASE_ANON_KEY : leerSesion()?.access_token || ""}` },
       body: JSON.stringify(cuerpo),
     });
   } catch { throw new ApiError(0, "No se pudo conectar. Revisa tu internet e inténtalo de nuevo."); }
-  if (r.status === 401 && reintento) {
-    try { await refrescar(); return rpc(nombre, cuerpo, false); } catch {}
+  if (r.status === 401 && reintento && !publica) {
+    try { await refrescar(); return rpc(nombre, cuerpo, { reintento: false }); } catch {}
   }
   const j = await r.json().catch(() => null);
   if (!r.ok) {
@@ -139,6 +143,27 @@ export const equipoReiniciarClaveApi = (codusu, clave) => rpc("equipo_reiniciar_
 // Roles y permisos: secciones que el gerente desactiva para la administradora y el vendedor (docs/supabase-permisos-roles.sql)
 export const permisosListarApi = () => rpc("permisos_listar");
 export const permisosGuardarApi = (rol, seccion, activo) => rpc("permisos_guardar", { p_rol: rol, p_seccion: seccion, p_activo: activo });
+
+// Cotización o consulta de la web: queda como interesado en Leads (docs/supabase-sprint2-conexiones.sql)
+export const registrarInteresadoWebApi = (d) => rpc("web_registrar_interesado", {
+  p_nombre: d.nombre, p_telefono: d.telefono, p_codmod: d.codmod ? Number(d.codmod) : null, p_color: d.color || null,
+  p_codsed: d.codsed ? Number(d.codsed) : null, p_detalle: d.detalle || null, p_tipo: d.tipo,
+}, { publica: true });
+
+// HU-036: página de torito.pe leída desde Supabase (docs/supabase-torito-en-vivo.sql)
+export const paginaToritoApi = (ruta) => rpc("hu036_pagina_torito", { p_ruta: ruta });
+
+// HU-001: motor y chasis de cada moto (mismo SQL), mientras GET /api/inventario no los envíe
+export const seriesUnidadesApi = () => rpc("hu001_series_unidades");
+
+// HU-003: ubicación inicial de una moto identificada a mano (mismo SQL), mientras la API no tenga su ruta
+export const ubicacionInicialSqlApi = (coduni, codubi, observacion) => rpc("hu003_ubicacion_inicial", { p_coduni: Number(coduni), p_codubi: Number(codubi), p_observacion: observacion || null });
+
+// Seguimiento del vendedor: sus interesados, cada contacto y el nuevo estado (mismo SQL)
+export const seguimientoListarApi = () => rpc("seguimiento_listar");
+export const seguimientoRegistrarApi = (d) => rpc("seguimiento_registrar", {
+  p_codlea: Number(d.codlea), p_tipo: d.tipo, p_detalle: d.detalle, p_estado: d.estado || null, p_proximo: d.proximo || null,
+});
 
 // Renovar la sesión
 async function refrescar() {

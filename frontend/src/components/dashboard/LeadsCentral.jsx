@@ -3,11 +3,13 @@
 // PATCH /api/leads/:codlea/responsable); el vendedor ve solo los suyos. Cambiar el responsable no cambia la etapa,
 // el canal, el número de WhatsApp que lo recibió ni sus seguimientos. Los filtros se aplican en la pantalla.
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { mensajeError } from "../../lib/errores";
 import { asignarLeadApi, leadsCentralApi, responsablesApi, sinRespuesta, useConsultaCentral } from "../../servicios/central";
 import { Aviso, Campo, Card, Modal, Stat, Tabla, Vacio, btnMini, useToast } from "../ui";
 import { Pill } from "./Sprint2";
+import { ETIQUETA_ESTADO } from "./SeguimientoCentral";
 import { AvisoConexion, BarraActualizacion, Paginador, capital, fechaCompleta } from "./Central";
 
 const ESTADOS = ["Nuevo", "Contactado", "En seguimiento", "Cerrado", "Convertido"];
@@ -18,6 +20,7 @@ const limpio = (t) => String(t || "").trim().replace(/\s+/g, " ");
 
 export default function LeadsCentral({ token = 0, recientes = [] }) {
   const { puede } = useAuth();
+  const nav = useNavigate();
   const gestiona = puede("leads.asignar");
   const [f, setF] = useState({ estado: "", responsable: "", sin: false });
   const [texto, setTexto] = useState(""); const [buscar, setBuscar] = useState("");
@@ -25,7 +28,7 @@ export default function LeadsCentral({ token = 0, recientes = [] }) {
   const [asignar, setAsignar] = useState(null);
   useEffect(() => { const t = setTimeout(() => setBuscar(limpio(texto).slice(0, 100).toLowerCase()), 250); return () => clearTimeout(t); }, [texto]);
   useEffect(() => { setOffset(0); }, [f, buscar]);
-  const consulta = useConsultaCentral(() => leadsCentralApi(), [token]);
+  const consulta = useConsultaCentral(() => leadsCentralApi(), [token], { clave: "leads-lista" });
   const [responsables, setResponsables] = useState(null);
   useEffect(() => { if (gestiona) responsablesApi().then(setResponsables).catch(() => setResponsables([])); }, [gestiona, token]);
   const datos = consulta.data;
@@ -61,7 +64,7 @@ export default function LeadsCentral({ token = 0, recientes = [] }) {
       <Card className="mb-5">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="sm:col-span-2"><label className="field-label" htmlFor="lc-buscar">Buscar</label><input id="lc-buscar" className="field-input" value={texto} maxLength={100} onChange={(e) => setTexto(e.target.value)} placeholder="Nombre o celular" /></div>
-          <div><label className="field-label" htmlFor="lc-estado">Etapa</label><select id="lc-estado" className="field-input" value={f.estado} onChange={(e) => setF({ ...f, estado: e.target.value })}><option value="">Todas</option>{ESTADOS.map((e) => <option key={e}>{e}</option>)}</select></div>
+          <div><label className="field-label" htmlFor="lc-estado">Etapa</label><select id="lc-estado" className="field-input" value={f.estado} onChange={(e) => setF({ ...f, estado: e.target.value })}><option value="">Todas</option>{ESTADOS.map((e) => <option key={e} value={e}>{ETIQUETA_ESTADO[e] || e}</option>)}</select></div>
           {gestiona && <div><label className="field-label" htmlFor="lc-resp">Responsable</label>
             <select id="lc-resp" className="field-input" value={f.sin ? "__sin" : f.responsable} onChange={(e) => setF({ ...f, sin: e.target.value === "__sin", responsable: e.target.value === "__sin" ? "" : e.target.value })}>
               <option value="">Todos</option><option value="__sin">Sin responsable</option>
@@ -82,9 +85,10 @@ export default function LeadsCentral({ token = 0, recientes = [] }) {
                 <td className="px-4 py-3">{l.modelo?.nommod || <span className="text-slate-400">Sin modelo</span>}{l.collea && <span className="block text-[12px] text-slate-400">{capital(l.collea)}</span>}</td>
                 <td className="px-4 py-3">{l.canlea}{l.whatsapp && <span className="block text-[12px] text-slate-400">Recibido en {l.whatsapp.numcwa}</span>}{l.orilea && <span className="block text-[12px] text-slate-400">Origen: {l.orilea}</span>}</td>
                 <td className="px-4 py-3" data-responsable={l.responsable?.codusu || ""}>{l.responsable ? <><span className="font-semibold text-marino dark:text-white">{l.responsable.nombre}</span>{!l.responsable.activo && <span className="block text-[12px] font-semibold text-acento">Sin acceso activo</span>}{l.asignado_desde && <span className="block text-[12px] text-slate-400">Desde {fechaCompleta(l.asignado_desde)}</span>}</> : <Pill tono="ambar">Sin responsable</Pill>}</td>
-                <td className="px-4 py-3"><Pill tono={TONO[l.estlea] || "gris"}>{l.estlea}</Pill></td>
+                <td className="px-4 py-3"><Pill tono={TONO[l.estlea] || "gris"}>{ETIQUETA_ESTADO[l.estlea] || l.estlea}</Pill></td>
                 <td className="px-4 py-3"><div className="flex flex-wrap gap-1.5">
                   {gestiona && <button className={btnMini} onClick={() => setAsignar(l)}>{l.responsable ? "Transferir" : "Asignar"}</button>}
+                  {l.responsable && <button className={btnMini} onClick={() => nav("/admin/seguimiento", { state: { codlea: l.codlea } })}>Seguimiento</button>}
                   {l.tellea && <a className={btnMini} target="_blank" rel="noopener noreferrer" href={`https://wa.me/51${String(l.tellea).replace(/\D/g, "").slice(-9)}`}>WhatsApp</a>}
                 </div></td>
               </tr>
@@ -93,7 +97,7 @@ export default function LeadsCentral({ token = 0, recientes = [] }) {
           <Paginador total={filtrados.length} limite={LIMITE} offset={offset} onCambio={setOffset} />
         </>
       )}
-      <p className="mt-3 text-[12.5px] text-slate-400">La lista se actualiza sola cada 30 segundos. Asignar no marca al interesado como atendido ni cambia su etapa; no se envían mensajes automáticos.</p>
+      <p className="mt-3 text-[12.5px] text-slate-400">Asignar no marca al interesado como atendido ni cambia su etapa; no se envían mensajes automáticos.</p>
 
       </>}
       <ModalAsignar lead={asignar} responsables={responsables} abiertosDe={abiertosDe} onClose={() => setAsignar(null)} onHecho={() => consulta.refrescar(true)} />

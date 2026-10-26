@@ -6,7 +6,7 @@ import { mensajeError } from "../../lib/errores";
 import { actualizarPreparacionApi, confirmarRecepcionApi, iniciarMovimientoApi, movimientosUnidadApi, sinRespuesta, ubicacionInicialApi, useIntento } from "../../servicios/central";
 import { GRUPOS_LUGAR_API, techoDe, ubicacionDe } from "../../servicios/inventarioCentral";
 import { Aviso, Campo, Modal, useToast } from "../ui";
-import { ColorUnidad, capital } from "./Central";
+import { ColorUnidad, capital, nombreUnidad } from "./Central";
 
 const limpio = (t) => String(t || "").trim().replace(/\s+/g, " ");
 const largo = (t) => [...limpio(t)].length;
@@ -23,7 +23,7 @@ function CabeceraUnidad({ unidad, ubicacion }) {
   const donde = ubicacion === undefined ? x.texto : ubicacion?.nomubi ? `En ${ubicacion.nomubi}` : "Sin ubicación confirmada";
   return (
     <div className="rounded-xl bg-slate-50 px-4 py-3 text-[13.5px] dark:bg-white/5" data-cabecera-unidad={unidad.coduni}>
-      <p className="font-semibold text-marino dark:text-white">{unidad.nommod ? `${unidad.nommod} · motor ${unidad.nummotuni}` : `Unidad N° ${unidad.coduni}`}</p>
+      <p className="font-semibold text-marino dark:text-white">{unidad.nommod ? `${unidad.nommod} · ${unidad.nummotuni ? `motor ${unidad.nummotuni}` : `N° ${unidad.coduni}`}` : `Unidad N° ${unidad.coduni}`}</p>
       <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-slate-500">{unidad.coluni && <ColorUnidad color={unidad.coluni} />}{unidad.chauni && <span>Chasis {unidad.chauni}</span>}<span>{donde}</span></p>
     </div>
   );
@@ -119,7 +119,7 @@ export function ModalTrasladoCentral({ abierto, unidad: fija, unidades = [], ubi
     } finally { setEnviando(false); }
   }
 
-  const resumen = unidad && d && origen ? `${unidad.nommod ? `Motor ${unidad.nummotuni}` : `Unidad N° ${unidad.coduni}`}: de ${origen.nomubi} a ${d.nomubi}. ${MODOS.find((m) => m.id === modo)?.texto}` : "";
+  const resumen = unidad && d && origen ? `${nombreUnidad(unidad)}: de ${origen.nomubi} a ${d.nomubi}. ${MODOS.find((m) => m.id === modo)?.texto}` : "";
   return (
     <Modal abierto={abierto} onClose={onClose} titulo="Registrar traslado" ancho="max-w-xl"
       confirmarGuardar={{ titulo: "¿Registrar este traslado?", texto: resumen, boton: "Sí, registrar", validar }}
@@ -129,7 +129,7 @@ export function ModalTrasladoCentral({ abierto, unidad: fija, unidades = [], ubi
           <Campo etiqueta="Moto" error={err.unidad}>
             <select id="tras-unidad" className="field-input" value={coduni} onChange={(e) => { setCoduni(e.target.value); setConflicto(""); setErr({}); consultar(e.target.value); }}>
               <option value="">{elegibles.length ? "Elige la moto" : "No hay motos con ubicación y sin traslado en curso"}</option>
-              {elegibles.map((u) => <option key={u.coduni} value={u.coduni}>{u.nommod}, {capital(u.coluni)}, motor {u.nummotuni} · en {u.ubicacion.nomubi}</option>)}
+              {elegibles.map((u) => <option key={u.coduni} value={u.coduni}>{u.nommod}, {capital(u.coluni)}, {u.nummotuni ? `motor ${u.nummotuni}` : `N° ${u.coduni}`} · en {u.ubicacion.nomubi}</option>)}
             </select>
           </Campo>
         )}
@@ -232,7 +232,8 @@ export function ModalUbicacionInicial({ unidad, ubicaciones = [], onClose, onHec
       onHecho?.(r.data);
       onClose();
     } catch (er) {
-      if (er.detalle?.sinRuta) setErr({ general: "Todavía no se puede registrar la ubicación inicial desde el panel. Pídele a quien administra el sistema que registre dónde está esta moto." });
+      // Sin ruta en la API ni función en Supabase (falta el PASO-5: docs/supabase-sprint2-conexiones.sql)
+      if (er.detalle?.sinRuta || er.detalle?.faltaSql) setErr({ general: "Todavía no se puede registrar la ubicación inicial desde el panel. Pídele a quien administra el sistema que registre dónde está esta moto." });
       else if (er.status === 409) { setErr({ general: `${conPunto(mensajeError(er))} ${textoConflicto(er.detalle?.actual)}` }); onConflicto?.(); }
       else setErr({ general: sinRespuesta(er) ? NO_CONFIRMADO : mensajeError(er) });
     } finally { setEnviando(false); }
@@ -320,7 +321,7 @@ export function ModalPreparacionCentral({ datos, onClose, onHecho, onConflicto }
   }
 
   const titulo = etapa === "Armado" ? "Armado" : etapa === "Techo" ? "Avance del techo" : "Condición de entrega";
-  const confirmacion = etapa === "Entrega" ? `Motor ${unidad.nummotuni} quedará lista para entrega. No significa entregada al comprador.` : `Motor ${unidad.nummotuni}: ${etapa === "Armado" ? estado.toLowerCase() : `techo ${estado.toLowerCase()}`}${origen === "Aviso de proveedor" ? `, según aviso de ${p.techo?.proveedor}` : ""}. La ubicación y la situación comercial no cambian.`;
+  const confirmacion = etapa === "Entrega" ? `${nombreUnidad(unidad)} quedará lista para entrega. No significa entregada al comprador.` : `${nombreUnidad(unidad)}: ${etapa === "Armado" ? estado.toLowerCase() : `techo ${estado.toLowerCase()}`}${origen === "Aviso de proveedor" ? `, según aviso de ${p.techo?.proveedor}` : ""}. La ubicación y la situación comercial no cambian.`;
   return (
     <Modal abierto onClose={onClose} titulo={titulo} ancho="max-w-xl"
       confirmarGuardar={{ titulo: "¿Registrar este avance?", texto: confirmacion, boton: "Sí, registrar", validar }}

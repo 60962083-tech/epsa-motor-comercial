@@ -5,7 +5,9 @@ import { useApp } from "../store/appStore.jsx";
 import { MODO_REAL, WHATSAPP_NUMERO } from "../lib/config";
 import { IconWhatsapp } from "./Icons";
 import ModeloImg from "./ModeloImg";
-import { OPCIONES_TECHO, SIN_TECHO, formatoSoles } from "../data/mockData";
+import { COLORES, OPCIONES_TECHO, SIN_TECHO, formatoSoles } from "../data/mockData";
+import { registrarInteresadoWebApi } from "../lib/api";
+import { mensajeError } from "../lib/errores";
 import { soloDigitos, soloLetrasNombre, esNombreYApellido, esCelular, limpiarTexto, formatoTelefono, MSJ } from "../lib/validar";
 import { POLITICA_DATOS, SEGUNDOS_MINIMOS, TEXTO_CONSENTIMIENTO, anotarEnvio, limiteAlcanzado, registrarConsultaWeb } from "../servicios/consultas";
 
@@ -15,6 +17,9 @@ export const useCotizar = () => useContext(Ctx);
 const TECHOS = [SIN_TECHO, ...OPCIONES_TECHO];
 const VACIO = { tipo: "cotizar", nombre: "", telefono: "", modelo: "", color: "", sede: "", techo: "", pago: "Financiamiento", mensaje: "", acepta: false, trampa: "" };
 const MAX_MENSAJE = 400;
+// Colores para elegir: los del modelo en la base; si el modelo todavía no tiene, todos los de la marca
+const coloresDe = (m) => (m?.colores?.length ? m.colores : m ? COLORES : []);
+const colorInicial = (m, pedido) => (m?.colores?.length ? (m.colores.includes(pedido) ? pedido : m.colores[0]) : COLORES.includes(pedido) ? pedido : "");
 
 // Ventana de cotización o consulta (se abre desde cualquier página)
 export function CotizarProvider({ children }) {
@@ -26,6 +31,7 @@ export function CotizarProvider({ children }) {
   const [hecho, setHecho] = useState(null);
   const [pausaClic, setPausaClic] = useState(false);
   const [verPolitica, setVerPolitica] = useState(false);
+  const [guardando, setGuardando] = useState(false);
   const enviando = useRef(false);
   const abiertoEn = useRef(0);
 
@@ -33,7 +39,7 @@ export function CotizarProvider({ children }) {
   const abrir = useCallback((pre = {}) => {
     const consulta = pre.tipo === "consulta";
     const m = publicos.find((x) => x.id === pre.modeloId) || (consulta ? null : publicos[0]);
-    const color = m?.colores?.includes(pre.color) ? pre.color : m?.colores?.[0] || "";
+    const color = colorInicial(m, pre.color);
     setF({ ...VACIO, tipo: consulta ? "consulta" : "cotizar", modelo: m?.id || "", color, techo: TECHOS.some((t) => t.id === pre.techo) ? pre.techo : "", sede: pre.sede && sedes.some((s) => s.nombre === pre.sede) ? pre.sede : sedes[0]?.nombre || "" });
     setErr({}); setHecho(null); setVerPolitica(false); enviando.current = false; abiertoEn.current = Date.now(); setAbierto(true);
   }, [publicos, sedes]);
@@ -48,7 +54,7 @@ export function CotizarProvider({ children }) {
   const set = (k, v) => {
     setF((p) => {
       const n = { ...p, [k]: v };
-      if (k === "modelo") { const m = publicos.find((x) => x.id === v); n.color = m?.colores?.[0] || ""; }
+      if (k === "modelo") n.color = colorInicial(publicos.find((x) => x.id === v), p.color);
       return n;
     });
     setErr((x) => (x[k] || x.general ? { ...x, [k]: undefined, general: undefined } : x));
@@ -76,8 +82,8 @@ export function CotizarProvider({ children }) {
     return Object.keys(e).length === 0;
   }
 
-  // Enviar
-  function enviar(e) {
+  // Enviar: con la base conectada queda guardado como interesado en Leads (HU-015 lo asigna a un vendedor)
+  async function enviar(e) {
     e.preventDefault();
     if (enviando.current || !validar()) return;
     // Antispam: campo trampa, tiempo mínimo y límite de envíos por navegador
@@ -86,11 +92,26 @@ export function CotizarProvider({ children }) {
     if (limiteAlcanzado()) { setErr({ general: "Ya recibimos tus mensajes. Un asesor te contactará pronto; si es urgente, escríbenos por WhatsApp." }); return; }
     enviando.current = true;
     const nombre = limpiarTexto(f.nombre);
-    // Con la base conectada la solicitud se envía por WhatsApp (el registro web llega en un sprint siguiente);
-    // en la vista de ejemplo queda registrada en este navegador con su número de consulta
-    const r = MODO_REAL ? { codigo: "", repetido: false } : registrarConsultaWeb(app, { tipo: f.tipo, nombre, telefono: f.telefono, sede: f.sede, modelo, color: f.color, techo, pago: f.pago, total: conPrecio ? total : 0, mensaje: f.mensaje });
-    anotarEnvio();
     const techoTxt = techo?.precio ? techo.nombre : "";
+    let r = { codigo: "", repetido: false, guardado: false };
+    if (MODO_REAL) {
+      const detalle = consulta
+        ? limpiarTexto(f.mensaje)
+        : [techoTxt ? `Techo ${techoTxt} (+${formatoSoles(techo.precio)})` : "Sin techo", f.pago, conPrecio ? `Total referencial ${formatoSoles(total)}` : "Precio por confirmar", limpiarTexto(f.mensaje)].filter(Boolean).join(" · ");
+      setErr({}); setGuardando(true);
+      try {
+        const g = await registrarInteresadoWebApi({ nombre, telefono: f.telefono, codmod: modelo?.codmodApi, color: f.color, codsed: sedes.find((s) => s.nombre === f.sede)?.codsed, detalle, tipo: consulta ? "Consulta" : "Cotización" });
+        r = { codigo: "", repetido: !!g?.repetido, guardado: true };
+      } catch (er) {
+        // Sin la función en Supabase la web sigue funcionando por WhatsApp; otro error se muestra para corregirlo
+        if (!er?.detalle?.faltaSql) { setErr({ general: mensajeError(er) }); setGuardando(false); enviando.current = false; return; }
+      }
+      setGuardando(false);
+    } else {
+      // Vista de ejemplo: queda en este navegador con su número de consulta
+      r = registrarConsultaWeb(app, { tipo: f.tipo, nombre, telefono: f.telefono, sede: f.sede, modelo, color: f.color, techo, pago: f.pago, total: conPrecio ? total : 0, mensaje: f.mensaje });
+    }
+    anotarEnvio();
     const msg = consulta
       ? `Hola, soy ${nombre}. ${modelo ? `Consulto por el ${modelo.nombre}. ` : ""}${limpiarTexto(f.mensaje)} Sede ${f.sede}. Mi celular: ${f.telefono}.`
       : `Hola, soy ${nombre}. Quisiera cotizar el ${modelo.nombre}${f.color ? ` en color ${f.color}` : ""}${techoTxt ? ` con techo ${techoTxt} (+${formatoSoles(techo.precio)})` : " sin techo"}, ${conPrecio ? `total referencial ${formatoSoles(total)}` : "precio por confirmar"} (${f.pago.toLowerCase()}). Sede ${f.sede}. Mi celular: ${f.telefono}.`;
@@ -99,7 +120,8 @@ export function CotizarProvider({ children }) {
   }
 
   const valor = useMemo(() => abrir, [abrir]);
-  const titulo = hecho ? (MODO_REAL ? "¡Tu mensaje está listo!" : consulta ? "¡Consulta enviada!" : "¡Solicitud recibida!") : consulta ? "Envíanos tu consulta" : "Cotizar mi Torito";
+  const titulo = hecho ? (MODO_REAL && !hecho.guardado ? "¡Tu mensaje está listo!" : consulta ? "¡Consulta enviada!" : "¡Solicitud recibida!") : consulta ? "Envíanos tu consulta" : "Cotizar mi Torito";
+  const soloWhatsapp = MODO_REAL && !hecho?.guardado;
   return (
     <Ctx.Provider value={valor}>
       {children}
@@ -115,11 +137,11 @@ export function CotizarProvider({ children }) {
           <div className={`space-y-5 ${pausaClic ? "pointer-events-none" : ""}`} data-consulta-enviada>
             <div className="text-center">
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-100 text-2xl text-emerald-600">✓</div>
-              <p className="mt-3 text-[15px] text-slate-600 dark:text-slate-300">{MODO_REAL ? <>Armamos tu {consulta ? "consulta" : "solicitud"}{hecho.modelo ? <> por el <strong>{hecho.modelo}</strong></> : ""}. Envíala por WhatsApp y un asesor de la sede {hecho.sede} te responde.</> : <>{hecho.repetido ? "Ya teníamos tus datos: sumamos este mensaje a tu consulta" : consulta ? "Recibimos tu consulta" : "Registramos tu solicitud"}{hecho.modelo ? <> por el <strong>{hecho.modelo}</strong></> : ""}.</>}</p>
+              <p className="mt-3 text-[15px] text-slate-600 dark:text-slate-300">{soloWhatsapp ? <>Armamos tu {consulta ? "consulta" : "solicitud"}{hecho.modelo ? <> por el <strong>{hecho.modelo}</strong></> : ""}. Envíala por WhatsApp y un asesor de la sede {hecho.sede} te responde.</> : <>{hecho.repetido ? "Ya teníamos tus datos: sumamos este mensaje a tu consulta" : consulta ? "Recibimos tu consulta" : "Registramos tu solicitud"}{hecho.modelo ? <> por el <strong>{hecho.modelo}</strong></> : ""}.</>}</p>
               {hecho.codigo && <p className="mt-2 text-[13.5px] text-slate-500">Número de consulta <b className="cifra font-mono text-[15px] text-marino dark:text-white" data-codigo-consulta>{hecho.codigo}</b></p>}
             </div>
             <ol className="space-y-2 rounded-xl2 bg-marino-50 p-4 text-[14px] text-slate-600 dark:bg-white/5 dark:text-slate-300">
-              {MODO_REAL ? <>
+              {soloWhatsapp ? <>
                 <li><b className="text-marino dark:text-white">1.</b> Toca «Enviar por WhatsApp»: el mensaje ya lleva tus datos y lo que elegiste.</li>
                 <li><b className="text-marino dark:text-white">2.</b> Un asesor de la sede {hecho.sede} te responde en su horario de atención{horarioSede ? ` (${horarioSede})` : ""}.</li>
               </> : <>
@@ -128,7 +150,7 @@ export function CotizarProvider({ children }) {
                 <li><b className="text-marino dark:text-white">3.</b> Si prefieres, adelanta la conversación por WhatsApp.</li>
               </>}
             </ol>
-            {hecho.url && <a href={hecho.url} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp w-full"><IconWhatsapp /> {MODO_REAL ? "Enviar por WhatsApp" : "Continuar por WhatsApp"}</a>}
+            {hecho.url && <a href={hecho.url} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp w-full"><IconWhatsapp /> {soloWhatsapp ? "Enviar por WhatsApp" : "Continuar por WhatsApp"}</a>}
             <button className="btn btn-secondary w-full" onClick={() => setAbierto(false)}>Cerrar</button>
           </div>
         ) : (
@@ -136,7 +158,7 @@ export function CotizarProvider({ children }) {
             {/* Cotizar o preguntar */}
             <div className="inline-flex w-full rounded-xl bg-slate-100 p-1 sm:col-span-2 dark:bg-white/5" role="tablist" aria-label="Tipo de mensaje">
               {[["cotizar", "Quiero una cotización"], ["consulta", "Tengo una pregunta"]].map(([t, l]) => (
-                <button key={t} type="button" role="tab" aria-selected={f.tipo === t} onClick={() => { setErr({}); setF((p) => ({ ...p, tipo: t, modelo: t === "cotizar" && !p.modelo ? publicos[0]?.id || "" : p.modelo, color: t === "cotizar" && !p.modelo ? publicos[0]?.colores?.[0] || "" : p.color })); }}
+                <button key={t} type="button" role="tab" aria-selected={f.tipo === t} onClick={() => { setErr({}); setF((p) => ({ ...p, tipo: t, modelo: t === "cotizar" && !p.modelo ? publicos[0]?.id || "" : p.modelo, color: t === "cotizar" && !p.modelo ? colorInicial(publicos[0], p.color) : p.color })); }}
                   className={`flex-1 rounded-lg px-3 py-2 text-[13.5px] font-semibold transition ${f.tipo === t ? "bg-white text-marino shadow-sm dark:bg-white/15 dark:text-white" : "text-slate-500"}`}>{l}</button>
               ))}
             </div>
@@ -170,9 +192,9 @@ export function CotizarProvider({ children }) {
               </select>
             </Campo>
             <Campo etiqueta="Color">
-              <select className="field-input" value={f.color} onChange={(e) => set("color", e.target.value)} disabled={(modelo?.colores || []).length < 2} aria-label="Color">
-                {!modelo && <option value="">—</option>}
-                {(modelo?.colores || []).map((c) => <option key={c}>{c}</option>)}
+              <select className="field-input" value={f.color} onChange={(e) => set("color", e.target.value)} disabled={coloresDe(modelo).length < 2} aria-label="Color" data-colores={coloresDe(modelo).length}>
+                {(!modelo || !modelo.colores?.length) && <option value="">{modelo ? "Sin preferencia" : "—"}</option>}
+                {coloresDe(modelo).map((c) => <option key={c}>{c}</option>)}
               </select>
             </Campo>
             {!consulta && <>
@@ -218,7 +240,7 @@ export function CotizarProvider({ children }) {
             </div>
             {err.general && <div className="sm:col-span-2"><Aviso tipo="error">{err.general}</Aviso></div>}
             {!consulta && <div className="sm:col-span-2"><Aviso>Precio referencial sin matrícula ni SOAT. El precio final y la disponibilidad los confirma un asesor.</Aviso></div>}
-            <button id="cot-enviar" className="btn bg-acento text-white hover:bg-acento-600 sm:col-span-2" type="submit">{consulta ? "Enviar consulta" : "Enviar solicitud"}</button>
+            <button id="cot-enviar" className="btn bg-acento text-white hover:bg-acento-600 sm:col-span-2" type="submit" disabled={guardando}>{guardando ? "Enviando…" : consulta ? "Enviar consulta" : "Enviar solicitud"}</button>
           </form>
         )}
       </Modal>

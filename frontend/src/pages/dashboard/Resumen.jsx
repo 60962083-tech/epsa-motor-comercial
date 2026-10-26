@@ -239,8 +239,8 @@ function ResumenCentral() {
   const { puedeVer, puede } = useAuth();
   const { publicos = [] } = useApp();
   const verMotos = puedeVer("inventario") || puedeVer("disponibilidad");
-  const inventario = useConsultaCentral(() => inventarioApi(), [], { activo: verMotos });
-  const leadsC = useConsultaCentral(() => leadsCentralApi({ limite: 200 }), [], { activo: puedeVer("leads") });
+  const inventario = useConsultaCentral(() => inventarioApi(), [], { activo: verMotos, clave: "inventario::" });
+  const leadsC = useConsultaCentral(() => leadsCentralApi({ limite: 200 }), [], { activo: puedeVer("leads"), clave: "leads" });
   const [compras, setCompras] = useState(null);
   useEffect(() => {
     if (!puede("compras.registrar") || !puedeVer("compras")) return;

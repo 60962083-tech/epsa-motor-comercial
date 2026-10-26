@@ -1,6 +1,6 @@
 // HU-004 · Ficha de la unidad (base central) · HU-001, HU-003 y HU-033
 // Ubicación, preparación y situación comercial se muestran por separado. Gerente y administradora registran
-// movimientos y avances; el vendedor solo consulta. La ficha se actualiza sola cada 30 segundos.
+// movimientos y avances; el vendedor solo consulta. La ficha se actualiza sola.
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { Link } from "../../components/dashboard/LinkPanel";
@@ -32,7 +32,7 @@ function FichaCentral({ id }) {
   const gestiona = puede("unidades.gestionar");
   const { state } = useLocation();
   const valido = /^[1-9]\d{0,18}$/.test(String(id));
-  const consulta = useConsultaCentral(() => unidadCentralApi(id), [id], { activo: valido });
+  const consulta = useConsultaCentral(() => unidadCentralApi(id), [id], { activo: valido, clave: `unidad:${id}` });
   // Si se llegó desde la compra, se suman el motor y el chasis (el inventario central no los envía)
   const desdeCompra = state?.unidad?.coduni === String(id) ? state.unidad : null;
   const u = consulta.data && desdeCompra ? { ...consulta.data, nummotuni: consulta.data.nummotuni || desdeCompra.nummotuni || "", chauni: consulta.data.chauni || desdeCompra.chauni || "" } : consulta.data;

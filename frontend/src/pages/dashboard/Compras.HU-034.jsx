@@ -1,5 +1,6 @@
 // HU-034 · Compras a proveedor · HU-023: pendientes de identificación o recepción
 import useAutoRefresco from "../../hooks/useAutoRefresco";
+import { REFRESCO_MS } from "../../servicios/central";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "../../components/dashboard/LinkPanel";
 import { useApp } from "../../store/appStore.jsx";
@@ -33,7 +34,7 @@ export default function Compras() {
     try { setLista((await api.listarCompras(100, 0)).data); } catch (e) { if (!silencioso) setErrorApi(mensajeError(e)); } finally { if (!silencioso) setCargando(false); }
   }
   useEffect(() => { cargar(); }, [locales]); // eslint-disable-line
-  useAutoRefresco(() => cargar(true), 30000, MODO_REAL);
+  useAutoRefresco(() => cargar(true), REFRESCO_MS, MODO_REAL);
 
   // Compras abiertas o registradas desde este equipo que ya no están pendientes de factura (dato vigente de la API)
   const [recientes, setRecientes] = useState([]);

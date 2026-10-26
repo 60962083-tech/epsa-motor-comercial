@@ -1,6 +1,6 @@
 // Inicio de la web
 // Carrusel de modelos, por qué comprar en EPSA (con fotos reales), catálogo por familia, vitrina de colores,
-// combustibles, cómo comprar, sedes y opiniones. Modelos y sedes vienen de la API (se editan en el panel).
+// combustibles, cómo comprar y sedes. Modelos y sedes vienen de la API (se editan en el panel).
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../store/appStore.jsx";
@@ -12,7 +12,6 @@ import { FAMILIAS, COLOR_HEX, FOTOS_FAMILIA, enlaceGoogleMaps, formatoSoles } fr
 import ModeloImg, { fotoDeColor } from "../components/ModeloImg";
 import MotoIllustration from "../components/MotoIllustration";
 import ImgReal from "../components/ImgReal";
-import Opiniones from "../components/Opiniones";
 
 // ---------------------------------------------------------------------------------------------
 // Contenido fijo de la página
@@ -179,10 +178,6 @@ export default function Home() {
       {/* ------------------------------------------------------------------------------------- */}
       {sedes.length > 0 && <NuestrasSedes sedes={sedes} />}
 
-      {/* ------------------------------------------------------------------------------------- */}
-      {/* Opiniones de clientes (solo aparece si hay opiniones publicadas)                       */}
-      {/* ------------------------------------------------------------------------------------- */}
-      <Opiniones />
     </div>
   );
 }

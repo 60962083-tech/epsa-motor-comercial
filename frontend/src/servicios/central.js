@@ -1,12 +1,20 @@
 // Sprint 2 · Servicios de la base central (API de Express + Supabase)
 // Todas las lecturas y escrituras pasan por la API con la sesión del usuario: el navegador no guarda copias.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BUCKET_FOTOS, borrarArchivoStorage, modelosAdminApi, pedir, pedirBinario, subirArchivoStorage } from "../lib/api";
+import { BUCKET_FOTOS, borrarArchivoStorage, cacheConsultas, modelosAdminApi, pedir, pedirBinario, seriesUnidadesApi, subirArchivoStorage, ubicacionInicialSqlApi } from "../lib/api";
 import { ApiError, mensajeError } from "../lib/errores";
 import useAutoRefresco from "../hooks/useAutoRefresco";
 
-// Intervalo de actualización automática de las vistas abiertas (documentado en docs/sprint2/HU-001.md)
-export const REFRESCO_MS = 30000;
+// Intervalo de actualización automática de las vistas abiertas del panel (además, al volver a la ventana o pestaña)
+export const REFRESCO_MS = 5000;
+
+// La misma lectura pedida a la vez por varias partes de una pantalla se hace una sola vez
+// (solo mientras está en camino: la siguiente lectura siempre trae datos nuevos)
+const enCurso = new Map();
+function unaVez(clave, fn) {
+  if (!enCurso.has(clave)) enCurso.set(clave, fn().finally(() => enCurso.delete(clave)));
+  return enCurso.get(clave);
+}
 
 const consulta = (params = {}) => {
   const q = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
@@ -64,12 +72,18 @@ async function paginas(ruta, params, items) {
   }
   return { lista: todas, total: total || todas.length, resto };
 }
-export async function inventarioApi({ codubi, codmod } = {}) {
-  const [inv, ubic] = await Promise.all([
+export const inventarioApi = ({ codubi, codmod } = {}) => unaVez(`inventario:${codubi || ""}:${codmod || ""}`, () => leerInventario({ codubi, codmod }));
+// Motor y chasis no vienen en el inventario de la API: se completan con la función SQL del PASO 5 (si está)
+let sinSeries = false;
+const leerSeries = () => (sinSeries ? Promise.resolve(null) : seriesUnidadesApi().catch((e) => { if (e?.detalle?.faltaSql) sinSeries = true; return null; }));
+async function leerInventario({ codubi, codmod }) {
+  const [inv, ubic, series] = await Promise.all([
     paginas("/api/inventario", { codubi, codmod }, (d) => d?.items),
     pedir("/api/ubicaciones").then((r) => r.data || []).catch(() => null),
+    leerSeries(),
   ]);
-  const unidades = inv.lista.map(unidadDesdeApi);
+  const porUnidad = new Map((Array.isArray(series) ? series : []).map((s) => [String(s.coduni), s]));
+  const unidades = inv.lista.map((x) => { const s = porUnidad.get(String(x.coduni)); return unidadDesdeApi(s ? { ...x, nummotuni: x.nummotuni || s.nummotuni, chauni: x.chauni || s.chauni } : x); });
   const ubicaciones = ubic ? ubic.map((l) => ({ codubi: String(l.codubi), nomubi: l.nomubi, tipubi: l.tipubi, estubi: l.estubi !== false }))
     : [...new Map(unidades.filter((u) => u.ubicacion).map((u) => [u.ubicacion.codubi, { ...u.ubicacion, estubi: true }])).values()];
   return { unidades, ubicaciones, total: inv.total, resumen: inv.resto?.resumen || null };
@@ -85,7 +99,29 @@ export async function unidadCentralApi(coduni) {
 // HU-003 · Movimientos de ubicación (diseño de Michelle): la salida deja la moto «En tránsito» desde su ubicación
 // confirmada y la recepción la finaliza; recién ahí cambia la ubicación. El origen enviado es el que vio la persona:
 // si otra sesión la movió antes, el servidor responde 409 y no se sobrescribe nada.
-export const historialMovimientosApi = ({ estado, limite = 50, offset = 0 } = {}) => pedir(`/api/movimientos${consulta({ estado, limite, offset })}`).then((r) => r.data);
+// Movimientos de todas las motos: si el servidor no publica GET /api/movimientos, se arman con lo que la API sí
+// tiene: el inventario y el historial de cada moto (GET /api/unidades/:id/movimientos), de a seis a la vez.
+let sinListaGeneral = false;
+async function movimientosDesdeUnidades(soloActivos) {
+  const { unidades } = await inventarioApi();
+  const elegidas = soloActivos ? unidades.filter((u) => u.movimiento_activo) : unidades;
+  const lista = [];
+  for (let i = 0; i < elegidas.length; i += 6) {
+    const lote = await Promise.all(elegidas.slice(i, i + 6).map((u) => movimientosUnidadApi(u.coduni)
+      .then((d) => d.movimientos.map((m) => ({ ...m, coduni: String(u.coduni), unidad: { nommod: u.nommod, nummotuni: u.nummotuni, coluni: u.coluni } })))));
+    lista.push(...lote.flat());
+  }
+  return lista.sort((a, b) => momentoMov(b.fechaSalida, b.horaSalida).localeCompare(momentoMov(a.fechaSalida, a.horaSalida)) || Number(b.codmub) - Number(a.codmub));
+}
+export async function historialMovimientosApi({ estado, limite = 50, offset = 0 } = {}) {
+  if (!sinListaGeneral) {
+    try { return (await pedir(`/api/movimientos${consulta({ estado, limite, offset })}`)).data; }
+    catch (e) { if (!e?.detalle?.sinRuta) throw e; sinListaGeneral = true; }
+  }
+  const todos = await movimientosDesdeUnidades(estado === "En transito");
+  const filtrados = estado ? todos.filter((m) => m.estado === estado) : todos;
+  return { movimientos: filtrados.slice(offset, offset + limite), total: filtrados.length };
+}
 export const movimientosUnidadApi = (coduni) => pedir(`/api/unidades/${coduni}/movimientos`).then((r) => {
   const d = r.data || {};
   return { ...d, movimientos: (d.movimientos || []).filter(Boolean) };
@@ -93,7 +129,13 @@ export const movimientosUnidadApi = (coduni) => pedir(`/api/unidades/${coduni}/m
 export const iniciarMovimientoApi = (coduni, { codubiori, codubides, obsmub }) =>
   pedir(`/api/unidades/${coduni}/movimientos`, { metodo: "POST", cuerpo: { codubiori: String(codubiori), codubides: String(codubides), obsmub: obsmub || null } });
 export const confirmarRecepcionApi = (coduni, codmub) => pedir(`/api/unidades/${coduni}/movimientos/${codmub}/recepcion`, { metodo: "PATCH" });
-export const ubicacionInicialApi = (coduni, cuerpo, clave) => pedir(`/api/unidades/${coduni}/ubicacion-inicial`, { metodo: "POST", cuerpo, headers: { "Idempotency-Key": clave } });
+// Ubicación inicial de una moto identificada a mano: si la API no tiene la ruta, la registra la función SQL del PASO 5
+export async function ubicacionInicialApi(coduni, cuerpo, clave) {
+  try { return await pedir(`/api/unidades/${coduni}/ubicacion-inicial`, { metodo: "POST", cuerpo, headers: { "Idempotency-Key": clave } }); }
+  catch (e) { if (!e?.detalle?.sinRuta) throw e; }
+  const data = await ubicacionInicialSqlApi(coduni, cuerpo.codubi, cuerpo.observacion);
+  return { message: "Ubicación inicial registrada", data };
+}
 // Fecha y hora de un movimiento tal como las registra el servidor («2026-10-21» y «10:45:12»)
 export const momentoMov = (fecha, hora) => (fecha ? `${fecha}T${String(hora || "00:00:00").slice(0, 8)}` : "");
 
@@ -176,27 +218,39 @@ export const ordenFotoModeloApi = (codmod, codimo, urlimo, ordimo) => pedir(`/ap
 export const estadoFotoModeloApi = (codmod, codimo, estimo) => pedir(`/api/modelos/${codmod}/imagenes/${codimo}/estado`, { metodo: "PATCH", cuerpo: { estimo } });
 
 // Consulta que se actualiza sola: conserva los datos si falla la red y avisa que pueden estar desactualizados
-export function useConsultaCentral(cargar, deps = [], { intervalo = REFRESCO_MS, activo = true } = {}) {
-  const [estado, setEstado] = useState({ data: null, error: null, cargando: activo, actualizado: null, fallo: null });
+// Con «clave», al volver a la pantalla se muestran al instante los últimos datos de esta sesión y se actualizan.
+export function useConsultaCentral(cargar, deps = [], { intervalo = REFRESCO_MS, activo = true, clave = "" } = {}) {
+  const [estado, setEstado] = useState(() => {
+    const previo = clave && activo ? cacheConsultas.get(clave) : null;
+    return { data: previo?.data ?? null, error: null, cargando: activo, actualizado: previo?.actualizado ?? null, fallo: null };
+  });
   const vigente = useRef(0);
+  const enVuelo = useRef(false);
   const fn = useRef(cargar);
   fn.current = cargar;
   const refrescar = useCallback(async (silencioso = false) => {
     if (!activo) return null;
+    // Una actualización automática no se encima a otra que todavía no responde
+    if (silencioso && enVuelo.current) return null;
     const n = ++vigente.current;
+    enVuelo.current = true;
     if (!silencioso) setEstado((e) => ({ ...e, cargando: true }));
     try {
       const data = await fn.current();
       if (n !== vigente.current) return null;
-      setEstado({ data, error: null, cargando: false, actualizado: new Date().toISOString(), fallo: null });
+      const actualizado = new Date().toISOString();
+      if (clave) cacheConsultas.set(clave, { data, actualizado });
+      setEstado({ data, error: null, cargando: false, actualizado, fallo: null });
       return data;
     } catch (error) {
       if (n !== vigente.current) return null;
       setEstado((e) => ({ ...e, cargando: false, error: e.data ? null : error, fallo: error }));
       return null;
+    } finally {
+      if (n === vigente.current) enVuelo.current = false;
     }
-  }, [activo, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { refrescar(); }, [refrescar]);
+  }, [activo, clave, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { refrescar(Boolean(clave && cacheConsultas.has(clave))); }, [refrescar]); // eslint-disable-line react-hooks/exhaustive-deps
   useAutoRefresco(() => refrescar(true), intervalo, activo);
   // Sin conexión: se avisa enseguida, sin esperar al siguiente intento
   useEffect(() => {

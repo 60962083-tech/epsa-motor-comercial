@@ -1,6 +1,6 @@
 // HU-007 · Sesión y permisos por rol
 // Cada rol tiene sus secciones (ROLES). Además, el gerente puede desactivar secciones para la administradora y el
-// vendedor en «Roles y permisos»: con la base conectada eso se guarda en Supabase y se vuelve a leer cada 30 segundos,
+// vendedor en «Roles y permisos»: con la base conectada eso se guarda en Supabase y se vuelve a leer cada 10 segundos,
 // así el menú de cada persona cambia sin que tenga que volver a entrar. El gerente siempre ve todo.
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { ROLES } from "../data/mockData";
@@ -44,7 +44,7 @@ export function AuthProvider({ children }) {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Leer los permisos (al entrar y cada 30 s). Si falla la red se conservan los últimos leídos.
+  // Leer los permisos (al entrar y cada 10 s). Si falla la red se conservan los últimos leídos.
   // ---------------------------------------------------------------------------------------------
   const cargarPermisos = useCallback(async () => {
     if (!user) return;
@@ -57,7 +57,7 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
   useEffect(() => { cargarPermisos(); }, [cargarPermisos]);
-  useAutoRefresco(cargarPermisos, 30000, Boolean(user) && MODO_REAL);
+  useAutoRefresco(cargarPermisos, 10000, Boolean(user) && MODO_REAL);
 
   // Vista de ejemplo: el gerente cambia los permisos en este navegador
   function cambiarPermisoLocal(rol, seccion, activo) {
