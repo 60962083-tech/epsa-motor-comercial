@@ -34,11 +34,12 @@ Se entra con el correo y la contraseña de cada persona (Supabase Auth). Las cue
 - Fotos repetidas en el catálogo (opcional): `docs/supabase-fotos-repetidas.sql` le da a cada modelo su propia foto.
 - Conexiones del Sprint 2 sin ruta en la API: `docs/supabase-sprint2-conexiones.sql`. La cotización de la web queda como interesado en Leads, el vendedor registra su seguimiento y sus ventas concretadas, y se registra la ubicación inicial de una moto identificada a mano.
 - Datos de prueba: `docs/supabase-borrar-datos-prueba.sql` borra solo lo marcado como prueba (interesados «Prueba …» y compras con factura «F999-…», con sus motos y movimientos).
-- Información de torito.pe (HU-036): en **Modelos**, el botón «Traer información de torito.pe» guarda con la API de modelos el precio, los colores, la descripción, la ficha técnica completa (en `carmod`) y las fotos oficiales. La web arma cada modelo solo con lo que devuelve `GET /api/modelos`.
+- Precios y fichas iniciales (HU-036): `docs/supabase-catalogo-torito.sql` carga el precio, los colores, la descripción y la ficha técnica de los 9 modelos de torito.pe, solo donde falten.
+- Información de torito.pe en vivo (HU-036): `docs/supabase-torito-en-vivo.sql` deja que Supabase lea torito.pe. En **Modelos**, el botón «Traer información de torito.pe» lee la web oficial en ese momento y guarda con la API de modelos el precio, los colores, la descripción, la ficha técnica completa (en `carmod`) y las fotos. Si torito.pe publica un modelo nuevo, lo crea (`POST /api/modelos`), le enlaza sus fotos y lo publica. Sin ese script, el botón usa la ficha oficial que trae el panel. La web arma cada modelo solo con lo que devuelve `GET /api/modelos`.
 
 ## Sprint 2: historias conectadas a la base central
 
-Todas las pantallas del Sprint 2 leen y guardan en la API. Las listas se actualizan solas cada 30 segundos y al volver a la pestaña, muestran la hora de la última actualización, tienen botón **Actualizar** y avisan si la conexión falla. Detalle por historia y guion de prueba: [`docs/SPRINT2.md`](docs/SPRINT2.md).
+Todas las pantallas del Sprint 2 leen y guardan en la API. Las listas se actualizan solas cada pocos segundos y al volver a la pestaña, tienen botón **Actualizar** y avisan si la conexión falla. Detalle por historia y guion de prueba: [`docs/SPRINT2.md`](docs/SPRINT2.md).
 
 | HU | Qué hace | Dónde | API |
 |---|---|---|---|

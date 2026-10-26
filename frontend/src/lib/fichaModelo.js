@@ -30,7 +30,7 @@ export const SECCIONES_FICHA = [
 ];
 const GENERALES = [
   ["familia", "Familia"], ["tipoMotor", "Tipo de motor"], ["combustible", "Combustible"], ["uso", "Uso"],
-  ["tipoTecho", "Techo"], ["colorFoto", "Color de la foto"],
+  ["tipoTecho", "Techo"], ["colorFoto", "Color de la foto"], ["paginaTorito", "Página en torito.pe"],
 ];
 const RESUMEN = ["Motor", "Cilindrada", "Llantas", "Potencia", "Torque"];
 const sinTildes = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();

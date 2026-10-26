@@ -232,7 +232,8 @@ export function ModalUbicacionInicial({ unidad, ubicaciones = [], onClose, onHec
       onHecho?.(r.data);
       onClose();
     } catch (er) {
-      if (er.detalle?.sinRuta) setErr({ general: "Todavía no se puede registrar la ubicación inicial desde el panel. Pídele a quien administra el sistema que registre dónde está esta moto." });
+      // Sin ruta en la API ni función en Supabase (falta el PASO-5: docs/supabase-sprint2-conexiones.sql)
+      if (er.detalle?.sinRuta || er.detalle?.faltaSql) setErr({ general: "Todavía no se puede registrar la ubicación inicial desde el panel. Pídele a quien administra el sistema que registre dónde está esta moto." });
       else if (er.status === 409) { setErr({ general: `${conPunto(mensajeError(er))} ${textoConflicto(er.detalle?.actual)}` }); onConflicto?.(); }
       else setErr({ general: sinRespuesta(er) ? NO_CONFIRMADO : mensajeError(er) });
     } finally { setEnviando(false); }

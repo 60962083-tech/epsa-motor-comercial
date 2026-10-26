@@ -2,7 +2,7 @@
 import useAutoRefresco from "../../hooks/useAutoRefresco";
 import { REFRESCO_MS } from "../../servicios/central";
 import { useEffect, useMemo, useState } from "react";
-import { esCorreo, esTelefono, formatoTelefono, limpiarTelefono, validarContacto } from "../../lib/validar";
+import { MAX_CONTACTO, esCorreo, esTelefono, filtrarContacto, formatoTelefono, limpiarTelefono, validarContacto } from "../../lib/validar";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
@@ -182,8 +182,8 @@ export default function Ubicaciones() {
           <Campo etiqueta="Nombre" error={err.nombre}><input id="ub-nombre" className="field-input" maxLength={120} value={f.nombre} onChange={set("nombre")} /></Campo>
           <Campo etiqueta="Tipo"><select id="ub-tipo" className="field-input" value={f.tipo} onChange={(e) => setF((x) => ({ ...x, tipo: e.target.value }))}>{TIPOS_UBICACION.map((t) => <option key={t}>{t}</option>)}</select></Campo>
           <Campo etiqueta={f.tipo === "Sede propia" ? "Dirección" : "Dirección (opcional)"} error={err.direccion} className="sm:col-span-2"><input className="field-input" maxLength={250} value={f.direccion} onChange={set("direccion")} /></Campo>
-          <Campo etiqueta="Número de contacto (opcional)" error={err.telefono} ayuda="Se guarda tal como lo escribas: con +, ceros, espacios, guiones o paréntesis. Puedes dejarlo vacío.">
-            <input id="ub-telefono" className="field-input" inputMode="tel" maxLength={30} placeholder="907 721 481 o (01) 555-1234" value={f.telefono} onChange={(e) => { setF({ ...f, telefono: e.target.value }); if (err.telefono) setErr((x) => ({ ...x, telefono: undefined })); }} />
+          <Campo etiqueta="Número de contacto (opcional)" error={err.telefono} ayuda="Solo números, espacios, guiones, paréntesis y un + al inicio, hasta 15 dígitos. Se guarda tal como lo escribas, con sus ceros. Puedes dejarlo vacío.">
+            <input id="ub-telefono" className="field-input" type="tel" inputMode="tel" maxLength={MAX_CONTACTO} placeholder="907 721 481 o (01) 555-1234" value={f.telefono} onChange={(e) => { setF({ ...f, telefono: filtrarContacto(e.target.value) }); if (err.telefono) setErr((x) => ({ ...x, telefono: undefined })); }} />
           </Campo>
           <div className="flex items-end pb-1 text-[13px] text-slate-500">{f.telefono.trim() && !validarContacto(f.telefono).error ? <span>Se mostrará como <b className="text-marino dark:text-white">{contactoVisible(validarContacto(f.telefono).valor)}</b>.</span> : <span>{f.tipo === "Sede propia" ? "Lo ve el equipo y, si es una sede, también la web de sedes." : "Lo usa el equipo para coordinar traslados."}</span>}</div>
           {f.tipo === "Sede propia" && <>

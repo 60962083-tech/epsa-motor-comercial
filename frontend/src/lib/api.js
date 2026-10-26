@@ -150,6 +150,9 @@ export const registrarInteresadoWebApi = (d) => rpc("web_registrar_interesado", 
   p_codsed: d.codsed ? Number(d.codsed) : null, p_detalle: d.detalle || null, p_tipo: d.tipo,
 }, { publica: true });
 
+// HU-036: página de torito.pe leída desde Supabase (docs/supabase-torito-en-vivo.sql)
+export const paginaToritoApi = (ruta) => rpc("hu036_pagina_torito", { p_ruta: ruta });
+
 // HU-001: motor y chasis de cada moto (mismo SQL), mientras GET /api/inventario no los envíe
 export const seriesUnidadesApi = () => rpc("hu001_series_unidades");
 
