@@ -5,9 +5,10 @@ import { IconCheck } from "../Icons";
 
 // ¿Esta pantalla trabaja con los datos compartidos del equipo? (el código de la HU queda solo en data-hu)
 // Si la sección todavía no está disponible en el servidor, no se muestra (ya lo explica el aviso de la página).
+// Con la base conectada no se muestra nada: solo la vista de ejemplo lleva su etiqueta.
 export function EstadoConexion({ hu, consulta }) {
   const ok = Boolean(CONECTADO[hu]);
-  if (consulta?.error?.detalle?.sinRuta && !consulta.data) return null;
+  if (ok || (consulta?.error?.detalle?.sinRuta && !consulta.data)) return null;
   return (
     <span data-conexion={ok ? "base" : "local"} data-hu={hu} title={ok ? "Todo el equipo ve la misma información, que se actualiza sola." : "Datos de ejemplo guardados solo en este equipo."}
       className={`inline-flex items-center gap-2 self-center rounded-full px-3 py-1.5 text-[12.5px] font-semibold ${ok ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200"}`}>

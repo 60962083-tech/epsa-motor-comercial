@@ -8,7 +8,7 @@ import { useAuth } from "../../context/AuthContext";
 import { historialMovimientosApi, inventarioApi, momentoMov, useConsultaCentral } from "../../servicios/central";
 import { Card, PageHeader, Stat, Tabla, Vacio, btnMini } from "../../components/ui";
 import { EstadoConexion, Pestanas, Pill } from "../../components/dashboard/Sprint2";
-import { AbrirPorNumero, AvisoConexion, sinApi, BarraActualizacion, ColorUnidad, Paginador, PillComercial, PillPreparacion, fechaCompleta } from "../../components/dashboard/Central";
+import { AbrirPorNumero, AvisoConexion, nombreUnidad, sinApi, BarraActualizacion, ColorUnidad, Paginador, PillComercial, PillPreparacion, fechaCompleta } from "../../components/dashboard/Central";
 import { ModalLlegadaCentral, ModalTrasladoCentral, ModalUbicacionInicial } from "../../components/dashboard/ModalesCentral";
 import { ESTADO_MOV, RutaMov, TONO_MOV, cuandoMov } from "../../components/dashboard/MovimientosUnidad";
 import { haceCuanto } from "../../lib/validar";
@@ -22,8 +22,8 @@ export default function MovimientosCentral() {
   const [offset, setOffset] = useState(0);
   const [filtroHist, setFiltroHist] = useState("");
   const [modal, setModal] = useState(null);
-  const inventario = useConsultaCentral(() => inventarioApi(), []);
-  const enCurso = useConsultaCentral(() => historialMovimientosApi({ estado: "En transito", limite: 200 }), []);
+  const inventario = useConsultaCentral(() => inventarioApi(), [], { clave: "inventario::" });
+  const enCurso = useConsultaCentral(() => historialMovimientosApi({ estado: "En transito", limite: 200 }), [], { clave: "movimientos:curso" });
   const historial = useConsultaCentral(() => historialMovimientosApi({ estado: filtroHist || undefined, limite: LIMITE, offset }), [filtroHist, offset], { activo: vista === "historial" });
   const unidades = useMemo(() => inventario.data?.unidades || [], [inventario.data]);
   const ubicaciones = inventario.data?.ubicaciones || [];
@@ -78,7 +78,7 @@ export default function MovimientosCentral() {
             return (
               <Card key={m.codmub} className="flex flex-wrap items-center justify-between gap-4" data-movimiento={m.codmub} data-estado={m.estado}>
                 <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 font-bold text-marino dark:text-white"><Link className="hover:underline" to={`/admin/inventario/${m.coduni}`}>{m.unidad?.nommod} · motor {m.unidad?.nummotuni}</Link><span className="text-[12.5px] font-medium text-slate-400"><ColorUnidad color={m.unidad?.coluni} /></span><Pill tono={TONO_MOV[m.estado]}>{ESTADO_MOV[m.estado]}</Pill></p>
+                  <p className="flex flex-wrap items-center gap-2 font-bold text-marino dark:text-white"><Link className="hover:underline" to={`/admin/inventario/${m.coduni}`}>{m.unidad?.nommod} · {m.unidad?.nummotuni ? `motor ${m.unidad.nummotuni}` : `N° ${m.coduni}`}</Link><span className="text-[12.5px] font-medium text-slate-400"><ColorUnidad color={m.unidad?.coluni} /></span><Pill tono={TONO_MOV[m.estado]}>{ESTADO_MOV[m.estado]}</Pill></p>
                   <div className="mt-1.5"><RutaMov m={m} /></div>
                   <p className="mt-1.5 text-[12.5px] text-slate-500">Salió el {cuandoMov(m.fechaSalida, m.horaSalida)} ({haceCuanto(salida)}). Registró {m.autorSalida?.nombre || "—"}.{m.observacion ? ` «${m.observacion}»` : ""}</p>
                   {horas > 24 && <p className="mt-1 text-[12.5px] font-semibold text-amber-700 dark:text-amber-300">Lleva más de un día en tránsito. Confirma su llegada cuando la reciban.</p>}
@@ -95,7 +95,7 @@ export default function MovimientosCentral() {
         <Tabla columnas={["Moto", "Modelo", "Almacén", "Preparación", "Situación comercial", "Acción"]}>
           {enAlmacen.map((u) => (
             <tr key={u.coduni} data-en-almacen={u.coduni}>
-              <td className="px-4 py-3"><Link className="font-semibold text-marino hover:underline dark:text-white" to={`/admin/inventario/${u.coduni}`}>{u.nummotuni}</Link><span className="block text-[12px] text-slate-400">chasis {u.chauni}</span></td>
+              <td className="px-4 py-3"><Link className="font-semibold text-marino hover:underline dark:text-white" to={`/admin/inventario/${u.coduni}`}>{nombreUnidad(u)}</Link>{u.chauni && <span className="block text-[12px] text-slate-400">chasis {u.chauni}</span>}</td>
               <td className="px-4 py-3">{u.nommod}<span className="block text-[12px] text-slate-400"><ColorUnidad color={u.coluni} /></span></td>
               <td className="px-4 py-3">{u.ubicacion.nomubi}<span className="block text-[12px] text-slate-400">{u.origen}{u.ingreso ? `, ${fechaCompleta(u.ingreso)}` : ""}</span></td>
               <td className="px-4 py-3"><PillPreparacion preparacion={u.preparacion} /></td>
@@ -111,7 +111,7 @@ export default function MovimientosCentral() {
         <Tabla columnas={["Moto", "Modelo", "Compra", "Identificada", "Acción"]}>
           {sinUbicacion.map((u) => (
             <tr key={u.coduni} data-sin-ubicacion={u.coduni}>
-              <td className="px-4 py-3"><Link className="font-semibold text-marino hover:underline dark:text-white" to={`/admin/inventario/${u.coduni}`}>{u.nummotuni}</Link><span className="block text-[12px] text-slate-400">chasis {u.chauni}</span></td>
+              <td className="px-4 py-3"><Link className="font-semibold text-marino hover:underline dark:text-white" to={`/admin/inventario/${u.coduni}`}>{nombreUnidad(u)}</Link>{u.chauni && <span className="block text-[12px] text-slate-400">chasis {u.chauni}</span>}</td>
               <td className="px-4 py-3">{u.nommod}<span className="block text-[12px] text-slate-400"><ColorUnidad color={u.coluni} /></span></td>
               <td className="px-4 py-3 text-slate-500">{u.origen}</td>
               <td className="whitespace-nowrap px-4 py-3 text-slate-500">{fechaCompleta(u.ingreso)}</td>

@@ -1,5 +1,6 @@
 // HU-026 · Ubicaciones · EMT-97 (mejora técnica): número de contacto opcional en cada ubicación
 import useAutoRefresco from "../../hooks/useAutoRefresco";
+import { REFRESCO_MS } from "../../servicios/central";
 import { useEffect, useMemo, useState } from "react";
 import { esCorreo, esTelefono, formatoTelefono, limpiarTelefono, validarContacto } from "../../lib/validar";
 import { useNavigate } from "react-router-dom";
@@ -44,7 +45,7 @@ export default function Ubicaciones() {
     } catch (e) { if (!silencioso) setErrorApi(mensajeError(e)); } finally { if (!silencioso) setCargando(false); }
   }
   useEffect(() => { cargar(); }, []); // eslint-disable-line
-  useAutoRefresco(() => cargar(true), 30000, MODO_REAL);
+  useAutoRefresco(() => cargar(true), REFRESCO_MS, MODO_REAL);
 
   const lista = useMemo(() => ubicaciones.filter((u) => (!q || u.nombre.toLowerCase().includes(q.toLowerCase())) && (!tipo || u.tipo === tipo) && (!est || (est === "activa") === u.activo)), [ubicaciones, q, tipo, est]);
   const unidadesEn = (nombre) => unidades.filter((u) => u.ubicacion === nombre && u.disponibilidad !== "Vendida").length;

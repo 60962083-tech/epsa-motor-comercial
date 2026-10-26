@@ -9,7 +9,7 @@ import { inventarioApi, useConsultaCentral } from "../../servicios/central";
 import { ETAPAS_FILTRO, FILTRO_INICIAL, GRUPOS_LUGAR_API, filtrarUnidades } from "../../servicios/inventarioCentral";
 import { Card, PageHeader, Stat, Tabla, Vacio, btnMini } from "../../components/ui";
 import { EstadoConexion } from "../../components/dashboard/Sprint2";
-import { AbrirPorNumero, AvisoConexion, sinApi, BarraActualizacion, ColorUnidad, PillComercial, PillPreparacion, TextoTecho, TextoUbicacion } from "../../components/dashboard/Central";
+import { AbrirPorNumero, AvisoConexion, MotosPorIdentificar, nombreUnidad, sinApi, BarraActualizacion, ColorUnidad, PillComercial, PillPreparacion, TextoTecho, TextoUbicacion } from "../../components/dashboard/Central";
 import { ModalTrasladoCentral, ModalUbicacionInicial } from "../../components/dashboard/ModalesCentral";
 
 const POR_PAGINA = 20;
@@ -23,7 +23,7 @@ export default function InventarioCentral() {
   const [sinUbicacion, setSinUbicacion] = useState(false);
   const [pag, setPag] = useState(1);
   const [modal, setModal] = useState(null);
-  const consulta = useConsultaCentral(() => inventarioApi(servidor), [servidor.codubi, servidor.codmod]);
+  const consulta = useConsultaCentral(() => inventarioApi(servidor), [servidor.codubi, servidor.codmod], { clave: `inventario:${servidor.codubi || ""}:${servidor.codmod || ""}` });
   const datos = consulta.data;
   const unidades = datos?.unidades || [];
   const ubicaciones = datos?.ubicaciones || [];
@@ -58,6 +58,7 @@ export default function InventarioCentral() {
         {puede("compras.registrar") && <Link className="btn btn-primary !py-2.5" to="/admin/compras">Compras e identificación</Link>}
       </PageHeader>
       <AvisoConexion consulta={consulta} que="el inventario central" />
+      <MotosPorIdentificar />
 
       <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-5">
         <Stat etiqueta="Unidades" valor={unidades.length} nota={servidor.codubi || servidor.codmod ? "Con el filtro de ubicación o modelo" : "Identificadas en total"} />
@@ -114,7 +115,7 @@ export default function InventarioCentral() {
           <Tabla columnas={["Unidad", "Modelo", "Ubicación", "Preparación", "Techo", "Situación comercial", "Acciones"]}>
             {visibles.map((u) => (
               <tr key={u.coduni} className="align-top" data-unidad={u.coduni}>
-                <td className="px-4 py-3"><Link to={`/admin/inventario/${u.coduni}`} className="font-semibold text-marino hover:underline dark:text-white">{u.nummotuni}</Link><p className="text-[11.5px] text-slate-400">chasis {u.chauni}, N° {u.coduni}</p></td>
+                <td className="px-4 py-3"><Link to={`/admin/inventario/${u.coduni}`} className="font-semibold text-marino hover:underline dark:text-white">{nombreUnidad(u)}</Link>{u.chauni && <p className="text-[11.5px] text-slate-400">chasis {u.chauni}, N° {u.coduni}</p>}</td>
                 <td className="px-4 py-3">{u.nommod}<span className="block text-[12px] text-slate-400"><ColorUnidad color={u.coluni} /></span></td>
                 <td className="px-4 py-3"><TextoUbicacion unidad={u} /></td>
                 <td className="px-4 py-3"><PillPreparacion preparacion={u.preparacion} /></td>

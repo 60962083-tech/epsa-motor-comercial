@@ -1,7 +1,7 @@
 // HU-001 · Consultar disponibilidad compartida (base central)
 // La misma lectura para gerente, administradora y vendedores: ubicación, modelo, color, techo, preparación y
 // situación comercial, cada una por separado. Sin clientes, costos ni boletas. Ubicación y modelo se filtran en el
-// servidor; la vista se actualiza sola cada 30 segundos, con «Actualizar» y al volver a la pestaña.
+// servidor; la vista se actualiza sola, con «Actualizar» y al volver a la pestaña.
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "../../components/dashboard/LinkPanel";
 import { useApp } from "../../store/appStore.jsx";
@@ -12,7 +12,7 @@ import ModeloImg from "../../components/ModeloImg";
 import MotoIllustration from "../../components/MotoIllustration";
 import { Card, PageHeader, Stat, Tabla, btnMini } from "../../components/ui";
 import { ColorPunto, EstadoConexion, Pestanas, Pill } from "../../components/dashboard/Sprint2";
-import { AvisoConexion, sinApi, BarraActualizacion, ColorUnidad, PillComercial, PillPreparacion, TextoTecho, TextoUbicacion, capital } from "../../components/dashboard/Central";
+import { AvisoConexion, MotosPorIdentificar, nombreUnidad, sinApi, BarraActualizacion, ColorUnidad, PillComercial, PillPreparacion, TextoTecho, TextoUbicacion, capital } from "../../components/dashboard/Central";
 
 const CLAVE_FILTROS = "epsa-filtros-disponibilidad";
 const SERVIDOR_INICIAL = { codubi: "", codmod: "" };
@@ -34,7 +34,7 @@ export default function DisponibilidadCentral() {
   useEffect(() => { try { sessionStorage.setItem(CLAVE_FILTROS, JSON.stringify({ servidor, f, vista })); } catch {} }, [servidor, f, vista]);
 
   // Lectura central (ubicación y modelo los filtra el servidor)
-  const consulta = useConsultaCentral(() => inventarioApi(servidor), [servidor.codubi, servidor.codmod]);
+  const consulta = useConsultaCentral(() => inventarioApi(servidor), [servidor.codubi, servidor.codmod], { clave: `inventario:${servidor.codubi || ""}:${servidor.codmod || ""}` });
   const datos = consulta.data;
   const unidades = datos?.unidades || [];
   const lista = useMemo(() => filtrarUnidades(unidades, f), [unidades, f]);
@@ -66,7 +66,7 @@ export default function DisponibilidadCentral() {
     <li key={u.coduni} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2.5" data-unidad={u.coduni} data-comercial={u.comercial}>
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px]">
-          <Link to={`/admin/inventario/${u.coduni}`} className="font-bold text-marino hover:underline dark:text-white">Motor {u.nummotuni}</Link>
+          <Link to={`/admin/inventario/${u.coduni}`} className="font-bold text-marino hover:underline dark:text-white">{nombreUnidad(u)}</Link>
           <span className="text-slate-500"><ColorUnidad color={u.coluni} /></span>
           <PillComercial comercial={u.comercial} />
           <PillPreparacion preparacion={u.preparacion} />
@@ -95,6 +95,7 @@ export default function DisponibilidadCentral() {
         <BarraActualizacion consulta={consulta} />
       </PageHeader>
       <AvisoConexion consulta={consulta} que="el inventario central" />
+      <MotosPorIdentificar />
 
       {/* Indicadores (siguen a los filtros) */}
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4" data-indicadores>
@@ -256,7 +257,7 @@ export default function DisponibilidadCentral() {
         <Tabla columnas={["Moto", "Modelo", "Color", "Ubicación", "Techo", "Preparación", "Situación comercial", ""]}>
           {lista.map((u) => (
             <tr key={u.coduni} data-unidad={u.coduni} data-comercial={u.comercial} className="align-top">
-              <td className="px-4 py-3"><Link to={`/admin/inventario/${u.coduni}`} className="font-semibold text-marino hover:underline dark:text-white">{u.nummotuni}</Link><span className="block text-[12px] text-slate-400">chasis {u.chauni}</span></td>
+              <td className="px-4 py-3"><Link to={`/admin/inventario/${u.coduni}`} className="font-semibold text-marino hover:underline dark:text-white">{nombreUnidad(u)}</Link>{u.chauni && <span className="block text-[12px] text-slate-400">chasis {u.chauni}</span>}</td>
               <td className="px-4 py-3">{u.nommod}</td>
               <td className="px-4 py-3"><ColorUnidad color={u.coluni} /></td>
               <td className="px-4 py-3"><TextoUbicacion unidad={u} /></td>
@@ -268,7 +269,7 @@ export default function DisponibilidadCentral() {
           ))}
         </Tabla>
       )}
-      <p className="mt-4 text-[12.5px] text-slate-400">La lista se actualiza sola cada 30 segundos y al volver a esta pestaña. Ubicación, preparación y situación comercial se registran por separado: una moto comprada o en Ancón no figura como lista para entrega.</p>
+      <p className="mt-4 text-[12.5px] text-slate-400">Ubicación, preparación y situación comercial se registran por separado: una moto comprada o en Ancón no figura como lista para entrega.</p>
     </div>
   );
 }

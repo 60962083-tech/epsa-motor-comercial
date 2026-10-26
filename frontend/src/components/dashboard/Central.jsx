@@ -1,9 +1,11 @@
 // Sprint 2 · Piezas de las vistas conectadas a la base central
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { haceCuanto } from "../../lib/validar";
 import { mensajeError } from "../../lib/errores";
-import { REFRESCO_MS } from "../../servicios/central";
+import { useConsultaCentral } from "../../servicios/central";
+import { listarCompras } from "../../lib/api";
+import { useAuth } from "../../context/AuthContext";
+import { Link } from "./LinkPanel";
 import { TONO_COMERCIAL, preparacionDe, techoDe, ubicacionDe } from "../../servicios/inventarioCentral";
 import { Aviso, btnMini } from "../ui";
 import { ColorPunto, Pill } from "./Sprint2";
@@ -16,16 +18,12 @@ export function useReloj(ms = 15000) {
 
 export const hora = (iso) => (iso ? new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false }) : "");
 
-// Última actualización y botón Actualizar
+// Botón Actualizar (la vista también se actualiza sola y al volver a la pestaña)
 export function BarraActualizacion({ consulta }) {
-  useReloj();
   return (
-    <>
-      <span className="self-center text-[12.5px] text-slate-400" data-actualizado={consulta.actualizado || ""} title={`Se actualiza sola cada ${REFRESCO_MS / 1000} segundos y al volver a esta pestaña.`}>
-        {consulta.actualizado ? `Actualizado ${haceCuanto(consulta.actualizado)}, a las ${hora(consulta.actualizado)}` : consulta.cargando ? "Cargando…" : "Sin datos todavía"}
-      </span>
-      <button className="btn btn-secondary !py-2.5" onClick={() => consulta.refrescar()} disabled={consulta.cargando} data-actualizar>{consulta.cargando ? "Actualizando…" : "Actualizar"}</button>
-    </>
+    <button className="btn btn-secondary ml-auto self-end !px-3.5 !py-2 text-[13px]" onClick={() => consulta.refrescar()} disabled={consulta.cargando} data-actualizar data-actualizado={consulta.actualizado || ""}>
+      {consulta.cargando ? "Actualizando…" : "Actualizar"}
+    </button>
   );
 }
 
@@ -57,8 +55,7 @@ export function AvisoConexion({ consulta, que = "la información" }) {
     return (
       <div className="mb-4" data-desactualizado role="status">
         <Aviso tipo="aviso">
-          <b>No se pudo actualizar{consulta.fallo.status === 0 ? ": no hay conexión" : ""}.</b> Lo que ves puede estar desactualizado; es la información de las {hora(consulta.actualizado)}.
-          Se vuelve a intentar sola cada {REFRESCO_MS / 1000} segundos, o usa Actualizar.
+          <b>No se pudo actualizar{consulta.fallo.status === 0 ? ": no hay conexión" : ""}.</b> Lo que ves puede estar desactualizado. Se vuelve a intentar sola, o usa Actualizar.
         </Aviso>
       </div>
     );
@@ -126,6 +123,8 @@ export function ColorUnidad({ color }) {
 }
 
 // «AZUL» del XML se muestra como «Azul»
+// Nombre corto de una moto: su motor si la API lo envía; si no, su número central
+export const nombreUnidad = (u) => (u?.nummotuni ? `Motor ${u.nummotuni}` : `Moto N° ${u?.coduni ?? ""}`);
 export const capital = (t) => { const s = String(t || "").trim().toLowerCase(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ""; };
 
 // Paginación sencilla
@@ -149,4 +148,24 @@ export function fechaCompleta(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   return `${d.toLocaleDateString("es-PE", { day: "numeric", month: "short", year: "numeric" }).replace(".", "")}, ${hora(iso)}`;
+}
+
+// HU-001 · Motos compradas que todavía no entran al inventario
+// Una compra registrada no crea motos: aparecen en Disponibilidad e Inventario cuando se registra su factura y se
+// identifican (motor y chasis) en Compras a proveedor (HU-002). Este aviso lo explica con lo que dice la base.
+export function MotosPorIdentificar() {
+  const { puedeVer } = useAuth();
+  const ve = puedeVer("compras");
+  const consulta = useConsultaCentral(() => listarCompras(100, 0).then((r) => (Array.isArray(r.data) ? r.data : [])), [], { activo: ve, clave: "compras-pendientes" });
+  const compras = (consulta.data || []).filter((c) => Number(c.cantidad_pendiente) > 0);
+  const motos = compras.reduce((n, c) => n + Number(c.cantidad_pendiente || 0), 0);
+  if (!ve || !motos) return null;
+  return (
+    <div className="mb-4" data-motos-por-identificar={motos}>
+      <Aviso tipo="aviso">
+        <b>{motos} moto{motos === 1 ? "" : "s"} comprada{motos === 1 ? "" : "s"} todavía no {motos === 1 ? "entra" : "entran"} al inventario.</b> Aparecen aquí cuando registras la factura de la compra e identificas cada moto (motor y chasis).{" "}
+        <Link to="/admin/compras" className="font-semibold underline">Ir a Compras a proveedor</Link>
+      </Aviso>
+    </div>
+  );
 }
