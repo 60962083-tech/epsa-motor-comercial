@@ -54,9 +54,7 @@ Proyecto del curso **Proyecto Tecnológico (NRC 3710)** - Periodo Académico 202
 
 ## 🔐 Seguridad
 
-No utilizar una clave `service_role` en la API.
-
-Las peticiones autenticadas transmiten el token del usuario a Supabase para aplicar RLS y los permisos correspondientes.
+Las rutas de usuarios usan la clave pública `SUPABASE_ANON_KEY` y transmiten el token del usuario para aplicar RLS y los permisos correspondientes. La integración servidor a servidor HU-030 usa `SUPABASE_SECRET_KEY`, una clave privilegiada equivalente a `service_role` que omite RLS. Se limita al backend y a las RPC técnicas de HU-030 desde nuestro código; no es una credencial de mínimo privilegio. Nunca debe llegar al navegador, Apps Script, Git, logs o respuestas HTTP. El actor `integracion.facturas@epsa.internal` se usa solo para auditoría y no inicia sesión.
 
 El archivo `.env` no debe versionarse.
 
@@ -152,4 +150,4 @@ La carga física del archivo de factura todavía requiere definir un mecanismo d
 
 El backend corresponde a una API Node.js/Express.
 
-El despliegue del frontend en Netlify no despliega automáticamente este backend, por lo que el equipo deberá definir el alojamiento de la API de manera independiente para el entorno de integración y QA.
+El despliegue del frontend en Netlify no despliega automáticamente este backend. El equipo confirmó que Render aloja el backend y despliega la rama `develop`; su commit y variables vigentes deben revisarse en Render al preparar una integración.

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+ xmlns:agg="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+ xmlns:basic="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+ xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
+ xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+  <ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><ds:Signature><ds:SignedInfo/></ds:Signature></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions>
+  <basic:UBLVersionID>2.1</basic:UBLVersionID>
+  <basic:ID>S001-00000001</basic:ID>
+  <basic:IssueDate>2026-10-20</basic:IssueDate>
+  <basic:DueDate>2026-11-20</basic:DueDate>
+  <basic:InvoiceTypeCode>01</basic:InvoiceTypeCode>
+  <basic:DocumentCurrencyCode>PEN</basic:DocumentCurrencyCode>
+  <basic:LineCountNumeric>4</basic:LineCountNumeric>
+  <agg:OrderReference><basic:ID>HEADER-REF-SYNTHETIC</basic:ID></agg:OrderReference>
+  <agg:AccountingSupplierParty><agg:Party>
+    <agg:PartyName><basic:Name>Proveedor de Prueba</basic:Name></agg:PartyName>
+    <agg:PartyTaxScheme><basic:CompanyID>20123456789</basic:CompanyID></agg:PartyTaxScheme>
+    <agg:PartyLegalEntity><basic:RegistrationName>Razón Social Sintética</basic:RegistrationName></agg:PartyLegalEntity>
+  </agg:Party></agg:AccountingSupplierParty>
+  <agg:AccountingCustomerParty><agg:Party>
+    <agg:PartyTaxScheme><basic:CompanyID>20987654321</basic:CompanyID></agg:PartyTaxScheme>
+    <agg:PartyLegalEntity><basic:RegistrationName>Comprador Sintético</basic:RegistrationName></agg:PartyLegalEntity>
+  </agg:Party></agg:AccountingCustomerParty>
+  <agg:TaxTotal><basic:TaxAmount currencyID="PEN">369.00</basic:TaxAmount></agg:TaxTotal>
+  <agg:LegalMonetaryTotal>
+    <basic:LineExtensionAmount currencyID="PEN">2049.99</basic:LineExtensionAmount>
+    <basic:TaxExclusiveAmount currencyID="PEN">2049.99</basic:TaxExclusiveAmount>
+    <basic:TaxInclusiveAmount currencyID="PEN">2418.99</basic:TaxInclusiveAmount>
+    <basic:PayableAmount currencyID="PEN">2418.99</basic:PayableAmount>
+  </agg:LegalMonetaryTotal>
+  <agg:InvoiceLine>
+    <basic:ID>1</basic:ID><basic:InvoicedQuantity unitCode="NIU">1</basic:InvoicedQuantity><basic:LineExtensionAmount currencyID="PEN">1000.00</basic:LineExtensionAmount>
+    <agg:Item><basic:Description>Vehículo de prueba A</basic:Description><agg:SellersItemIdentification><basic:ID>SYNTH-MOTO</basic:ID></agg:SellersItemIdentification>
+      <agg:CommodityClassification><basic:ItemClassificationCode>25112000</basic:ItemClassificationCode></agg:CommodityClassification>
+      <agg:AdditionalItemProperty><basic:NameCode>5012</basic:NameCode><basic:Name>Etiqueta sintética de marca</basic:Name><basic:Value>Marca Sintética</basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5013</basic:NameCode><basic:Name>Etiqueta sintética de modelo</basic:Name><basic:Value>Modelo Sintético</basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5014</basic:NameCode><basic:Name>Color de muestra</basic:Name><basic:Value>Negro</basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5015</basic:NameCode><basic:Name>Dato de motor ficticio</basic:Name><basic:Value>ENGINE-SYNTH-001</basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5016</basic:NameCode><basic:Name>Combustible de muestra</basic:Name><basic:Value>Gasolina</basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5018</basic:NameCode><basic:Name>VIN ficticio</basic:Name><basic:Value>VIN-SYNTH-001</basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5019</basic:NameCode><basic:Name>Dato de chasis ficticio</basic:Name><basic:Value>CHASSIS-SYNTH-001</basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5020</basic:NameCode><basic:Name>Año de fabricación de muestra</basic:Name><basic:Value>2026</basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5021</basic:NameCode><basic:Name>Año de modelo de muestra</basic:Name><basic:Value>2027</basic:Value></agg:AdditionalItemProperty>
+    </agg:Item><basic:AdditionalInformation>3 ORDER-SYNTH-0001</basic:AdditionalInformation><agg:Price><basic:PriceAmount currencyID="PEN">1000.00</basic:PriceAmount></agg:Price>
+  </agg:InvoiceLine>
+  <agg:InvoiceLine>
+    <basic:ID>2</basic:ID><basic:InvoicedQuantity unitCode="NIU">1</basic:InvoicedQuantity><basic:LineExtensionAmount currencyID="PEN">1000.00</basic:LineExtensionAmount>
+    <agg:Item><basic:Description>Vehículo de prueba B</basic:Description><agg:SellersItemIdentification><basic:ID>SYNTH-MOTO</basic:ID></agg:SellersItemIdentification>
+      <agg:AdditionalItemProperty><basic:NameCode>5013</basic:NameCode><basic:Name>Otra etiqueta de modelo</basic:Name><basic:Value>Modelo Sintético</basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5014</basic:NameCode><basic:Name>Otro nombre de color</basic:Name><basic:Value> Negro </basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5015</basic:NameCode><basic:Name>Otro dato de motor</basic:Name><basic:Value>ENGINE-SYNTH-002</basic:Value></agg:AdditionalItemProperty>
+      <agg:AdditionalItemProperty><basic:NameCode>5019</basic:NameCode><basic:Name>Otro dato de chasis</basic:Name><basic:Value>CHASSIS-SYNTH-002</basic:Value></agg:AdditionalItemProperty>
+    </agg:Item><basic:AdditionalInformation>3 ORDER-SYNTH-0002</basic:AdditionalInformation><agg:Price><basic:PriceAmount currencyID="PEN">1000.00</basic:PriceAmount></agg:Price>
+  </agg:InvoiceLine>
+  <agg:InvoiceLine><basic:ID>3</basic:ID><basic:InvoicedQuantity unitCode="NIU">1</basic:InvoicedQuantity><basic:LineExtensionAmount currencyID="PEN">25.00</basic:LineExtensionAmount>
+    <agg:Item><basic:Description>Accesorio de prueba A</basic:Description><agg:SellersItemIdentification><basic:ID>SYNTH-ACC</basic:ID></agg:SellersItemIdentification><agg:CommodityClassification><basic:ItemClassificationCode>31162800</basic:ItemClassificationCode></agg:CommodityClassification></agg:Item><agg:Price><basic:PriceAmount currencyID="PEN">25.00</basic:PriceAmount></agg:Price>
+  </agg:InvoiceLine>
+  <agg:InvoiceLine><basic:ID>4</basic:ID><basic:InvoicedQuantity unitCode="NIU">1</basic:InvoicedQuantity><basic:LineExtensionAmount currencyID="PEN">25.00</basic:LineExtensionAmount>
+    <agg:Item><basic:Description>Accesorio de prueba B</basic:Description><agg:SellersItemIdentification><basic:ID>SYNTH-ACC</basic:ID></agg:SellersItemIdentification><agg:CommodityClassification><basic:ItemClassificationCode>31162800</basic:ItemClassificationCode></agg:CommodityClassification></agg:Item><agg:Price><basic:PriceAmount currencyID="PEN">25.00</basic:PriceAmount></agg:Price>
+  </agg:InvoiceLine>
+</Invoice>
