@@ -14,8 +14,10 @@ import { crearRutasLead } from './routes/lead.routes';
 import { crearRutasSede } from './routes/sede.routes';
 import { crearRutasMovimiento } from './routes/movimiento.routes';
 import { crearRutasInventario } from './routes/inventario.routes';
+import { crearRutasIntegracionFacturas } from './routes/integracion.facturas.routes';
+import type { FabricaClienteIntegracion } from './middleware/integracion.hmac';
 
-export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClientePublico) {
+export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClientePublico, fabricaIntegracion?: FabricaClienteIntegracion) {
   const app = express();
 
   app.use(cors());
@@ -24,6 +26,7 @@ export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClien
   app.use('/api/sedes', crearRutasSede(fabricaPublica));
   app.use('/api/leads', crearRutasLead(fabrica));
   app.use('/api/inventario', crearRutasInventario(fabrica));
+  app.use('/api/integraciones/facturas', crearRutasIntegracionFacturas(fabricaIntegracion));
 
   app.get('/', (_req, res) => {
     res.json({
