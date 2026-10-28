@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 
 const migration = readFileSync('supabase/migrations/202610240001_hu030_modelo_documental.sql', 'utf8');
 const correctiveMigration = readFileSync('supabase/migrations/202610240002_hu030_ajustes_modelo_documental.sql', 'utf8');
+const provisionalEquivalencesMigration = readFileSync('supabase/migrations/202610280001_hu030_equivalencias_provisionales_crosland.sql', 'utf8');
 const base = readFileSync('tests/fixtures/esquema-base.sql', 'utf8');
 const hu026 = readFileSync('supabase/migrations/202610030001_hu026_ubicaciones.sql', 'utf8');
 const hu034 = readFileSync('supabase/migrations/202610040001_hu034_compra_pendiente.sql', 'utf8');
@@ -36,8 +37,13 @@ test('HU-030 modelo documental: restricciones, semillas, aislamiento y compatibi
       INSERT INTO usuario(uuidusu,codrol,nomusu,apepatusu,corusu)
         VALUES ('00000000-0000-0000-0000-000000000001',1,'QA','Sintético','qa-factura@test.local');
       INSERT INTO tipomotocar(nomtmo) VALUES ('QA');
-      INSERT INTO modelo(codtmo,nommod,marmod,desmod,carmod,estmod)
-        VALUES (1,'Torito 250 4V GLP','Bajaj','Modelo sintético','Datos sintéticos','Publicado');
+      INSERT INTO modelo(codtmo,nommod,marmod,desmod,carmod,estmod) VALUES
+        (1,'Torito 250 4V GLP','Bajaj','Modelo sintético','Datos sintéticos','Publicado'),
+        (1,'Torito Crom Plus GLP','Bajaj','Modelo sintético','Datos sintéticos','Publicado'),
+        (1,'Torito 4V GLP','Bajaj','Modelo sintético','Datos sintéticos','Publicado'),
+        (1,'Torito Crom Plus GSL','Bajaj','Modelo sintético','Datos sintéticos','Publicado'),
+        (1,'Torito 2T UG GLP','Bajaj','Modelo sintético','Datos sintéticos','Publicado'),
+        (1,'Torito Crom Plus GNV','Bajaj','Modelo sintético','Datos sintéticos','No publicado');
       INSERT INTO proveedor(nompro,estpro) VALUES ('Proveedor histórico sin RUC',true);
       INSERT INTO compra(codmod,codusu,colcom,cancom,estcom) VALUES (1,1,'Negro',1,'Pendiente de factura');
       INSERT INTO unidad(codcom,codmod,codpro,nummotuni,chauni)
@@ -60,6 +66,13 @@ test('HU-030 modelo documental: restricciones, semillas, aislamiento y compatibi
 
     codproCrosland = (await db.query<any>(`SELECT codpro FROM proveedor WHERE rucpro='20502913752'`)).rows[0].codpro;
     codmod = (await db.query<any>(`SELECT codmod FROM modelo WHERE nommod='Torito 250 4V GLP'`)).rows[0].codmod;
+    const bajajAntes = (await db.query<any>(`SELECT codequ,codext,claequ,codmod,estequ,fueaprequ,obsequ,codusuapr
+      FROM equivalenciaproducto WHERE codpro=$1 AND codext='BAJAJVERDE' AND estequ`, [codproCrosland])).rows[0];
+    await db.exec(provisionalEquivalencesMigration);
+    await db.exec(provisionalEquivalencesMigration);
+    const bajajDespues = (await db.query<any>(`SELECT codequ,codext,claequ,codmod,estequ,fueaprequ,obsequ,codusuapr
+      FROM equivalenciaproducto WHERE codpro=$1 AND codext='BAJAJVERDE' AND estequ`, [codproCrosland])).rows[0];
+    assert.deepEqual(bajajDespues, bajajAntes);
     coddoc = (await db.query<any>(`INSERT INTO documentocompra(codpro,tipdoc,iddoc,serdoc,numdoc,gmailmessageid)
       VALUES ($1,'01','S001-00000001','S001','00000001','factura-test-message-1') RETURNING coddoc`, [codproCrosland])).rows[0].coddoc;
 
@@ -87,7 +100,7 @@ test('HU-030 modelo documental: restricciones, semillas, aislamiento y compatibi
       assert.notEqual(String(location.codubi), '4');
     });
 
-    await t.test('equivalencias cumplen la clasificación aprobada y conservan solo los códigos sembrados', async () => {
+    await t.test('equivalencias provisionales del PO se resuelven por modelo, son idempotentes y preservan BAJAJVERDE', async () => {
       const vehicle = (await db.query<any>(`SELECT e.codext,e.claequ,e.codmod,m.nommod,e.fueaprequ,e.codusuapr
         FROM equivalenciaproducto e LEFT JOIN modelo m USING(codmod)
         WHERE e.codpro=$1 AND upper(btrim(e.codext))='B3-4TLPG250UG4V' AND e.estequ`, [codproCrosland])).rows[0];
@@ -99,7 +112,44 @@ test('HU-030 modelo documental: restricciones, semillas, aislamiento y compatibi
       const accessory = (await db.query<any>(`SELECT claequ,codmod FROM equivalenciaproducto
         WHERE codpro=$1 AND codext='BAJAJVERDE' AND estequ`, [codproCrosland])).rows[0];
       assert.deepEqual(accessory, { claequ: 'Accesorio', codmod: null });
-      assert.equal((await db.query<any>(`SELECT count(*)::int AS n FROM equivalenciaproducto WHERE codpro=$1 AND upper(codext)='B3-4TLPGUG4V'`, [codproCrosland])).rows[0].n, 0);
+
+      const expectedVehicles = [
+        ['B3-4TLPGUG', 'Torito Crom Plus GLP'],
+        ['B3-4TLPGUG4V', 'Torito 4V GLP'],
+        ['B3-4TGSLUG', 'Torito Crom Plus GSL'],
+        ['B3-2TLPGUG', 'Torito 2T UG GLP'],
+        ['B3-4TCNGUG', 'Torito Crom Plus GNV'],
+        ['B3-4TLPG250UG4V', 'Torito 250 4V GLP']
+      ];
+      for (const [codigo, nombreModelo] of expectedVehicles) {
+        const matches = (await db.query<any>(`SELECT e.claequ,e.codmod,e.estequ,m.nommod,e.fueaprequ,e.obsequ
+          FROM equivalenciaproducto e JOIN modelo m USING(codmod)
+          WHERE e.codpro=$1 AND upper(btrim(e.codext))=upper(btrim($2)) AND e.estequ`,
+        [codproCrosland, codigo])).rows;
+        assert.equal(matches.length, 1, codigo);
+        assert.equal(matches[0].claequ, 'Vehiculo', codigo);
+        assert.equal(matches[0].estequ, true, codigo);
+        assert.equal(matches[0].nommod, nombreModelo, codigo);
+        if (codigo !== 'B3-4TLPG250UG4V') {
+          assert.equal(matches[0].fueaprequ, 'Product Owner HU-030 - mappings provisionales 2026-10-28', codigo);
+          assert.match(matches[0].obsequ, /provisional/i, codigo);
+        }
+      }
+      for (const pendingCode of ['B2-BM150UG', 'B3-4TLPG250']) {
+        assert.equal((await db.query<any>(`SELECT count(*)::int AS n FROM equivalenciaproducto
+          WHERE codpro=$1 AND upper(btrim(codext))=upper(btrim($2)) AND estequ`, [codproCrosland, pendingCode])).rows[0].n, 0, pendingCode);
+      }
+      assert.equal((await db.query<any>(`SELECT estmod FROM modelo WHERE nommod='Torito Crom Plus GNV'`)).rows[0].estmod, 'No publicado');
+
+      const correctModel = (await db.query<any>(`SELECT codmod FROM modelo WHERE nommod='Torito 4V GLP'`)).rows[0].codmod;
+      const otherModel = (await db.query<any>(`SELECT codmod FROM modelo WHERE nommod='Torito Crom Plus GLP'`)).rows[0].codmod;
+      await db.query(`UPDATE equivalenciaproducto SET codmod=$1 WHERE codpro=$2 AND codext='B3-4TLPGUG4V' AND estequ`, [otherModel, codproCrosland]);
+      await assert.rejects(db.exec(provisionalEquivalencesMigration), /contradice el mapping provisional/i);
+      const notOverwritten = (await db.query<any>(`SELECT codmod FROM equivalenciaproducto
+        WHERE codpro=$1 AND codext='B3-4TLPGUG4V' AND estequ`, [codproCrosland])).rows[0].codmod;
+      assert.equal(String(notOverwritten), String(otherModel));
+      await db.query(`UPDATE equivalenciaproducto SET codmod=$1 WHERE codpro=$2 AND codext='B3-4TLPGUG4V' AND estequ`, [correctModel, codproCrosland]);
+
       await fail(`INSERT INTO equivalenciaproducto(codpro,codext,claequ,codmod) VALUES (${codproCrosland},'INVALID-VEHICLE','Vehiculo',NULL)`);
       await fail(`INSERT INTO equivalenciaproducto(codpro,codext,claequ,codmod) VALUES (${codproCrosland},'INVALID-ACCESSORY','Accesorio',${codmod})`);
       await assert.rejects(db.exec(`INSERT INTO equivalenciaproducto(codpro,codext,claequ,codmod) VALUES (${codproCrosland},' b3-4tlpg250ug4v ','Accesorio',NULL)`), (error: any) => error.code === '23505');

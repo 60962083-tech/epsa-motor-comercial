@@ -1,4 +1,10 @@
 function facturaImportacionLog(evento) {
+  var labelsPermitidas = function (values) {
+    if (!Array.isArray(values)) return null;
+    return values.slice(0, 4).filter(function (name) {
+      return typeof name === 'string' && name.length <= 120 && name.trim() === name && !/[\r\n\u0000-\u001f]/.test(name);
+    });
+  };
   var safe = {
     evento: /^[A-Z0-9_]{1,64}$/.test(String(evento.evento || '')) ? evento.evento : 'EVENTO',
     messageId: typeof evento.messageId === 'string' ? evento.messageId.slice(0, 250) : null,
@@ -9,7 +15,14 @@ function facturaImportacionLog(evento) {
     codrec: typeof evento.codrec === 'string' && /^[0-9a-f-]{36}$/.test(evento.codrec) ? evento.codrec : null,
     coddoc: typeof evento.coddoc === 'string' && /^\d{1,20}$/.test(evento.coddoc) ? evento.coddoc : null,
     intento: Number.isInteger(evento.intento) ? evento.intento : null,
-    duracionMs: Number.isFinite(evento.duracionMs) ? Math.max(0, Math.round(evento.duracionMs)) : null
+    duracionMs: Number.isFinite(evento.duracionMs) ? Math.max(0, Math.round(evento.duracionMs)) : null,
+    threadId: typeof evento.threadId === 'string' && /^[\x21-\x7e]{1,250}$/.test(evento.threadId) ? evento.threadId : null,
+    estadoThread: ['Procesado', 'Pendiente', 'Revision', 'Error'].indexOf(evento.estadoThread) !== -1
+      ? evento.estadoThread : null,
+    labelObjetivo: labelsPermitidas([evento.labelObjetivo])[0] || null,
+    labelsAntes: labelsPermitidas(evento.labelsAntes),
+    labelsDespues: labelsPermitidas(evento.labelsDespues),
+    labelConfirmada: typeof evento.labelConfirmada === 'boolean' ? evento.labelConfirmada : null
   };
   Logger.log(JSON.stringify(safe));
 }
@@ -114,8 +127,29 @@ function facturaImportacionEstadoThreadAgregado(values) {
   return null;
 }
 
+function facturaImportacionLabelsGestionadasThread(thread, labels) {
+  var managed = Object.keys(labels || {}).map(function (state) { return labels[state]; });
+  var existing = thread.getLabels ? thread.getLabels() : [];
+  return existing.map(function (label) { return label.getName(); })
+    .filter(function (name) { return managed.indexOf(name) !== -1; })
+    .sort();
+}
+
 function facturaImportacionAplicarLabelThread(thread, state, labels) {
-  if (!state || !labels[state]) return;
+  if (!state || !labels || !labels[state]) {
+    var unchanged = facturaImportacionLabelsGestionadasThread(thread, labels);
+    facturaImportacionLog({
+      evento: 'LABEL_THREAD_OMITIDA',
+      threadId: thread.getId(),
+      estadoThread: state,
+      labelObjetivo: state && labels ? labels[state] : null,
+      labelsAntes: unchanged,
+      labelsDespues: unchanged,
+      labelConfirmada: false
+    });
+    return;
+  }
+  var before = facturaImportacionLabelsGestionadasThread(thread, labels);
   var allLabels = Object.keys(labels).map(function (key) {
     var name = labels[key];
     return GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name);
@@ -125,6 +159,18 @@ function facturaImportacionAplicarLabelThread(thread, state, labels) {
   });
   var selected = allLabels.filter(function (label) { return label.getName() === labels[state]; })[0];
   if (selected) thread.addLabel(selected);
+  try { if (typeof thread.refresh === 'function') thread.refresh(); } catch (_refreshError) { /* se confirma leyendo el estado disponible */ }
+  var after = facturaImportacionLabelsGestionadasThread(thread, labels);
+  var confirmed = after.indexOf(labels[state]) !== -1;
+  facturaImportacionLog({
+    evento: confirmed ? 'LABEL_THREAD_APLICADA' : 'LABEL_THREAD_NO_CONFIRMADA',
+    threadId: thread.getId(),
+    estadoThread: state,
+    labelObjetivo: labels[state],
+    labelsAntes: before,
+    labelsDespues: after,
+    labelConfirmada: confirmed
+  });
 }
 
 function facturaImportacionClasificarAttachmentsMensaje(message) {
@@ -306,7 +352,8 @@ function procesarCorreosPendientes() {
     }
     Object.keys(states).forEach(function (threadId) {
       var entry = states[threadId];
-      facturaImportacionAplicarLabelThread(entry.thread, facturaImportacionEstadoThreadAgregado(entry.states), config.labels);
+      var aggregateState = facturaImportacionEstadoThreadAgregado(entry.states);
+      facturaImportacionAplicarLabelThread(entry.thread, aggregateState, config.labels);
     });
     shouldAdvance = !incomplete && !failed && !globalStop;
     if (shouldAdvance) facturaImportacionGuardarUltimoBarrido(PropertiesService.getScriptProperties(), now);

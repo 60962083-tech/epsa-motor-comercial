@@ -27,7 +27,13 @@ async function crearDb() {
     INSERT INTO usuario(uuidusu,codrol,nomusu,apepatusu,corusu) VALUES
       ('${ADMIN_UUID}',1,'Admin','Sintético','admin-hu030@test.local');
     INSERT INTO tipomotocar(nomtmo) VALUES ('QA sintético');
-    INSERT INTO modelo(codtmo,nommod,marmod,desmod,carmod,estmod) VALUES (1,'Torito 250 4V GLP','Bajaj','Ficha sintética','GLP','Publicado');`);
+    INSERT INTO modelo(codtmo,nommod,marmod,desmod,carmod,estmod) VALUES
+      (1,'Torito 250 4V GLP','Bajaj','Ficha sintética','GLP','Publicado'),
+      (1,'Torito Crom Plus GLP','Bajaj','Ficha sintética','GLP','Publicado'),
+      (1,'Torito 4V GLP','Bajaj','Ficha sintética','GLP','Publicado'),
+      (1,'Torito Crom Plus GSL','Bajaj','Ficha sintética','Gasolina','Publicado'),
+      (1,'Torito 2T UG GLP','Bajaj','Ficha sintética','GLP','Publicado'),
+      (1,'Torito Crom Plus GNV','Bajaj','Ficha sintética','GNV','No publicado');`);
   await db.exec(read('supabase/migrations/202610040001_hu034_compra_pendiente.sql'));
   await db.exec(read('supabase/migrations/202610060001_hu002_identificacion_unidades.sql'));
   await db.exec(read('supabase/migrations/202610190001_hu003_movimientos_ubicacion.sql'));
@@ -37,6 +43,9 @@ async function crearDb() {
   await db.exec(read('supabase/migrations/202610240003_hu030_importacion_transaccional.sql'));
   await db.exec(read('supabase/migrations/202610250001_hu030_integracion_backend.sql'));
   await db.exec(read('supabase/migrations/202610250001_hu030_integracion_backend.sql'));
+  const provisionalEquivalencesMigration = read('supabase/migrations/202610280001_hu030_equivalencias_provisionales_crosland.sql');
+  await db.exec(provisionalEquivalencesMigration);
+  await db.exec(provisionalEquivalencesMigration);
   const provider = (await db.query<any>(`SELECT codpro FROM proveedor WHERE rucpro='20502913752'`)).rows[0].codpro;
   const model = (await db.query<any>(`SELECT codmod FROM modelo WHERE nommod='Torito 250 4V GLP'`)).rows[0].codmod;
   await db.exec(`INSERT INTO equivalenciaproducto(codpro,codext,claequ,codmod) VALUES
@@ -103,6 +112,16 @@ test('HU-030 Fase 3: migración incremental, wrappers y reserva atómica', async
 
     const human = (await db.query<any>(`SELECT public.listar_equivalencias_importacion('20502913752') r`)).rows[0].r;
     assert.ok(Array.isArray(human));
+    const torito4vCodmod = (await db.query<any>(`SELECT codmod FROM modelo WHERE nommod='Torito 4V GLP'`)).rows[0].codmod;
+    const humanPoMapping = human.find((item: any) => item.codigoExterno === 'B3-4TLPGUG4V');
+    assert.deepEqual(humanPoMapping, {
+      codigoExterno: 'B3-4TLPGUG4V', clasificacion: 'Vehiculo', codmod: String(torito4vCodmod),
+      activa: true, nombreModelo: 'Torito 4V GLP'
+    });
+    assert.equal(human.some((item: any) => item.codigoExterno === 'B2-BM150UG' || item.codigoExterno === 'B3-4TLPG250'), false);
+    const humanBajaj = human.find((item: any) => item.codigoExterno === 'BAJAJVERDE');
+    assert.equal(humanBajaj?.clasificacion, 'Accesorio');
+    assert.equal(humanBajaj?.codmod, null);
     const humanPayload = await payloadImportacion(db, 'HUMAN-00000001');
     const humanResult = (await db.query<any>(`SELECT public.importar_documento_compra($1::jsonb) r`,
       [JSON.stringify(humanPayload)])).rows[0].r;
@@ -114,6 +133,9 @@ test('HU-030 Fase 3: migración incremental, wrappers y reserva atómica', async
     await db.exec('SET ROLE service_role');
     const technical = (await db.query<any>(`SELECT public.hu030_listar_equivalencias_tecnicas('20502913752') r`)).rows[0].r;
     assert.ok(Array.isArray(technical));
+    const technicalPoMapping = technical.find((item: any) => item.codigoExterno === 'B3-4TLPGUG4V');
+    assert.deepEqual(technicalPoMapping, humanPoMapping);
+    assert.equal(technical.some((item: any) => item.codigoExterno === 'B2-BM150UG' || item.codigoExterno === 'B3-4TLPG250'), false);
     const technicalResult = (await db.query<any>(`SELECT public.hu030_importar_documento_tecnico($1::jsonb) r`,
       [JSON.stringify(technicalPayload)])).rows[0].r;
     assert.equal(technicalResult.estadoDocumento, 'Importado');
