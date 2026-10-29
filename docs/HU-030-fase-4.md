@@ -86,7 +86,7 @@ El manifest declara scopes para Gmail, solicitudes HTTPS, PropertiesService y tr
 
 Funciones disponibles, ninguna ejecutada durante esta implementación:
 
-- `instalarTriggerFacturas()` crea un trigger cada 15 minutos y evita duplicados.
+- `instalarTriggerFacturas()` crea un trigger cada 5 minutos y evita duplicados.
 - `listarTriggersFacturas()` devuelve los triggers del handler HU-030.
 - `eliminarTriggersFacturas()` los elimina.
 - `recrearTriggerFacturas()` elimina y crea uno nuevo.
@@ -107,6 +107,6 @@ Antes de una prueba externa, acordar explícitamente un entorno de integración 
 6. ejecutar una prueba manual controlada sin trigger;
 7. ejecutar E2E sintético en el entorno aprobado;
 8. ejecutar prueba real controlada;
-9. solo tras aprobación, instalar el trigger de 15 minutos.
+9. solo tras aprobación, instalar el trigger de 5 minutos.
 
 No se asume que exista staging; si no existe, queda pendiente su disponibilidad o aprobación de un entorno seguro. La base operativa con datos de prueba no cambia esa restricción. No apuntar automáticamente datos sintéticos a producción.
