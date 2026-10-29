@@ -10,14 +10,26 @@ La migración inicial `supabase/migrations/202610240001_hu030_modelo_documental.
 
 `public.proveedor.rucpro` es `varchar(11) NULL`, acepta solo 11 dígitos y tiene unicidad parcial cuando no es NULL. Las filas históricas permanecen con RUC NULL. La migración busca Crosland por RUC o nombre normalizado; completa una fila sin RUC, inserta una fila activa si no hay coincidencia o aborta cuando nombre y RUC señalan entidades distintas. No actualiza `unidad.codpro`.
 
-Se crean estas equivalencias activas, usando el modelo encontrado por nombre normalizado exacto y sin codificar el ID:
+La migración inicial crea `B3-4TLPG250UG4V` como `Vehiculo` → `Torito 250 4V GLP` y `BAJAJVERDE` como `Accesorio` sin modelo. La primera equivalencia se conserva como fila existente; la segunda es una bonificación confirmada como `ACEITE VERDE 1L` y no se modifica.
 
-| Proveedor | Código externo | Clasificación | Modelo |
-| --- | --- | --- | --- |
-| Crosland | `B3-4TLPG250UG4V` | `Vehiculo` | `Torito 250 4V GLP` |
-| Crosland | `BAJAJVERDE` | `Accesorio` | ninguno |
+### Equivalencias provisionales confirmadas por el PO
 
-El código `B3-4TLPGUG4V` queda sin equivalencia. La fuente de aprobación registrada es `Product Owner HU-030 - 2026-10-24`; `codusuapr` queda NULL porque no se atribuye la aprobación a una cuenta de usuario inventada. La tabla conserva el código original y permite una sola equivalencia activa por proveedor y código normalizado; las inactivas sirven de historial.
+Para la demostración, el PO confirmó la siguiente correspondencia SKU/modelo/combustible. La migración aditiva `202610280001_hu030_equivalencias_provisionales_crosland.sql` resuelve Crosland por RUC y los modelos por nombre exacto del catálogo. No fija IDs numéricos; los `codmod` de la tabla son los observados en la base consultada y pueden variar entre entornos.
+
+| SKU | Modelo y combustible indicados por PO | Modelo existente asociado | `codmod` observado | Estado |
+| --- | --- | --- | ---: | --- |
+| `B3-4TLPGUG` | Torito Crom 4T · GLP | Torito Crom Plus GLP | 9 | Provisional |
+| `B3-4TLPGUG4V` | Torito 4V · GLP | Torito 4V GLP | 7 | Provisional |
+| `B3-4TGSLUG` | Torito Crom 4T · Gasolina | Torito Crom Plus GSL | 6 | Provisional |
+| `B3-2TLPGUG` | Torito Crom 2T · GLP | Torito 2T UG GLP | 8 | Provisional |
+| `B3-4TCNGUG` | Torito Crom 4T · GNV | Torito Crom Plus GNV | 11 | Provisional; el modelo está No publicado |
+| `B3-4TLPG250UG4V` | Torito 250 4V · GLP | Torito 250 4V GLP | 5 | Existente y coherente; se conserva |
+
+`B2-BM150UG` (Boxer BM 150X UG) y `B3-4TLPG250` (Torito 250 · GLP) siguen pendientes: no se les asigna modelo interno ni equivalencia hasta contar con un modelo suficientemente definido. Sin mapping, las líneas se mantienen en revisión con `CODIGO_SIN_EQUIVALENCIA`.
+
+Las asociaciones nuevas son provisionales para demostración y deberán revisarse cuando el negocio entregue la definición oficial de los SKU. `codusuapr` permanece NULL; la fuente de aprobación se registra en `fueaprequ` sin inventar una cuenta de usuario. La migración no cambia el estado de publicación de los modelos y no modifica `BAJAJVERDE`.
+
+La tabla conserva el código original y permite una sola equivalencia activa por proveedor y código normalizado; las inactivas sirven de historial.
 
 ## Ancón y modelo documental
 

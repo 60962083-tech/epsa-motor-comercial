@@ -19,7 +19,7 @@ function instalarTriggerFacturas() {
     existing.slice(1).forEach(function (trigger) { ScriptApp.deleteTrigger(trigger); });
     return { installed: false, existing: true, remaining: 1 };
   }
-  ScriptApp.newTrigger('procesarCorreosPendientes').timeBased().everyMinutes(15).create();
+  ScriptApp.newTrigger('procesarCorreosPendientes').timeBased().everyMinutes(5).create();
   return { installed: true, existing: false, remaining: 1 };
 }
 

@@ -165,6 +165,32 @@ test('HU-030 clasificación usa equivalencias aprobadas y conserva accesorios si
   assert.equal(classified[2]?.estado, 'Procesada');
 });
 
+test('HU-030 reconoce el SKU provisional B3-4TLPGUG4V y mantiene pendientes sin equivalencia en revisión', () => {
+  const document = parse();
+  document.lineas[0]!.codigoExterno = 'B3-4TLPGUG4V';
+  const mapped = clasificarLineasFactura(document, [
+    { codigoExterno: 'B3-4TLPGUG4V', clasificacion: 'Vehiculo', codmod: '7', activa: true }
+  ])[0]!;
+
+  assert.equal(mapped.clasificacion, 'Vehiculo');
+  assert.equal(mapped.estado, 'Candidato');
+  assert.equal(mapped.motivo, null);
+  assert.equal(mapped.equivalencia?.codmod, '7');
+  assert.equal(mapped.vehiculos[0]?.codmod, '7');
+
+  for (const codigoExterno of ['B2-BM150UG', 'B3-4TLPG250']) {
+    const pendingDocument = parse();
+    pendingDocument.lineas[0]!.codigoExterno = codigoExterno;
+    const pending = clasificarLineasFactura(pendingDocument, [
+      { codigoExterno: 'B3-4TLPGUG4V', clasificacion: 'Vehiculo', codmod: '7', activa: true }
+    ])[0]!;
+    assert.equal(pending.codigoExterno, codigoExterno);
+    assert.equal(pending.clasificacion, 'Desconocido');
+    assert.equal(pending.estado, 'Revision');
+    assert.equal(pending.motivo, 'CODIGO_SIN_EQUIVALENCIA');
+  }
+});
+
 test('HU-030 clasificación pone en revisión los códigos desconocidos, motor/chasis ausentes y cantidad múltiple', () => {
   const unknown = clasificarLineasFactura(parse('factura_codigo_desconocido.xml'), equivalences);
   assert.equal(unknown[0]?.clasificacion, 'Desconocido');

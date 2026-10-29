@@ -16,6 +16,7 @@ import { crearRutasMovimiento } from './routes/movimiento.routes';
 import { crearRutasPreparacionUnidad } from './routes/preparacion.unidad.routes';
 import { crearRutasInventario } from './routes/inventario.routes';
 import { crearRutasIntegracionFacturas } from './routes/integracion.facturas.routes';
+import { crearRutasComprasPendientes } from './routes/compras.pendientes.routes';
 import type { FabricaClienteIntegracion } from './middleware/integracion.hmac';
 
 export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClientePublico, fabricaIntegracion?: FabricaClienteIntegracion) {
@@ -27,6 +28,7 @@ export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClien
   app.use('/api/sedes', crearRutasSede(fabricaPublica));
   app.use('/api/leads', crearRutasLead(fabrica));
   app.use('/api/inventario', crearRutasInventario(fabrica));
+  app.use('/api/compras-pendientes', crearRutasComprasPendientes(fabrica));
   app.use('/api/integraciones/facturas', crearRutasIntegracionFacturas(fabricaIntegracion));
 
   app.get('/', (_req, res) => {

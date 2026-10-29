@@ -69,7 +69,7 @@ function makeRuntime(options: {
     deleteTrigger: (trigger: unknown) => { const index = triggers.indexOf(trigger as typeof triggers[number]); if (index >= 0) triggers.splice(index, 1); },
     newTrigger: (handler: string) => ({
       timeBased: () => ({ everyMinutes: (minutes: number) => ({ create: () => {
-        assert.equal(minutes, 15);
+        assert.equal(minutes, 5);
         createdTriggers.push({ handler });
         const trigger = { handler, getHandlerFunction: () => handler, getEventType: () => 'CLOCK', getTriggerSource: () => 'TIME' };
         triggers.push(trigger);
@@ -130,8 +130,10 @@ function thread(id: string, messages: any[], initialLabels: string[] = []) {
     getLabels: () => Array.from(currentLabels, (name) => ({ getName: () => name })),
     addLabel: (label: { getName(): string }) => { attached.push(label.getName()); currentLabels.add(label.getName()); },
     removeLabel: (label: { getName(): string }) => { removed.push(label.getName()); currentLabels.delete(label.getName()); },
+    refresh: () => undefined,
     attached,
-    removed
+    removed,
+    get currentLabels() { return Array.from(currentLabels); }
   };
 }
 
@@ -369,6 +371,15 @@ test('HU-030 Apps Script: labels agregadas priorizan revisión/error/pendiente y
     Revision: 'EPSA/HU030/Revision', Error: 'EPSA/HU030/Error'
   });
   assert.equal(runtime.context.facturaImportacionEstadoThreadAgregado(aggregate['prior-review'].states), 'Revision');
+  runtime.context.facturaImportacionAplicarLabelThread(priorReview, null, {
+    Procesado: 'EPSA/HU030/Procesado', Pendiente: 'EPSA/HU030/Pendiente',
+    Revision: 'EPSA/HU030/Revision', Error: 'EPSA/HU030/Error'
+  });
+  const skippedLabel = runtime.logs.map((line) => JSON.parse(line)).find((entry) => entry.evento === 'LABEL_THREAD_OMITIDA');
+  assert.equal(skippedLabel.threadId, 'prior-review');
+  assert.equal(skippedLabel.estadoThread, null);
+  assert.deepEqual(skippedLabel.labelsAntes, ['EPSA/HU030/Revision']);
+  assert.deepEqual(skippedLabel.labelsDespues, ['EPSA/HU030/Revision']);
   configure(runtime);
   runtime.context.procesarCorreosPendientes();
   assert.equal(runtime.lockReleased, true);
@@ -406,6 +417,111 @@ test('HU-030 Apps Script: polling respeta fecha exacta, labels thread y no adela
   overloaded.scriptValues.set('HU030_LOTE_MAX', '1');
   overloaded.context.procesarCorreosPendientes();
   assert.equal(overloaded.scriptValues.get('HU030_ULTIMO_BARRIDO_ISO'), oldCursor);
+});
+
+test('HU-030 Apps Script: registra verificación sanitizada de label en éxito', () => {
+  const now = Date.now();
+  const cutoffIso = new Date(now - 60_000).toISOString();
+  const xml = blob([60, 120, 109, 108, 62], 'invoice.xml', 'application/xml');
+  const parent = thread('thread-label-log', [], ['Cliente/Importante']);
+  const email = message('msg-label-log', new Date(now - 10_000), [xml], parent);
+  parent.getMessages = () => [email];
+  const runtime = makeRuntime({ search: () => [parent], fetch: () => response(201, { ok: true, data: { pdfPendiente: false } }) });
+  configure(runtime);
+  runtime.scriptValues.set('HU030_FECHA_CORTE_ISO', cutoffIso);
+  runtime.context.procesarCorreosPendientes();
+
+  assert.deepEqual(parent.currentLabels.sort(), ['Cliente/Importante', 'EPSA/HU030/Procesado']);
+  const labelEvent = runtime.logs.map((line) => JSON.parse(line)).find((entry) => entry.evento === 'LABEL_THREAD_APLICADA');
+  assert.ok(labelEvent);
+  assert.equal(labelEvent.threadId, 'thread-label-log');
+  assert.equal(labelEvent.estadoThread, 'Procesado');
+  assert.equal(labelEvent.labelObjetivo, 'EPSA/HU030/Procesado');
+  assert.deepEqual(labelEvent.labelsAntes, []);
+  assert.deepEqual(labelEvent.labelsDespues, ['EPSA/HU030/Procesado']);
+  assert.equal(labelEvent.labelConfirmada, true);
+  assert.equal(JSON.stringify(labelEvent).includes('invoice.xml'), false);
+});
+
+test('HU-030 Apps Script: Pendiente previo por PDF sobrevive a otro mensaje exitoso sin retry en cola', () => {
+  const firstRunNow = Date.now();
+  const cutoffIso = new Date(firstRunNow - 2 * 60 * 60 * 1000).toISOString();
+  const xmlA = blob([60, 97, 47, 62], 'invoice-a.xml', 'application/xml');
+  const xmlB = blob([60, 98, 47, 62], 'invoice-b.xml', 'application/xml');
+  const parent = thread('thread-pdf-pending-sibling', []);
+  const messageA = message('msg-pdf-pending-a', new Date(firstRunNow - 60 * 60 * 1000), [xmlA], parent);
+  const messages = [messageA];
+  parent.getMessages = () => messages;
+  let responseBody = { ok: true, data: { pdfPendiente: true } };
+  const runtime = makeRuntime({
+    search: () => [parent],
+    fetch: () => response(201, responseBody)
+  });
+  configure(runtime);
+  runtime.scriptValues.set('HU030_FECHA_CORTE_ISO', cutoffIso);
+
+  runtime.context.procesarCorreosPendientes();
+  assert.deepEqual(parent.currentLabels, ['EPSA/HU030/Pendiente']);
+  assert.equal(runtime.scriptValues.has('HU030_RETRY_QUEUE_JSON'), false);
+
+  const messageB = message('msg-success-b', new Date(Date.now()), [xmlB], parent);
+  messages.push(messageB);
+  responseBody = { ok: true, data: { pdfPendiente: false } };
+  runtime.context.procesarCorreosPendientes();
+
+  assert.equal(runtime.calls.length, 2);
+  assert.equal((runtime.calls[1]?.request.headers as Record<string, string>)['X-EPSA-Message-Id'], 'msg-success-b');
+  assert.deepEqual(parent.currentLabels, ['EPSA/HU030/Pendiente']);
+  assert.equal(runtime.scriptValues.has('HU030_RETRY_QUEUE_JSON'), false);
+  const labelEvent = runtime.logs.map((line) => JSON.parse(line))
+    .filter((entry) => entry.evento === 'LABEL_THREAD_APLICADA' && entry.threadId === 'thread-pdf-pending-sibling').pop();
+  assert.equal(labelEvent.estadoThread, 'Pendiente');
+  assert.equal(labelEvent.labelObjetivo, 'EPSA/HU030/Pendiente');
+  assert.deepEqual(labelEvent.labelsAntes, ['EPSA/HU030/Pendiente']);
+  assert.deepEqual(labelEvent.labelsDespues, ['EPSA/HU030/Pendiente']);
+  assert.equal(labelEvent.labelConfirmada, true);
+});
+
+test('HU-030 Apps Script: conserva Pendiente si sigue existiendo otro retry del mismo thread', () => {
+  const now = Date.now();
+  const cutoffIso = new Date(now - 60_000).toISOString();
+  const xml = blob([60, 120, 109, 108, 62], 'invoice.xml', 'application/xml');
+  const parent = thread('thread-pending-sibling', [], ['EPSA/HU030/Pendiente']);
+  const current = message('msg-current', new Date(now - 10_000), [xml], parent);
+  const sibling = message('msg-pending-sibling', new Date(now - 120_000), [], parent);
+  parent.getMessages = () => [current, sibling];
+  const runtime = makeRuntime({ search: () => [parent], fetch: () => response(200, { ok: true, data: { pdfPendiente: false } }) });
+  configure(runtime);
+  runtime.scriptValues.set('HU030_FECHA_CORTE_ISO', cutoffIso);
+  runtime.scriptValues.set('HU030_RETRY_QUEUE_JSON', JSON.stringify([{
+    messageId: 'msg-pending-sibling', sha256Xml: 'd'.repeat(64), retryCount: 0,
+    nextAttemptAt: new Date(now + 60 * 60 * 1000).toISOString()
+  }]));
+  runtime.context.procesarCorreosPendientes();
+
+  assert.deepEqual(parent.currentLabels, ['EPSA/HU030/Pendiente']);
+  const labelEvent = runtime.logs.map((line) => JSON.parse(line)).find((entry) => entry.threadId === 'thread-pending-sibling');
+  assert.equal(labelEvent.estadoThread, 'Pendiente');
+  assert.equal(labelEvent.labelObjetivo, 'EPSA/HU030/Pendiente');
+  assert.equal(labelEvent.labelConfirmada, true);
+});
+
+test('HU-030 Apps Script: conserva Pendiente calculada en la ejecución aunque la cola esté vacía', () => {
+  const now = Date.now();
+  const cutoffIso = new Date(now - 60_000).toISOString();
+  const xml = blob([60, 120, 109, 108, 62], 'invoice.xml', 'application/xml');
+  const parent = thread('thread-pdf-pending', []);
+  const email = message('msg-pdf-pending', new Date(now - 10_000), [xml], parent);
+  parent.getMessages = () => [email];
+  const runtime = makeRuntime({ search: () => [parent], fetch: () => response(201, { ok: true, data: { pdfPendiente: true } }) });
+  configure(runtime);
+  runtime.scriptValues.set('HU030_FECHA_CORTE_ISO', cutoffIso);
+  runtime.context.procesarCorreosPendientes();
+
+  assert.deepEqual(parent.currentLabels, ['EPSA/HU030/Pendiente']);
+  const labelEvent = runtime.logs.map((line) => JSON.parse(line)).find((entry) => entry.threadId === 'thread-pdf-pending');
+  assert.equal(labelEvent.estadoThread, 'Pendiente');
+  assert.equal(labelEvent.labelConfirmada, true);
 });
 
 test('HU-030 Apps Script: búsqueda pagina Gmail y detiene el lote ante 401', () => {
