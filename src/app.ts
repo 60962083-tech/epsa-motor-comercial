@@ -13,6 +13,7 @@ import { crearRutasTecho } from './routes/techo.routes';
 import { crearRutasLead } from './routes/lead.routes';
 import { crearRutasSede } from './routes/sede.routes';
 import { crearRutasMovimiento } from './routes/movimiento.routes';
+import { crearRutasPreparacionUnidad } from './routes/preparacion.unidad.routes';
 import { crearRutasInventario } from './routes/inventario.routes';
 import { crearRutasIntegracionFacturas } from './routes/integracion.facturas.routes';
 import { crearRutasComprasPendientes } from './routes/compras.pendientes.routes';
@@ -54,6 +55,11 @@ export function crearApp(fabrica?: FabricaCliente, fabricaPublica?: FabricaClien
   app.use(
     '/api/unidades',
     crearRutasMovimiento(fabrica)
+  );
+
+  app.use(
+    '/api/unidades',
+    crearRutasPreparacionUnidad(fabrica)
   );
 
   app.use(

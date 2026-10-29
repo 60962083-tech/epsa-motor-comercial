@@ -38,11 +38,14 @@ async function crearDb() {
   await db.exec(read('supabase/migrations/202610060001_hu002_identificacion_unidades.sql'));
   await db.exec(read('supabase/migrations/202610190001_hu003_movimientos_ubicacion.sql'));
   await db.exec(read('supabase/migrations/202610210001_hu001_consulta_inventario.sql'));
+  await db.exec(read('supabase/migrations/202610080001_hu004_configuracion_techo.sql'));
   await db.exec(read('supabase/migrations/202610240001_hu030_modelo_documental.sql'));
   await db.exec(read('supabase/migrations/202610240002_hu030_ajustes_modelo_documental.sql'));
   await db.exec(read('supabase/migrations/202610240003_hu030_importacion_transaccional.sql'));
   await db.exec(read('supabase/migrations/202610250001_hu030_integracion_backend.sql'));
   await db.exec(read('supabase/migrations/202610250001_hu030_integracion_backend.sql'));
+  await db.exec(read('supabase/migrations/202610280003_hu033_preparacion_unidad.sql'));
+  await db.exec(read('supabase/migrations/202610280004_hu001_preparacion_operativa.sql'));
   const provisionalEquivalencesMigration = read('supabase/migrations/202610280001_hu030_equivalencias_provisionales_crosland.sql');
   await db.exec(provisionalEquivalencesMigration);
   await db.exec(provisionalEquivalencesMigration);
@@ -82,7 +85,7 @@ async function payloadImportacion(db: PGlite, identity: string) {
   };
 }
 
-test('HU-030 Fase 3: migración incremental, wrappers y reserva atómica', async () => {
+test('HU-030 Fase 3: migración incremental, wrappers y reserva atómica', async t => {
   const db = await crearDb();
   try {
     const indexes = (await db.query<any>(`SELECT indexname,indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='documentocompra'`)).rows;
@@ -126,6 +129,59 @@ test('HU-030 Fase 3: migración incremental, wrappers y reserva atómica', async
     const humanResult = (await db.query<any>(`SELECT public.importar_documento_compra($1::jsonb) r`,
       [JSON.stringify(humanPayload)])).rows[0].r;
     assert.equal(humanResult.estadoDocumento, 'Importado');
+
+    await t.test('HU-030 inicializa preparación pendiente y la reimportación no reinicia avances', async () => {
+      const hu030Payload = await payloadImportacion(db, 'PREP-00003301');
+      const imported = (await db.query<any>('SELECT public.importar_documento_compra($1::jsonb) r',
+        [JSON.stringify(hu030Payload)])).rows[0].r;
+      assert.equal(imported.estadoDocumento, 'Importado');
+      assert.equal(imported.unidades.length, 2);
+      const coduni = imported.unidades[0].coduni as string;
+      const initial = (await db.query<any>('SELECT public.hu033_consultar_preparacion_unidad($1) r', [coduni])).rows[0].r;
+      assert.equal(initial.actual.armado, 'Pendiente');
+      assert.equal(initial.actual.techo.estado, 'Pendiente');
+      assert.equal(initial.actual.techo.configuracion, null);
+      assert.equal(initial.actual.preparacionCompleta, false);
+
+      const advanced = (await db.query<any>(
+        `SELECT public.hu033_actualizar_preparacion_unidad($1,'Armado','Terminado',1,NULL,'Interno',$2) r`,
+        [coduni, 'HU033-HU030-REIMPORT-KEY']
+      )).rows[0].r;
+      assert.equal(advanced.armado, 'Terminado');
+      assert.equal(advanced.version, '2');
+
+      const inventarioAvanzado = (await db.query<any>(
+        'SELECT public.hu001_consultar_inventario(NULL,NULL,NULL,NULL,NULL,NULL,100,0) r'
+      )).rows[0].r;
+      const unidadAvanzada = inventarioAvanzado.items.find((item: any) => item.coduni === coduni);
+      assert.equal(unidadAvanzada.preparacionOperativa.armado, 'Terminado');
+      assert.equal(unidadAvanzada.preparacionOperativa.version, '2');
+      assert.equal('historial' in unidadAvanzada.preparacionOperativa, false);
+      const estadoNoPreparacion = {
+        ubicacionConfirmada: unidadAvanzada.ubicacionConfirmada,
+        situacionComercial: unidadAvanzada.situacionComercial
+      };
+
+      const retried = (await db.query<any>('SELECT public.importar_documento_compra($1::jsonb) r',
+        [JSON.stringify(hu030Payload)])).rows[0].r;
+      assert.equal(retried.reintento, true);
+      assert.equal(retried.unidades[0].coduni, coduni);
+      const afterRetry = (await db.query<any>('SELECT public.hu033_consultar_preparacion_unidad($1) r', [coduni])).rows[0].r;
+      assert.equal(afterRetry.actual.armado, 'Terminado');
+      assert.equal(afterRetry.actual.version, '2');
+      assert.equal(afterRetry.historial.length, 1);
+      const inventarioReimportado = (await db.query<any>(
+        'SELECT public.hu001_consultar_inventario(NULL,NULL,NULL,NULL,NULL,NULL,100,0) r'
+      )).rows[0].r;
+      const unidadReimportada = inventarioReimportado.items.find((item: any) => item.coduni === coduni);
+      assert.equal(unidadReimportada.preparacionOperativa.armado, 'Terminado');
+      assert.equal(unidadReimportada.preparacionOperativa.version, '2');
+      assert.deepEqual({
+        ubicacionConfirmada: unidadReimportada.ubicacionConfirmada,
+        situacionComercial: unidadReimportada.situacionComercial
+      }, estadoNoPreparacion);
+    });
+
     await db.query(`SELECT set_config('request.jwt.claim.sub','',false)`);
     await assert.rejects(db.query(`SELECT public.listar_equivalencias_importacion('20502913752')`), (e: any) => e.code === '42501');
     await db.query(`SELECT set_config('request.jwt.claim.sub',$1,false)`, [ADMIN_UUID]);

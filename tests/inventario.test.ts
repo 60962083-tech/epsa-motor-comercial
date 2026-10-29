@@ -18,10 +18,19 @@ const perfiles: Record<string, Perfil> = {
 };
 
 const unidad = {
-  coduni: '21', modelo: { codmod: '4', nommod: 'Modelo QA' }, color: 'Azul',
+  coduni: '21', modelo: { codmod: '4', nommod: 'Modelo QA' },
+  nummotuni: 'MOTOR-21', chauni: 'CHASIS-21', color: 'Azul',
   ubicacionConfirmada: { codubi: '2', nomubi: 'Comas', tipubi: 'Sede' },
   movimientoActivo: { codmub: '7', estado: 'En transito', destino: { codubi: '3', nomubi: 'FIVESA' } },
-  techo: null, preparacion: null, situacionComercial: 'No disponible'
+  techo: null, preparacion: null,
+  preparacionOperativa: {
+    coduni: '21', armado: 'Pendiente',
+    techo: { estado: 'Pendiente', codtte: null, configuracion: null, requiereInstalacion: null },
+    version: '1', preparacionCompleta: false,
+    condicionesFaltantes: ['Armado pendiente', 'Configuración de techo pendiente'],
+    ultimaActualizacion: '2026-10-28T12:00:00Z', actualizadoPor: null
+  },
+  situacionComercial: 'No disponible'
 };
 const inventario: InventarioResultado = {
   items: [unidad], total: 1, limite: 50, offset: 0,
@@ -124,11 +133,14 @@ test('HU-001 API: el contrato proyecta solo los campos públicos de inventario',
   assert.equal(respuesta.status, 200);
   const item = respuesta.body.data?.items[0] as unknown as Record<string, unknown>;
   assert.deepEqual(Object.keys(item).sort(), [
-    'coduni', 'color', 'modelo', 'movimientoActivo', 'preparacion',
-    'situacionComercial', 'techo', 'ubicacionConfirmada'
+    'chauni', 'coduni', 'color', 'modelo', 'movimientoActivo', 'nummotuni',
+    'preparacion', 'preparacionOperativa', 'situacionComercial', 'techo', 'ubicacionConfirmada'
   ].sort());
+  assert.equal(item.nummotuni, 'MOTOR-21');
+  assert.equal(item.chauni, 'CHASIS-21');
+  assert.equal((item.preparacionOperativa as { armado: string }).armado, 'Pendiente');
   const serializado = JSON.stringify(respuesta.body);
-  for (const campo of ['codcom', 'codcli', 'cliente', 'nummotuni', 'chauni', 'obsuni', 'factura', 'precom', 'motor', 'chasis'])
+  for (const campo of ['codcom', 'codcli', 'cliente', 'obsuni', 'factura', 'precom', 'motor', 'chasis', 'historial', 'idempotencia'])
     assert.equal(serializado.includes(`"${campo}"`), false, campo);
 }));
 
