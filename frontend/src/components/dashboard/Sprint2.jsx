@@ -26,6 +26,8 @@ const TONOS = {
   gris: "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-white/70",
   oscuro: "bg-slate-200 text-slate-700 dark:bg-white/15 dark:text-white/80",
   rojo: "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  naranja: "bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-200",
+  azul: "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-200",
   marino: "bg-marino-50 text-marino dark:bg-white/10 dark:text-white",
 };
 export function Pill({ tono = "gris", children, className = "" }) {

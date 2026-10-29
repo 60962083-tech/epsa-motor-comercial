@@ -8,6 +8,19 @@ import { Aviso, Card } from "../ui";
 import { Pill } from "./Sprint2";
 import { fechaCompleta } from "./Central";
 import { ModalLlegadaCentral, ModalTrasladoCentral, ModalUbicacionInicial } from "./ModalesCentral";
+import { leerMotivo } from "../../lib/motivos";
+
+// Motivo del traslado y su detalle (los traslados anteriores al motivo muestran solo su observación)
+export function MotivoMov({ observacion, className = "" }) {
+  const { motivo, detalle } = leerMotivo(observacion);
+  if (!motivo && !detalle) return null;
+  return (
+    <p className={`text-[12.5px] text-slate-500 ${className}`} data-motivo={motivo || ""}>
+      {motivo && <span className="mr-1.5 font-semibold text-marino dark:text-white">Motivo: {motivo}.</span>}
+      {detalle && <span>{motivo ? detalle : `«${detalle}»`}</span>}
+    </p>
+  );
+}
 
 export const ESTADO_MOV = { "En transito": "En tránsito", Finalizado: "Recibida", Pendiente: "Programado", Cancelado: "Cancelado" };
 export const TONO_MOV = { "En transito": "celeste", Finalizado: "verde", Pendiente: "ambar", Cancelado: "gris" };
@@ -60,7 +73,7 @@ export default function MovimientosUnidad({ unidad, gestiona, ubicaciones = [], 
           <p className="text-[12px] font-semibold text-sky-800/80 dark:text-sky-200/80">{activo.estado === "En transito" ? "En tránsito" : "Traslado programado"}</p>
           <div className="mt-1"><RutaMov m={activo} /></div>
           <p className="mt-1.5 text-[12.5px] text-slate-600 dark:text-white/70">Salió el {cuandoMov(activo.fechaSalida, activo.horaSalida)}{activo.autorSalida?.nombre ? `, lo registró ${activo.autorSalida.nombre}` : ""}. Sigue figurando en {activo.origen?.nomubi} hasta que se confirme la llegada.</p>
-          {activo.observacion && <p className="mt-1 text-[12.5px] italic text-slate-500">«{activo.observacion}»</p>}
+          <MotivoMov observacion={activo.observacion} className="mt-1" />
           {gestiona && activo.estado === "En transito" && <button className="btn btn-primary mt-3 !px-3.5 !py-2 text-[13.5px]" onClick={() => setModal({ tipo: "llegada", m: activo })}>Confirmar llegada</button>}
         </div>
       ) : conf ? (
@@ -94,7 +107,7 @@ export default function MovimientosUnidad({ unidad, gestiona, ubicaciones = [], 
                   <p className="flex flex-wrap items-center gap-2"><RutaMov m={m} /><Pill tono={TONO_MOV[m.estado] || "gris"}>{ESTADO_MOV[m.estado] || m.estado}</Pill></p>
                   <p className="text-[12px] text-slate-500">Salida: {cuandoMov(m.fechaSalida, m.horaSalida)}{m.autorSalida?.nombre ? `, ${m.autorSalida.nombre}` : ""}</p>
                   {m.fechaRecepcion && <p className="text-[12px] text-slate-500">Llegada: {cuandoMov(m.fechaRecepcion, m.horaRecepcion)}{m.autorRecepcion?.nombre ? `, recibió ${m.autorRecepcion.nombre}` : ""}</p>}
-                  {m.observacion && <p className="text-[12.5px] text-slate-500">{m.observacion}</p>}
+                  <MotivoMov observacion={m.observacion} />
                 </li>
               ))}
             </ol>

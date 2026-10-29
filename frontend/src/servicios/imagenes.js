@@ -10,6 +10,7 @@ import { comprimirImagen, guardarArchivoLocal, borrarArchivoLocal, validarFoto }
 import { hoyLocal } from "../lib/validar";
 import { siguienteId } from "../lib/sprint2";
 import { ordenarFotos as ordenar } from "../lib/galeria";
+import { SUPABASE_URL } from "../lib/config";
 
 export { aplicarGaleria } from "../lib/galeria";
 export const MAX_FOTOS = 12;
@@ -19,6 +20,8 @@ export function validarEnlaceFoto(url) {
   const t = String(url || "").trim();
   if (!t) return "Pega el enlace de la foto.";
   if (/\s/.test(t)) return "El enlace no puede tener espacios.";
+  // Las fotos guardadas en nuestro almacenamiento (Supabase Storage) siempre valen
+  if (SUPABASE_URL && t.startsWith(`${SUPABASE_URL}/storage/v1/object/public/`)) return "";
   try {
     const u = new URL(t);
     if (u.protocol !== "https:") return "Usa un enlace que empiece con https://";
