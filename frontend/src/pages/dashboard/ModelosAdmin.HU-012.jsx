@@ -8,7 +8,7 @@ import { soloDigitos } from "../../lib/validar";
 import { Aviso, Campo, Modal, PageHeader, Tabla, Vacio, btnMini, btnMiniPeligro, useConfirm, useToast } from "../../components/ui";
 import ModeloImg from "../../components/ModeloImg";
 import Badge from "../../components/Badge";
-import { MODO_REAL } from "../../lib/config";
+import { MODO_REAL, SUPABASE_URL } from "../../lib/config";
 import * as api from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
 import { emparejarModelos, modeloDesdeApi } from "../../lib/modelos";
@@ -57,6 +57,8 @@ function imagenValida(v) {
   const t = String(v || "").trim();
   if (/^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,/i.test(t)) return true;
   if (/^\/(?!\/)[\w./-]+\.(png|jpe?g|webp|svg|gif)$/i.test(t)) return true;
+  // Foto guardada en nuestro almacenamiento (Supabase Storage)
+  if (SUPABASE_URL && t.startsWith(`${SUPABASE_URL}/storage/v1/object/public/`)) return true;
   try { const u = new URL(t); return ["http:", "https:"].includes(u.protocol) && /\.[a-z]{2,}$/i.test(u.hostname); } catch { return false; }
 }
 

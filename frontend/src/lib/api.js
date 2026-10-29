@@ -111,8 +111,12 @@ export async function cambiarClaveApi(nueva) {
 const datosToken = (t) => { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); } catch { return {}; } };
 
 // Funciones SQL de Supabase (docs/*.sql). Con «publica» se llama como visitante de la web, sin sesión.
+// Si una función todavía no está creada, no se vuelve a pedir hasta recargar la página (evita avisos repetidos).
+const funcionesFaltantes = new Set();
+const errorFaltaSql = () => new ApiError(404, "Esta función todavía no está habilitada en el sistema.", { faltaSql: true });
 async function rpc(nombre, cuerpo = {}, { reintento = true, publica = false } = {}) {
   if (!MODO_REAL) throw new ApiError(0, "Esta función necesita conexión.");
+  if (funcionesFaltantes.has(nombre)) throw errorFaltaSql();
   let r;
   try {
     r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${nombre}`, {
@@ -128,7 +132,8 @@ async function rpc(nombre, cuerpo = {}, { reintento = true, publica = false } = 
   if (!r.ok) {
     if (j?.code === "PGRST202") {
       console.warn(`[EPSA] Falta la función ${nombre} en Supabase: ejecuta el SQL de docs/ que la crea.`);
-      throw new ApiError(404, "Esta función todavía no está habilitada en el sistema.", { faltaSql: true });
+      funcionesFaltantes.add(nombre);
+      throw errorFaltaSql();
     }
     if (r.status === 401) throw new ApiError(401, "Tu sesión venció. Vuelve a iniciar sesión.");
     throw new ApiError(r.status, j?.message || "No se pudo completar la operación.");
@@ -152,6 +157,8 @@ export const registrarInteresadoWebApi = (d) => rpc("web_registrar_interesado", 
 
 // HU-036: página de torito.pe leída desde Supabase (docs/supabase-torito-en-vivo.sql)
 export const paginaToritoApi = (ruta) => rpc("hu036_pagina_torito", { p_ruta: ruta });
+// HU-036: una imagen de torito.pe descargada por Supabase ({ tipo, base64 }) para guardarla en nuestro Storage
+export const imagenToritoApi = (url) => rpc("hu036_imagen_torito", { p_url: url });
 
 // HU-001: motor y chasis de cada moto (mismo SQL), mientras GET /api/inventario no los envíe
 export const seriesUnidadesApi = () => rpc("hu001_series_unidades");
@@ -164,6 +171,28 @@ export const seguimientoListarApi = () => rpc("seguimiento_listar");
 export const seguimientoRegistrarApi = (d) => rpc("seguimiento_registrar", {
   p_codlea: Number(d.codlea), p_tipo: d.tipo, p_detalle: d.detalle, p_estado: d.estado || null, p_proximo: d.proximo || null,
 });
+
+// Mejoras del Sprint 2 (docs/supabase-sprint2-mejoras.sql)
+// HU-003: motivos de traslado y el motivo guardado de cada movimiento
+export const motivosTrasladoApi = () => rpc("hu003_motivos_traslado");
+export const motivosMovimientosApi = () => rpc("hu003_motivos_movimientos");
+// HU-015: última actualización de cada interesado y su historial completo
+export const ultimasActualizacionesApi = () => rpc("hu015_ultimas_actualizaciones");
+export const historialLeadApi = (codlea) => rpc("hu015_historial_lead", { p_codlea: Number(codlea) });
+// Ventas a clientes con quien concretó cada una (el vendedor recibe solo las suyas)
+export const ventasListarApi = () => rpc("ventas_listar");
+
+// HU-030 · Facturas recibidas (importación de Michelle + funciones del panel en supabase-sprint2-mejoras.sql)
+export const BUCKET_FACTURAS = "facturas-compra";
+export const listarEquivalenciasImportacionApi = (ruc) => rpc("listar_equivalencias_importacion", { p_ruc_emisor: ruc });
+export const importarDocumentoCompraApi = (payload) => rpc("importar_documento_compra", { p_payload: payload });
+export const documentosRecibidosApi = () => rpc("hu030_documentos_listar");
+export const documentoRecibidoApi = (coddoc) => rpc("hu030_documento_detalle", { p_coddoc: Number(coddoc) });
+export const recepcionesConErrorApi = () => rpc("hu030_recepciones_con_error");
+export const codigosCroslandApi = () => rpc("hu030_equivalencias_listar");
+export const guardarCodigoCroslandApi = (d) => rpc("hu030_guardar_equivalencia", { p_codigo: d.codigo, p_clasificacion: d.clasificacion, p_codmod: d.codmod ? Number(d.codmod) : null, p_observacion: d.observacion || null });
+export const desactivarCodigoCroslandApi = (codequ) => rpc("hu030_desactivar_equivalencia", { p_codequ: Number(codequ) });
+export const registrarSubidaPanelApi = (d) => rpc("hu030_registrar_subida_panel", { p_coddoc: Number(d.coddoc), p_rutaxml: d.rutaxml || null, p_sha256xml: d.sha256xml || null, p_rutapdf: d.rutapdf || null, p_sha256pdf: d.sha256pdf || null });
 
 // Renovar la sesión
 async function refrescar() {
@@ -266,6 +295,29 @@ export async function subirArchivoStorage(bucket, ruta, archivo, reintento = tru
   if (estado === 403 || /row-level security|unauthorized/i.test(texto)) throw new ApiError(403, "No tienes permiso para subir fotos.");
   if (estado === 409 || /already exists|duplicate/i.test(texto)) throw new ApiError(409, "Ya existe un archivo con ese nombre. Vuelve a intentarlo.");
   throw new ApiError(estado >= 400 ? estado : 500, "No se pudo subir la foto. Inténtalo de nuevo.");
+}
+
+// Archivo privado de Storage: dirección firmada por unos minutos (solo si la sesión tiene permiso de lectura)
+export async function urlFirmadaStorage(bucket, ruta, segundos = 300) {
+  if (!MODO_REAL) throw new ApiError(0, "Esta función necesita conexión.");
+  await sesionVigente();
+  let r;
+  try {
+    r = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${bucket}/${rutaCodificada(ruta)}`, {
+      method: "POST", headers: cabecerasStorage({ "Content-Type": "application/json" }), body: JSON.stringify({ expiresIn: segundos }),
+    });
+  } catch { throw new ApiError(0, "No se pudo conectar. Revisa tu internet e inténtalo de nuevo."); }
+  const j = await r.json().catch(() => ({}));
+  const firmada = j.signedURL || j.signedUrl;
+  if (!r.ok || !firmada) throw new ApiError(r.status === 400 ? 404 : r.status, "No se encontró el archivo o no tienes permiso para verlo.");
+  return /^https?:/i.test(firmada) ? firmada : `${SUPABASE_URL}/storage/v1${firmada.startsWith("/") ? "" : "/"}${firmada}`;
+}
+export async function descargarStorage(bucket, ruta) {
+  const url = await urlFirmadaStorage(bucket, ruta, 120);
+  let r;
+  try { r = await fetch(url); } catch { throw new ApiError(0, "No se pudo conectar. Revisa tu internet e inténtalo de nuevo."); }
+  if (!r.ok) throw new ApiError(r.status, "No se pudo descargar el archivo.");
+  return r.blob();
 }
 
 export async function borrarArchivoStorage(bucket, rutas) {

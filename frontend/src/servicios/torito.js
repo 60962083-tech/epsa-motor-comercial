@@ -2,7 +2,7 @@
 // Supabase lee la web oficial desde el servidor (docs/supabase-torito-en-vivo.sql) y el panel saca de cada página
 // el precio, los colores, la descripción, la ficha técnica y las fotos. Con eso arma la misma ficha que guarda la
 // API de modelos. Si torito.pe no responde, el panel usa la ficha oficial que ya trae (data/catalogoTorito.js).
-import { paginaToritoApi } from "../lib/api";
+import { BUCKET_FOTOS, imagenToritoApi, paginaToritoApi, subirArchivoStorage, urlPublicaStorage } from "../lib/api";
 import { CATALOGO_TORITO } from "../data/catalogoTorito";
 import { COLORES, MODELOS } from "../data/mockData";
 import { fichaATexto, textoAFicha } from "../lib/fichaModelo";
@@ -174,4 +174,36 @@ export async function catalogoEnVivo(modelosBase = []) {
   // Modelos del panel que torito.pe ya no muestra en su lista: se conserva su ficha oficial guardada
   for (const base of CATALOGO_TORITO) if (!catalogo.some((o) => o.nombre === base.nombre)) { catalogo.push(base); fallas.push(base.nombre); }
   return { catalogo, fallas, leido: new Date().toISOString() };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Fotos de torito.pe guardadas como archivo propio (Supabase Storage, bucket «modelos»)
+// Cada foto se copia en «<codmod>/torito-<huella>.<ext>»: la huella sale de su dirección en torito.pe, así la
+// misma foto siempre cae en el mismo archivo y una foto nueva o cambiada de torito.pe crea uno nuevo.
+// ---------------------------------------------------------------------------------------------
+function huella(texto) {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(16).padStart(8, "0") + (h1 >>> 0).toString(16).padStart(8, "0");
+}
+const extension = (url) => (String(url).match(/\.(png|jpe?g|webp)$/i)?.[1] || "png").toLowerCase().replace("jpeg", "jpg");
+export const rutaCopiaTorito = (codmod, url) => `${codmod}/torito-${huella(String(url))}.${extension(url)}`;
+export const urlCopiaTorito = (codmod, url) => urlPublicaStorage(BUCKET_FOTOS, rutaCopiaTorito(codmod, url));
+export const esCopiaTorito = (url) => /\/storage\/v1\/object\/public\/modelos\/\d+\/torito-[0-9a-f]{16}\.(png|jpg|webp)$/i.test(String(url || ""));
+
+// Descarga la foto (Supabase la trae de torito.pe) y la guarda en Storage; devuelve la dirección propia
+export async function copiarImagenTorito(codmod, url) {
+  const r = await imagenToritoApi(url);
+  const binario = atob(String(r?.base64 || "").replace(/\s+/g, ""));
+  if (!binario.length) throw new Error("La imagen de torito.pe llegó vacía.");
+  const bytes = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  const tipo = /^image\/(png|jpeg|webp)$/i.test(r?.tipo || "") ? r.tipo.toLowerCase() : `image/${extension(url) === "jpg" ? "jpeg" : extension(url)}`;
+  try { return await subirArchivoStorage(BUCKET_FOTOS, rutaCopiaTorito(codmod, url), new Blob([bytes], { type: tipo })); }
+  catch (e) { if (e?.status === 409) return urlCopiaTorito(codmod, url); throw e; }   // ya estaba copiada
 }
