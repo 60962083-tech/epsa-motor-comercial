@@ -6,6 +6,8 @@ import { mensajeError } from "../../lib/errores";
 import { actualizarPreparacionApi, confirmarRecepcionApi, iniciarMovimientoApi, movimientosUnidadApi, sinRespuesta, ubicacionInicialApi, useIntento } from "../../servicios/central";
 import { GRUPOS_LUGAR_API, techoDe, ubicacionDe } from "../../servicios/inventarioCentral";
 import { Aviso, Campo, Modal, useToast } from "../ui";
+import { motivosTrasladoApi } from "../../lib/api";
+import { MAX_DETALLE_MOTIVO, MOTIVOS_TRASLADO, observacionConMotivo } from "../../lib/motivos";
 import { ColorUnidad, capital, nombreUnidad } from "./Central";
 
 const limpio = (t) => String(t || "").trim().replace(/\s+/g, " ");
@@ -14,6 +16,15 @@ const NO_CONFIRMADO = "No se pudo confirmar si se guardó: la conexión falló. 
 const SIN_RESPUESTA_MOV = "No se pudo confirmar si se guardó porque falló la conexión. Revisa la ubicación actualizada antes de volver a intentarlo.";
 export const MAX_OBS_MOV = 500;
 // El mensaje del servidor puede venir sin punto final
+// Motivos de traslado guardados en la base (si aún no están, la lista del panel)
+function useMotivosTraslado(abierto) {
+  const [motivos, setMotivos] = useState(MOTIVOS_TRASLADO);
+  useEffect(() => {
+    if (!abierto) return;
+    motivosTrasladoApi().then((r) => { if (Array.isArray(r) && r.length) setMotivos(r); }).catch(() => {});
+  }, [abierto]);
+  return motivos;
+}
 const conPunto = (t) => (/[.!?…]$/.test(String(t).trim()) ? String(t).trim() : `${String(t).trim()}.`);
 
 // Resumen de la moto en la cabecera de cada ventana
@@ -59,7 +70,9 @@ export function ModalTrasladoCentral({ abierto, unidad: fija, unidades = [], ubi
   const [coduni, setCoduni] = useState("");
   // Dónde está confirmada al abrir la ventana: ese es el origen que se envía
   const [actual, setActual] = useState({ cargando: false, datos: null, error: "" });
-  const [destino, setDestino] = useState(""); const [modo, setModo] = useState("transito"); const [obs, setObs] = useState("");
+  const [destino, setDestino] = useState(""); const [modo, setModo] = useState("transito");
+  const [motivo, setMotivo] = useState(""); const [detalle, setDetalle] = useState("");
+  const motivos = useMotivosTraslado(abierto);
   const [err, setErr] = useState({}); const [enviando, setEnviando] = useState(false); const [conflicto, setConflicto] = useState("");
   const elegibles = useMemo(() => unidades.filter((u) => u.ubicacion && !u.movimiento_activo), [unidades]);
   const unidad = fija || elegibles.find((u) => String(u.coduni) === String(coduni)) || null;
@@ -72,7 +85,7 @@ export function ModalTrasladoCentral({ abierto, unidad: fija, unidades = [], ubi
   }, []);
   useEffect(() => {
     if (!abierto) return;
-    setCoduni(fija?.coduni || ""); setDestino(""); setModo("transito"); setObs(""); setErr({}); setConflicto("");
+    setCoduni(fija?.coduni || ""); setDestino(""); setModo("transito"); setMotivo(""); setDetalle(""); setErr({}); setConflicto("");
     consultar(fija?.coduni);
   }, [abierto, fija?.coduni]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -91,7 +104,12 @@ export function ModalTrasladoCentral({ abierto, unidad: fija, unidades = [], ubi
     else if (!d || !d.estubi) x.destino = "Ese destino no existe o está inactivo.";
     else if (origen && String(origen.codubi) === String(destino)) x.destino = "El destino debe ser distinto de donde está la moto.";
     if (!MODOS.some((m) => m.id === modo)) x.modo = "Indica si sale ahora o si ya llegó.";
-    if (largo(obs) > MAX_OBS_MOV) x.obs = `La observación admite hasta ${MAX_OBS_MOV} caracteres.`;
+    // Motivo obligatorio (la base también lo exige); «Otro» pide escribir el detalle
+    const m = motivos.find((x) => x.nombre === motivo);
+    if (!motivo) x.motivo = "Elige el motivo del traslado.";
+    else if (!m) x.motivo = "Ese motivo ya no está disponible. Elige otro.";
+    if (m?.detalleObligatorio && largo(detalle) < 5) x.detalle = "Cuenta el motivo en el detalle (mínimo 5 caracteres).";
+    if (largo(detalle) > MAX_DETALLE_MOTIVO) x.detalle = `El detalle admite hasta ${MAX_DETALLE_MOTIVO} caracteres.`;
     setErr(x);
     return Object.keys(x).length === 0;
   }
@@ -101,7 +119,7 @@ export function ModalTrasladoCentral({ abierto, unidad: fija, unidades = [], ubi
     if (enviando || !validar()) return;
     setEnviando(true); setConflicto("");
     try {
-      const r = await iniciarMovimientoApi(unidad.coduni, { codubiori: origen.codubi, codubides: destino, obsmub: limpio(obs) || null });
+      const r = await iniciarMovimientoApi(unidad.coduni, { codubiori: origen.codubi, codubides: destino, obsmub: observacionConMotivo(motivo, limpio(detalle)) });
       if (modo === "llego" && r.data?.codmub) {
         try {
           await confirmarRecepcionApi(unidad.coduni, r.data.codmub);
@@ -119,7 +137,8 @@ export function ModalTrasladoCentral({ abierto, unidad: fija, unidades = [], ubi
     } finally { setEnviando(false); }
   }
 
-  const resumen = unidad && d && origen ? `${nombreUnidad(unidad)}: de ${origen.nomubi} a ${d.nomubi}. ${MODOS.find((m) => m.id === modo)?.texto}` : "";
+  const resumen = unidad && d && origen ? `${nombreUnidad(unidad)}: de ${origen.nomubi} a ${d.nomubi}. Motivo: ${motivo || "—"}. ${MODOS.find((m) => m.id === modo)?.texto}` : "";
+  const detalleObligatorio = motivos.find((x) => x.nombre === motivo)?.detalleObligatorio;
   return (
     <Modal abierto={abierto} onClose={onClose} titulo="Registrar traslado" ancho="max-w-xl"
       confirmarGuardar={{ titulo: "¿Registrar este traslado?", texto: resumen, boton: "Sí, registrar", validar }}
@@ -155,8 +174,14 @@ export function ModalTrasladoCentral({ abierto, unidad: fija, unidades = [], ubi
           </div>
           {err.modo && <p className="mt-1 text-[12px] font-medium text-acento">{err.modo}</p>}
         </fieldset>
-        <Campo etiqueta="Observación (opcional)" error={err.obs} ayuda={`${largo(obs)}/${MAX_OBS_MOV}. Por ejemplo: quién la lleva o qué avisó el taller.`}>
-          <textarea id="tras-obs" className="field-input" rows={2} maxLength={MAX_OBS_MOV + 40} value={obs} onChange={(e) => setObs(e.target.value)} />
+        <Campo etiqueta="Motivo del traslado" error={err.motivo}>
+          <select id="tras-motivo" className="field-input" value={motivo} onChange={(e) => { setMotivo(e.target.value); setErr((x) => ({ ...x, motivo: undefined, detalle: undefined })); }} data-motivo-traslado>
+            <option value="">Elige el motivo</option>
+            {motivos.map((m) => <option key={m.nombre} value={m.nombre}>{m.nombre}</option>)}
+          </select>
+        </Campo>
+        <Campo etiqueta={detalleObligatorio ? "Detalle del motivo" : "Detalle (opcional)"} error={err.detalle} ayuda={`${largo(detalle)}/${MAX_DETALLE_MOTIVO}. ${detalleObligatorio ? "Cuenta por qué se traslada." : "Por ejemplo: quién la lleva o qué avisó el taller."}`}>
+          <textarea id="tras-obs" className="field-input" rows={2} maxLength={MAX_DETALLE_MOTIVO + 20} value={detalle} onChange={(e) => { setDetalle(e.target.value); setErr((x) => ({ ...x, detalle: undefined })); }} />
         </Campo>
         <p className="text-[12.5px] text-slate-500">Trasladar no cambia la situación comercial: una moto separada o vendida lo sigue estando. Un aviso del taller por WhatsApp no la mueve sola.</p>
         {conflicto && (

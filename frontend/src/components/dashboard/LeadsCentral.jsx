@@ -11,6 +11,7 @@ import { Aviso, Campo, Card, Modal, Stat, Tabla, Vacio, btnMini, useToast } from
 import { Pill } from "./Sprint2";
 import { ETIQUETA_ESTADO } from "./SeguimientoCentral";
 import { AvisoConexion, BarraActualizacion, Paginador, capital, fechaCompleta } from "./Central";
+import { ModalHistorialLead, UltimaActualizacion, useActualizaciones } from "./HistorialLead";
 
 const ESTADOS = ["Nuevo", "Contactado", "En seguimiento", "Cerrado", "Convertido"];
 const TONO = { Nuevo: "celeste", Contactado: "marino", "En seguimiento": "ambar", Cerrado: "gris", Convertido: "verde" };
@@ -26,6 +27,9 @@ export default function LeadsCentral({ token = 0, recientes = [] }) {
   const [texto, setTexto] = useState(""); const [buscar, setBuscar] = useState("");
   const [offset, setOffset] = useState(0);
   const [asignar, setAsignar] = useState(null);
+  const [historial, setHistorial] = useState(null);
+  // Última actualización de cada interesado (se guarda en la base con cada cambio)
+  const { porLead, consulta: actualizaciones } = useActualizaciones();
   useEffect(() => { const t = setTimeout(() => setBuscar(limpio(texto).slice(0, 100).toLowerCase()), 250); return () => clearTimeout(t); }, [texto]);
   useEffect(() => { setOffset(0); }, [f, buscar]);
   const consulta = useConsultaCentral(() => leadsCentralApi(), [token], { clave: "leads-lista" });
@@ -77,7 +81,7 @@ export default function LeadsCentral({ token = 0, recientes = [] }) {
 
       {datos && filtrados.length === 0 ? <Vacio titulo={hayFiltro ? "No hay interesados con esos filtros" : gestiona ? "Todavía no hay interesados registrados" : "No tienes interesados asignados"} texto={hayFiltro ? "Limpia los filtros o busca con otro dato." : "Regístralos con «Registrar interesado»."} /> : datos && (
         <>
-          <Tabla columnas={["Registrado", "Interesado", "Moto de interés", "Llegó por", "Responsable", "Etapa", "Acciones"]}>
+          <Tabla columnas={["Registrado", "Interesado", "Moto de interés", "Llegó por", "Responsable", "Etapa", "Última actualización", "Acciones"]}>
             {leads.map((l) => (
               <tr key={l.codlea} className="align-top" data-lead={l.codlea}>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-500">{fechaCompleta(l.fecreglea)}<span className="block text-[12px] text-slate-400">N° {l.codlea}</span></td>
@@ -86,6 +90,7 @@ export default function LeadsCentral({ token = 0, recientes = [] }) {
                 <td className="px-4 py-3">{l.canlea}{l.whatsapp && <span className="block text-[12px] text-slate-400">Recibido en {l.whatsapp.numcwa}</span>}{l.orilea && <span className="block text-[12px] text-slate-400">Origen: {l.orilea}</span>}</td>
                 <td className="px-4 py-3" data-responsable={l.responsable?.codusu || ""}>{l.responsable ? <><span className="font-semibold text-marino dark:text-white">{l.responsable.nombre}</span>{!l.responsable.activo && <span className="block text-[12px] font-semibold text-acento">Sin acceso activo</span>}{l.asignado_desde && <span className="block text-[12px] text-slate-400">Desde {fechaCompleta(l.asignado_desde)}</span>}</> : <Pill tono="ambar">Sin responsable</Pill>}</td>
                 <td className="px-4 py-3"><Pill tono={TONO[l.estlea] || "gris"}>{ETIQUETA_ESTADO[l.estlea] || l.estlea}</Pill></td>
+                <td className="min-w-[13rem] max-w-[16rem] px-4 py-3"><UltimaActualizacion act={porLead.get(String(l.codlea))} respaldo={{ fecha: l.fecreglea, detalle: "Registrado", usuario: "" }} onAbrir={() => setHistorial(l)} /></td>
                 <td className="px-4 py-3"><div className="flex flex-wrap gap-1.5">
                   {gestiona && <button className={btnMini} onClick={() => setAsignar(l)}>{l.responsable ? "Transferir" : "Asignar"}</button>}
                   {l.responsable && <button className={btnMini} onClick={() => nav("/admin/seguimiento", { state: { codlea: l.codlea } })}>Seguimiento</button>}
@@ -100,7 +105,8 @@ export default function LeadsCentral({ token = 0, recientes = [] }) {
       <p className="mt-3 text-[12.5px] text-slate-400">Asignar no marca al interesado como atendido ni cambia su etapa; no se envían mensajes automáticos.</p>
 
       </>}
-      <ModalAsignar lead={asignar} responsables={responsables} abiertosDe={abiertosDe} onClose={() => setAsignar(null)} onHecho={() => consulta.refrescar(true)} />
+      <ModalAsignar lead={asignar} responsables={responsables} abiertosDe={abiertosDe} onClose={() => setAsignar(null)} onHecho={() => { consulta.refrescar(true); actualizaciones.refrescar(true); }} />
+      <ModalHistorialLead lead={historial} onClose={() => setHistorial(null)} />
     </div>
   );
 }

@@ -1,16 +1,19 @@
-// Seguimiento de interesados con la base central (docs/supabase-sprint2-conexiones.sql)
+// Seguimiento de interesados con la base central (docs/supabase-sprint2-conexiones.sql y supabase-sprint2-mejoras.sql)
 // El vendedor ve los interesados que tiene asignados (HU-015) y registra cada contacto: qué pasó, el nuevo
 // estado (contactado, en seguimiento, venta concretada o cerrado) y el próximo contacto. El gerente y la
-// administradora ven a todo el equipo. Cada registro queda en seguimientolead y cambia lead.estlea.
+// administradora ven a todo el equipo. Cada registro queda en seguimientolead, cambia lead.estlea y deja su
+// huella en el historial (historiallead) y en la última actualización del interesado.
+// La lista va en filas: interesado, próximo contacto, última actualización (abre el historial), estado con color y acciones.
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useApp } from "../../store/appStore.jsx";
-import { seguimientoListarApi, seguimientoRegistrarApi } from "../../lib/api";
+import { seguimientoListarApi, seguimientoRegistrarApi, ventasListarApi } from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
-import { haceCuanto, limpiarTexto } from "../../lib/validar";
+import { limpiarTexto } from "../../lib/validar";
 import { useConsultaCentral } from "../../servicios/central";
 import { Aviso, Campo, Card, Modal, PageHeader, Stat, Vacio, btnMini, useToast } from "../ui";
+import { ModalHistorialLead, UltimaActualizacion, useActualizaciones } from "./HistorialLead";
 import { Pestanas, Pill } from "./Sprint2";
 import { AvisoConexion, BarraActualizacion, capital, fechaCompleta, sinApi } from "./Central";
 import SeccionPendiente from "./SeccionPendiente";
@@ -37,9 +40,40 @@ export function situacion(l, hoy = hoyLocal()) {
   return dia === hoy ? "hoy" : "proximo";
 }
 
+// Estado con color para que el vendedor sepa qué atender primero
+export const ESTADOS_VISUALES = [
+  { texto: "Por atender", tono: "rojo", ayuda: "Nuevo, nadie lo contactó" },
+  { texto: "Vencido", tono: "naranja", ayuda: "Su próximo contacto ya pasó" },
+  { texto: "Para hoy", tono: "ambar", ayuda: "Contacto programado hoy" },
+  { texto: "En seguimiento", tono: "azul", ayuda: "Contactado, en proceso" },
+  { texto: "Venta concretada", tono: "verde", ayuda: "Ya compró" },
+  { texto: "Cerrado sin venta", tono: "gris", ayuda: "No compró" },
+];
+export function estadoVisual(l, hoy = hoyLocal()) {
+  const de = (t) => ESTADOS_VISUALES.find((e) => e.texto === t);
+  if (l.estlea === "Convertido") return de("Venta concretada");
+  if (l.estlea === "Cerrado") return de("Cerrado sin venta");
+  if (l.estlea === "Nuevo") return de("Por atender");
+  const s = situacion(l, hoy);
+  if (s === "vencido") return de("Vencido");
+  if (s === "hoy") return de("Para hoy");
+  return de("En seguimiento");
+}
+
 // Lista de interesados y su historial (vendedor: los suyos; gerencia: todos)
 export function useSeguimiento() {
   return useConsultaCentral(() => seguimientoListarApi().then((r) => (Array.isArray(r) ? r : [])), [], { clave: "seguimiento" });
+}
+// Ventas concretadas con quien las concretó (vendedor: las suyas; gerencia: todas)
+export function useVentas() {
+  return useConsultaCentral(() => ventasListarApi().then((r) => (Array.isArray(r) ? r : [])), [], { clave: "ventas" });
+}
+
+// Última actualización a partir del seguimiento (si el SQL de mejoras aún no está)
+export function respaldoActualizacion(l) {
+  const h = l.historial?.[0];
+  if (h) return { fecha: h.fecha, detalle: `${h.tipo === "Venta" ? "Venta concretada" : h.tipo}${h.detalle && h.tipo !== "Venta" ? `: ${h.detalle}` : ""}`, usuario: h.usuario };
+  return { fecha: l.fecreglea, detalle: l.tipreglea === "Web" ? "Registrado desde la web" : "Registrado", usuario: "" };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -51,6 +85,8 @@ export default function SeguimientoCentral() {
   const { state, pathname } = useLocation();
   const nav = useNavigate();
   const consulta = useSeguimiento();
+  const ventas = useVentas();
+  const { porLead } = useActualizaciones();
   const [vista, setVista] = useState("pendientes");
   const [resp, setResp] = useState("");
   const [texto, setTexto] = useState("");
@@ -94,7 +130,8 @@ export default function SeguimientoCentral() {
         <Stat etiqueta="Para hoy" valor={consulta.data ? cuenta("hoy") : "—"} />
         <Stat etiqueta="Vencidos" valor={consulta.data ? cuenta("vencido") : "—"} tono={cuenta("vencido") ? "rojo" : "marino"} nota="Su fecha ya pasó" />
         <Stat etiqueta="Sin próximo contacto" valor={consulta.data ? cuenta("sinFecha") : "—"} tono={cuenta("sinFecha") ? "ambar" : "marino"} nota="Abiertos sin fecha" />
-        <Stat etiqueta="Ventas concretadas" valor={consulta.data ? base.filter((l) => l.estlea === "Convertido").length : "—"} tono="verde" />
+        <Stat etiqueta="Ventas concretadas" tono="verde" nota={gestiona ? "Del equipo" : "Concretadas por ti"}
+          valor={ventas.data ? ventas.data.filter((v) => !resp || resp === "__sin" || v.vendedor?.codusu === resp).length : consulta.data ? base.filter((l) => l.estlea === "Convertido").length : "—"} />
       </div>
 
       {/* Filtros */}
@@ -115,56 +152,65 @@ export default function SeguimientoCentral() {
             </select></div>}
           <div className="flex items-end gap-3"><BarraActualizacion consulta={consulta} /></div>
         </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-slate-100 pt-3 dark:border-white/10" data-leyenda-estados>
+          {ESTADOS_VISUALES.map((e) => <span key={e.texto} className="flex items-center gap-1.5 text-[12px] text-slate-500" title={e.ayuda}><Pill tono={e.tono}>{e.texto}</Pill></span>)}
+        </div>
       </Card>
 
       {consulta.data && lista.length === 0 ? (
         <Vacio titulo={todos.length ? "No hay interesados en esta vista" : gestiona ? "Todavía no hay interesados" : "No tienes interesados asignados"} texto={todos.length ? "Prueba con otra pestaña o limpia la búsqueda." : gestiona ? "Llegan desde la web o se registran en Leads; ahí se asignan a un vendedor." : "Cuando la gerencia te asigne interesados en Leads, aparecerán aquí."} />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {lista.map((l) => <TarjetaInteresado key={l.codlea} l={l} hoy={hoy} gestiona={gestiona} onRegistrar={(venta) => setRegistrar({ lead: l, venta })} onHistorial={() => setHistorial(l)} />)}
-        </div>
+        <Card className="overflow-hidden !p-0">
+          <div className={`hidden gap-4 border-b border-slate-100 px-5 py-2.5 text-[12px] font-semibold text-slate-400 dark:border-white/10 lg:grid ${COLUMNAS}`}>
+            <span>Interesado</span><span>Próximo contacto</span><span>Última actualización</span><span>Estado</span><span className="text-right">Acciones</span>
+          </div>
+          <ul className="divide-y divide-slate-100 dark:divide-white/10" data-lista-seguimiento>
+            {lista.map((l) => <FilaInteresado key={l.codlea} l={l} hoy={hoy} gestiona={gestiona} act={porLead.get(String(l.codlea))}
+              onRegistrar={(venta) => setRegistrar({ lead: l, venta })} onHistorial={() => setHistorial(l)} />)}
+          </ul>
+        </Card>
       )}
       <p className="mt-3 text-[12.5px] text-slate-400">Los interesados se asignan o transfieren en Leads.</p>
 
-      <ModalContacto lead={registrar?.lead} venta={registrar?.venta} onClose={() => setRegistrar(null)} onHecho={() => consulta.refrescar(true)} />
-      <ModalHistorial lead={historial} onClose={() => setHistorial(null)} />
+      <ModalContacto lead={registrar?.lead} venta={registrar?.venta} onClose={() => setRegistrar(null)} onHecho={() => { consulta.refrescar(true); ventas.refrescar(true); }} />
+      <ModalHistorialLead lead={historial} respaldo={historial?.historial || []} onClose={() => setHistorial(null)} />
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------------------------
-// Tarjeta de un interesado
+// Fila de un interesado: datos, próximo contacto, última actualización, estado y acciones
 // ---------------------------------------------------------------------------------------------
-function TarjetaInteresado({ l, hoy, gestiona, onRegistrar, onHistorial }) {
+const COLUMNAS = "lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,0.8fr)_auto]";
+function FilaInteresado({ l, hoy, gestiona, act, onRegistrar, onHistorial }) {
   const s = situacion(l, hoy);
-  const ultimo = l.historial?.[0];
+  const e = estadoVisual(l, hoy);
   const cel = celular9(l.tellea);
   return (
-    <Card className={s === "vencido" ? "!border-acento/40" : s === "hoy" ? "!border-marino-700/30" : ""}>
-      <div data-seguimiento={l.codlea}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate font-bold text-marino dark:text-white">{l.nomlea}</p>
-            <p className="text-[12.5px] text-slate-400">{l.tellea || "Sin celular"}{l.nommod && ` · ${l.nommod}`}{l.collea && ` · ${capital(l.collea)}`}</p>
-          </div>
-          <Pill tono={TONO_ESTADO[l.estlea] || "gris"}>{ETIQUETA_ESTADO[l.estlea] || l.estlea}</Pill>
-        </div>
-        <p className={`mt-3 text-[13.5px] font-semibold ${s === "vencido" ? "text-acento" : s === "sinFecha" ? "text-amber-700 dark:text-amber-300" : "text-marino dark:text-white"}`}>
-          {s === "cerrado" ? `Cerrado ${ultimo ? haceCuanto(ultimo.fecha) : ""}` : s === "sinFecha" ? "Sin próximo contacto" : `${s === "vencido" ? "Vencido: " : s === "hoy" ? "Hoy: " : "Próximo: "}${fechaCompleta(l.proximo)}`}
-        </p>
-        {ultimo ? <p className="mt-1 line-clamp-3 text-[13px] text-slate-600 dark:text-slate-300"><span className="font-medium">{ultimo.tipo}</span>, {haceCuanto(ultimo.fecha)}{ultimo.usuario ? ` por ${ultimo.usuario}` : ""}: {ultimo.detalle || "sin detalle"}</p>
-          : <p className="mt-1 text-[13px] text-slate-500">Aún sin contactos registrados. {l.canlea === "Web" ? "Llegó desde la web." : `Llegó por ${l.canlea}.`}</p>}
-        {l.obslea && !ultimo && <p className="mt-1 line-clamp-2 text-[12.5px] text-slate-400">{l.obslea}</p>}
-        {gestiona && <p className="mt-1 text-[12.5px] text-slate-400">{l.responsable ? `A cargo de ${l.responsable.nombre}` : "Sin responsable: asígnalo en Leads"}</p>}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button className={btnMini} onClick={() => onRegistrar(false)} data-registrar-contacto>Registrar contacto</button>
-          {ABIERTO(l) && <button className={btnMini} onClick={() => onRegistrar(true)} data-venta-concretada>Venta concretada</button>}
-          {l.historial?.length > 0 && <button className={btnMini} onClick={onHistorial}>Historial ({l.historial.length})</button>}
-          {cel.length === 9 && <a className={btnMini} target="_blank" rel="noopener noreferrer" href={`https://wa.me/51${cel}?text=${encodeURIComponent(`Hola ${l.nomlea.split(" ")[0]}, te saluda EPSA Motor.`)}`}>WhatsApp</a>}
-          {cel.length === 9 && <a className={btnMini} href={`tel:+51${cel}`}>Llamar</a>}
-        </div>
+    <li className={`grid gap-3 px-5 py-4 lg:items-center lg:gap-4 ${COLUMNAS}`} data-seguimiento={l.codlea} data-estado-visual={e.texto}>
+      <div className="min-w-0">
+        <p className="truncate font-bold text-marino dark:text-white">{l.nomlea}</p>
+        <p className="text-[12.5px] text-slate-500">{l.tellea || "Sin celular"}{l.nommod && ` · ${l.nommod}`}{l.collea && ` · ${capital(l.collea)}`}</p>
+        {gestiona && <p className="text-[12px] text-slate-400">{l.responsable ? `A cargo de ${l.responsable.nombre}` : "Sin responsable: asígnalo en Leads"}</p>}
       </div>
-    </Card>
+      <div className="text-[13px]">
+        <span className="text-[12px] text-slate-400 lg:hidden">Próximo contacto: </span>
+        {s === "cerrado" ? <span className="text-slate-400">—</span>
+          : s === "sinFecha" ? <span className="font-semibold text-amber-700 dark:text-amber-300">Sin próximo contacto</span>
+          : <span className={`font-semibold ${s === "vencido" ? "text-orange-700 dark:text-orange-300" : "text-marino dark:text-white"}`}>{fechaCompleta(l.proximo)}</span>}
+      </div>
+      <div className="min-w-0">
+        <span className="text-[12px] text-slate-400 lg:hidden">Última actualización</span>
+        <UltimaActualizacion act={act} respaldo={respaldoActualizacion(l)} onAbrir={onHistorial} />
+      </div>
+      <div><Pill tono={e.tono}>{e.texto}</Pill></div>
+      <div className="flex flex-wrap gap-1.5 lg:justify-end">
+        <button className={btnMini} onClick={() => onRegistrar(false)} data-registrar-contacto>Registrar contacto</button>
+        {ABIERTO(l) && <button className={btnMini} onClick={() => onRegistrar(true)} data-venta-concretada>Venta concretada</button>}
+        {cel.length === 9 && <a className={btnMini} target="_blank" rel="noopener noreferrer" href={`https://wa.me/51${cel}?text=${encodeURIComponent(`Hola ${l.nomlea.split(" ")[0]}, te saluda EPSA Motor.`)}`}>WhatsApp</a>}
+        {cel.length === 9 && <a className={btnMini} href={`tel:+51${cel}`}>Llamar</a>}
+      </div>
+    </li>
   );
 }
 
@@ -240,28 +286,6 @@ export function ModalContacto({ lead, venta = false, onClose, onHecho }) {
         {err.general && <div className="sm:col-span-2"><Aviso tipo="error">{err.general}</Aviso></div>}
         {venta && <p className="text-[12.5px] text-slate-400 sm:col-span-2">La venta queda en el historial del interesado y en Ventas a clientes. <button type="button" className="font-semibold underline" onClick={() => { onClose(); nav("/admin/ventas"); }}>Ver ventas</button></p>}
       </form>
-    </Modal>
-  );
-}
-
-// ---------------------------------------------------------------------------------------------
-// Historial de contactos de un interesado
-// ---------------------------------------------------------------------------------------------
-function ModalHistorial({ lead, onClose }) {
-  if (!lead) return null;
-  return (
-    <Modal abierto onClose={onClose} titulo={`Historial · ${lead.nomlea}`} ancho="max-w-lg" sinAvisoCambios confirmarGuardar={false}
-      pie={<button className="btn btn-secondary !py-2" onClick={onClose}>Cerrar</button>}>
-      <ol className="space-y-3" data-historial>
-        {lead.historial.map((h) => (
-          <li key={h.codsle} className="rounded-xl border border-slate-100 px-4 py-3 dark:border-white/10">
-            <p className="text-[12.5px] text-slate-400">{fechaCompleta(h.fecha)}{h.usuario ? ` · ${h.usuario}` : ""}</p>
-            <p className="mt-0.5 text-[14px]"><b className="text-marino dark:text-white">{h.tipo}</b>{h.detalle ? `: ${h.detalle}` : ""}</p>
-            {h.proximo && <p className="mt-0.5 text-[12.5px] text-slate-500">Próximo contacto: {fechaCompleta(h.proximo)}</p>}
-          </li>
-        ))}
-      </ol>
-      {lead.obslea && <p className="mt-4 text-[12.5px] text-slate-500">Al registrarse: {lead.obslea}</p>}
     </Modal>
   );
 }

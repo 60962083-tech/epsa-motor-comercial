@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+ xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+ xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+ xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
+ xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+  <ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><ds:Signature><ds:SignedInfo/></ds:Signature></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions>
+  <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+  <cbc:ID>S001-00000001</cbc:ID>
+  <cbc:IssueDate>2026-10-20</cbc:IssueDate>
+  <cbc:DueDate>2026-11-20</cbc:DueDate>
+  <cbc:InvoiceTypeCode>01</cbc:InvoiceTypeCode>
+  <cbc:DocumentCurrencyCode>PEN</cbc:DocumentCurrencyCode>
+  <cbc:LineCountNumeric>4</cbc:LineCountNumeric>
+  <cac:OrderReference><cbc:ID>HEADER-REF-SYNTHETIC</cbc:ID></cac:OrderReference>
+  <cac:AccountingSupplierParty><cac:Party>
+    <cac:PartyName><cbc:Name>Proveedor de Prueba</cbc:Name></cac:PartyName>
+    <cac:PartyTaxScheme><cbc:CompanyID>20123456789</cbc:CompanyID></cac:PartyTaxScheme>
+    <cac:PartyLegalEntity><cbc:RegistrationName>Razón Social Sintética</cbc:RegistrationName></cac:PartyLegalEntity>
+  </cac:Party></cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty><cac:Party>
+    <cac:PartyTaxScheme><cbc:CompanyID>20987654321</cbc:CompanyID></cac:PartyTaxScheme>
+    <cac:PartyLegalEntity><cbc:RegistrationName>Comprador Sintético</cbc:RegistrationName></cac:PartyLegalEntity>
+  </cac:Party></cac:AccountingCustomerParty>
+  <cac:TaxTotal><cbc:TaxAmount currencyID="PEN">369.00</cbc:TaxAmount></cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="PEN">2049.99</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="PEN">2049.99</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="PEN">2418.99</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="PEN">2418.99</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+  <cac:InvoiceLine>
+    <cbc:ID>1</cbc:ID><cbc:InvoicedQuantity unitCode="NIU">1</cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="PEN">1000.00</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Description>Vehículo de prueba A</cbc:Description><cac:SellersItemIdentification><cbc:ID>SYNTH-MOTO</cbc:ID></cac:SellersItemIdentification>
+      <cac:CommodityClassification><cbc:ItemClassificationCode>25112000</cbc:ItemClassificationCode></cac:CommodityClassification>
+      <cac:AdditionalItemProperty><cbc:NameCode>5012</cbc:NameCode><cbc:Name>Etiqueta sintética de marca</cbc:Name><cbc:Value>Marca Sintética</cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5013</cbc:NameCode><cbc:Name>Etiqueta sintética de modelo</cbc:Name><cbc:Value>Modelo Sintético</cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5014</cbc:NameCode><cbc:Name>Color de muestra</cbc:Name><cbc:Value>Negro</cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5015</cbc:NameCode><cbc:Name>Dato de motor ficticio</cbc:Name><cbc:Value>ENGINE-SYNTH-001</cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5016</cbc:NameCode><cbc:Name>Combustible de muestra</cbc:Name><cbc:Value>Gasolina</cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5018</cbc:NameCode><cbc:Name>VIN ficticio</cbc:Name><cbc:Value>VIN-SYNTH-001</cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5019</cbc:NameCode><cbc:Name>Dato de chasis ficticio</cbc:Name><cbc:Value>CHASSIS-SYNTH-001</cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5020</cbc:NameCode><cbc:Name>Año de fabricación de muestra</cbc:Name><cbc:Value>2026</cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5021</cbc:NameCode><cbc:Name>Año de modelo de muestra</cbc:Name><cbc:Value>2027</cbc:Value></cac:AdditionalItemProperty>
+    </cac:Item><cbc:AdditionalInformation>3 ORDER-SYNTH-0001</cbc:AdditionalInformation><cac:Price><cbc:PriceAmount currencyID="PEN">1000.00</cbc:PriceAmount></cac:Price>
+  </cac:InvoiceLine>
+  <cac:InvoiceLine>
+    <cbc:ID>2</cbc:ID><cbc:InvoicedQuantity unitCode="NIU">1</cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="PEN">1000.00</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Description>Vehículo de prueba B</cbc:Description><cac:SellersItemIdentification><cbc:ID>SYNTH-MOTO</cbc:ID></cac:SellersItemIdentification>
+      <cac:AdditionalItemProperty><cbc:NameCode>5013</cbc:NameCode><cbc:Name>Otra etiqueta de modelo</cbc:Name><cbc:Value>Modelo Sintético</cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5014</cbc:NameCode><cbc:Name>Otro nombre de color</cbc:Name><cbc:Value> Negro </cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5015</cbc:NameCode><cbc:Name>Otro dato de motor</cbc:Name><cbc:Value>ENGINE-SYNTH-002</cbc:Value></cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty><cbc:NameCode>5019</cbc:NameCode><cbc:Name>Otro dato de chasis</cbc:Name><cbc:Value>CHASSIS-SYNTH-002</cbc:Value></cac:AdditionalItemProperty>
+    </cac:Item><cbc:AdditionalInformation>3 ORDER-SYNTH-0002</cbc:AdditionalInformation><cac:Price><cbc:PriceAmount currencyID="PEN">1000.00</cbc:PriceAmount></cac:Price>
+  </cac:InvoiceLine>
+  <cac:InvoiceLine><cbc:ID>3</cbc:ID><cbc:InvoicedQuantity unitCode="NIU">1</cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="PEN">25.00</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Description>Accesorio de prueba A</cbc:Description><cac:SellersItemIdentification><cbc:ID>SYNTH-ACC</cbc:ID></cac:SellersItemIdentification><cac:CommodityClassification><cbc:ItemClassificationCode>31162800</cbc:ItemClassificationCode></cac:CommodityClassification></cac:Item><cac:Price><cbc:PriceAmount currencyID="PEN">25.00</cbc:PriceAmount></cac:Price>
+  </cac:InvoiceLine>
+  <cac:InvoiceLine><cbc:ID>4</cbc:ID><cbc:InvoicedQuantity unitCode="NIU">1</cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="PEN">25.00</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Description>Accesorio de prueba B</cbc:Description><cac:SellersItemIdentification><cbc:ID>SYNTH-ACC</cbc:ID></cac:SellersItemIdentification><cac:CommodityClassification><cbc:ItemClassificationCode>31162800</cbc:ItemClassificationCode></cac:CommodityClassification></cac:Item><cac:Price><cbc:PriceAmount currencyID="PEN">25.00</cbc:PriceAmount></cac:Price>
+  </cac:InvoiceLine>
+</Invoice

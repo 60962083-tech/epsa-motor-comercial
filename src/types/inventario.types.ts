@@ -1,3 +1,5 @@
+import type { PreparacionUnidadActual } from './preparacion.unidad.types';
+
 export interface ConsultaInventarioInput {
   p_codubi: string | null;
   p_codmod: string | null;
@@ -12,6 +14,8 @@ export interface ConsultaInventarioInput {
 export interface InventarioUnidad {
   coduni: string;
   modelo: { codmod: string; nommod: string };
+  nummotuni: string | null;
+  chauni: string | null;
   color: string | null;
   ubicacionConfirmada: { codubi: string; nomubi: string; tipubi: string } | null;
   movimientoActivo: {
@@ -20,7 +24,10 @@ export interface InventarioUnidad {
     destino: { codubi: string; nomubi: string };
   } | null;
   techo: { codtte: string; nomtte: string } | null;
+  /** Preparación legacy basada en unidad.codepr; se conserva para compatibilidad histórica. */
   preparacion: { codepr: string; nomepr: string } | null;
+  /** Estado actual HU-033 derivado de preparacionunidad; fuente operativa de preparación. */
+  preparacionOperativa: PreparacionUnidadActual;
   situacionComercial: string;
 }
 

@@ -11,9 +11,11 @@ import { CATALOGO_TORITO } from "../../data/catalogoTorito";
 import { claveModelo } from "../../lib/modelos";
 import { esFichaCompleta } from "../../lib/fichaModelo";
 import { crearModeloApi, editarModeloApi, estadoModeloApi } from "../../lib/api";
-import { enlazarFotoModeloApi, estadoFotoModeloApi } from "../../servicios/central";
+import { enlazarFotoModeloApi, estadoFotoModeloApi, ordenFotoModeloApi } from "../../servicios/central";
+import { BUCKET_FOTOS, borrarArchivoStorage } from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
-import { PAGINA_TORITO, catalogoEnVivo, paginaDe } from "../../servicios/torito";
+import { PAGINA_TORITO, catalogoEnVivo, copiarImagenTorito, esCopiaTorito, paginaDe, urlCopiaTorito } from "../../servicios/torito";
+import { MODO_REAL } from "../../lib/config";
 import { formatoSoles } from "../../data/mockData";
 import { Aviso, Modal } from "../ui";
 import { Pill } from "./Sprint2";
@@ -34,7 +36,7 @@ const nuevosDe = (modelos, catalogo) => catalogo.filter((o) => o.enVivo && o.slu
 // ---------------------------------------------------------------------------------------------
 // Con «reemplazar», también se actualiza lo que ya tiene un valor distinto al de torito.pe
 const igualesColores = (a = [], b = []) => a.length === b.length && a.every((c) => b.includes(c));
-export function planInformacion(modelos = [], vinculo = {}, reemplazar = false, catalogo = CATALOGO_TORITO) {
+export function planInformacion(modelos = [], vinculo = {}, reemplazar = false, catalogo = CATALOGO_TORITO, copiaDe = null) {
   const oficialDe = (m) => catalogo.find((o) => o.nombre === vinculo[String(m.codmod)]) || null;
   // Fotos activas en uso y foto principal oficial de cada modelo vinculado
   const usoFoto = new Map();
@@ -49,22 +51,31 @@ export function planInformacion(modelos = [], vinculo = {}, reemplazar = false, 
     if (oficial.colores.length && (!(m.colores || []).length || (reemplazar && !igualesColores(m.colores || [], oficial.colores)))) datos.colores = oficial.colores;
     if (oficial.descripcion && (String(m.desmod || "").trim().length < 40 || (reemplazar && String(m.desmod || "").trim() !== oficial.descripcion))) datos.desmod = oficial.descripcion;
     if (!esFichaCompleta(m.carmod) || (reemplazar && String(m.carmod || "").trim() !== oficial.ficha)) datos.carmod = oficial.ficha;
-    // Fotos: una oficial extra no se agrega si es la principal de otro modelo (así ninguna moto se repite)
+    // Fotos: una oficial extra no se agrega si es la principal de otro modelo (así ninguna moto se repite).
+    // Con «copiaDe», cada foto de torito.pe se guarda como archivo propio en Supabase Storage y reemplaza a las
+    // fotos de torito.pe anteriores (enlaces directos o copias que torito.pe ya no muestra). Las fotos que subió
+    // el equipo no se tocan.
     const fotos = [];
     const imagenes = m.imagenes || [];
+    const activas = imagenes.filter((x) => x.estimo !== false);
     const principal = oficial.fotos[0];
     const propia = (url) => url === principal || !principales.has(url);
     if (principal) {
-      // Se ocultan las fotos de torito.pe repetidas entre modelos y, al actualizar, las que torito.pe ya no muestra
-      for (const i of imagenes.filter((x) => x.estimo !== false && deTorito(x.urlimo) && x.urlimo !== principal)) {
-        if (usoFoto.get(i.urlimo) > 1 || !propia(i.urlimo) || (reemplazar && !oficial.fotos.includes(i.urlimo))) fotos.push({ tipo: "quitar", imagen: i });
+      const nuevas = oficial.fotos.filter(propia).map((u) => ({ origen: u, url: copiaDe ? copiaDe(m.codmod, u) : u }));
+      const quedan = new Set(nuevas.map((n) => n.url));
+      for (const i of activas) {
+        if (copiaDe) {
+          if ((deTorito(i.urlimo) || esCopiaTorito(i.urlimo)) && !quedan.has(i.urlimo)) fotos.push({ tipo: "quitar", imagen: i });
+        } else if (deTorito(i.urlimo) && i.urlimo !== principal
+          && (usoFoto.get(i.urlimo) > 1 || !propia(i.urlimo) || (reemplazar && !oficial.fotos.includes(i.urlimo)))) fotos.push({ tipo: "quitar", imagen: i });
       }
       let orden = Math.max(0, ...imagenes.map((i) => Number(i.ordimo) || 0));
-      const quedanOtras = imagenes.some((i) => i.estimo !== false && i.urlimo !== principal && !fotos.some((c) => c.imagen?.codimo === i.codimo));
-      for (const url of oficial.fotos.filter(propia)) {
-        const existe = imagenes.find((i) => i.urlimo === url);
+      const principalDestino = nuevas[0]?.url;
+      const quedanOtras = activas.some((i) => i.urlimo !== principalDestino && !fotos.some((c) => c.imagen?.codimo === i.codimo));
+      for (const n of nuevas) {
+        const existe = imagenes.find((i) => i.urlimo === n.url);
         if (existe && existe.estimo === false) fotos.push({ tipo: "activar", imagen: existe });
-        if (!existe) fotos.push({ tipo: "foto", url, ordimo: url === principal && !quedanOtras ? 1 : ++orden });
+        if (!existe) fotos.push({ tipo: copiaDe ? "copia" : "foto", origen: n.origen, url: n.url, ordimo: n.url === principalDestino && !quedanOtras ? 1 : ++orden });
       }
     }
     return { m, oficial, datos, fotos };
@@ -80,8 +91,8 @@ function resumen({ datos, fotos, oficial, m }) {
     datos.colores ? `Colores: ${datos.colores.join(", ")}` : null,
     datos.desmod ? "Descripción" : null,
     datos.carmod ? `Ficha técnica (${oficial.datos} datos)` : null,
-    nuevas ? `${nuevas} foto${nuevas === 1 ? "" : "s"} oficial${nuevas === 1 ? "" : "es"}` : null,
-    quitar ? `Ocultar ${quitar} foto${quitar === 1 ? "" : "s"} anterior${quitar === 1 ? "" : "es"} o repetida${quitar === 1 ? "" : "s"}` : null,
+    nuevas ? `${nuevas} foto${nuevas === 1 ? "" : "s"} de torito.pe${fotos.some((c) => c.tipo === "copia") ? " (se guardan en la base)" : ""}` : null,
+    quitar ? `${fotos.some((c) => c.tipo === "copia") ? "Reemplaza" : "Ocultar"} ${quitar} foto${quitar === 1 ? "" : "s"} anterior${quitar === 1 ? "" : "es"}` : null,
   ].filter(Boolean);
 }
 
@@ -112,7 +123,7 @@ export default function InformacionTorito({ abierto, modelos, onClose, onHecho }
     return () => { vigente = false; };
   }, [abierto]); // eslint-disable-line react-hooks/exhaustive-deps
   const catalogo = vivo.estado === "ok" ? vivo.catalogo : CATALOGO_TORITO;
-  const plan = useMemo(() => (abierto && vivo.estado !== "cargando" ? planInformacion(modelos || [], vinculo, reemplazar, catalogo) : []), [abierto, modelos, vinculo, reemplazar, catalogo, vivo.estado]);
+  const plan = useMemo(() => (abierto && vivo.estado !== "cargando" ? planInformacion(modelos || [], vinculo, reemplazar, catalogo, MODO_REAL ? urlCopiaTorito : null) : []), [abierto, modelos, vinculo, reemplazar, catalogo, vivo.estado]);
   const conCambios = plan.filter((p) => Object.keys(p.datos).length || p.fotos.length);
   const marcados = elegidos ?? new Set(conCambios.map((p) => String(p.m.codmod)));
   // Los nuevos se calculan una vez al leer torito.pe (así no desaparecen de la lista apenas se crean)
@@ -134,12 +145,19 @@ export default function InformacionTorito({ abierto, modelos, onClose, onHecho }
   }
 
   // Modelo nuevo: se crea con su información, se enlazan sus fotos y se publica (sin foto queda como borrador)
+  // Foto de torito.pe guardada en nuestro almacenamiento; si no se puede copiar, queda su enlace (se reintenta la próxima vez)
+  async function guardarFoto(codmod, url, fallas) {
+    if (!MODO_REAL) return url;
+    try { return await copiarImagenTorito(codmod, url); }
+    catch { if (fallas) fallas.n++; return url; }
+  }
+
   async function crearNuevo(o) {
     const creado = (await crearModeloApi({ codtmo: o.codtmo, nommod: o.nombre, marmod: "Bajaj", desmod: o.descripcion, carmod: o.ficha, premod: o.precio ?? null, colores: o.colores })).data;
     const codmod = String(creado.codmod);
     try {
       let orden = 0;
-      for (const url of o.fotos) await enlazarFotoModeloApi(codmod, url, ++orden);
+      for (const url of o.fotos) await enlazarFotoModeloApi(codmod, await guardarFoto(codmod, url), ++orden);
       if (!o.fotos.length) return { ok: true, borrador: true };
       await estadoModeloApi(codmod, "Publicado");
       return { ok: true };
@@ -160,9 +178,34 @@ export default function InformacionTorito({ abierto, modelos, onClose, onHecho }
         if (Object.keys(p.datos).length) await editarModeloApi(id, p.datos);
         // Primero las fotos oficiales nuevas y después se ocultan las repetidas: el modelo nunca queda sin foto
         for (const c of p.fotos.filter((x) => x.tipo === "foto")) await enlazarFotoModeloApi(id, c.url, c.ordimo);
+        // Fotos copiadas a nuestro almacenamiento. Para no acumular fotos, cada foto nueva ocupa el lugar de una
+        // foto anterior de torito.pe (se actualiza su enlace) y el archivo anterior se borra del almacenamiento.
+        // Si una foto no se pudo copiar, se conserva su enlace a torito.pe y se reintenta la próxima vez.
+        const fallas = { n: 0 };
+        const conservar = new Set();
+        const libres = p.fotos.filter((x) => x.tipo === "quitar").map((x) => x.imagen).sort((a, b) => (Number(a.ordimo) || 0) - (Number(b.ordimo) || 0));
+        const archivosViejos = [];
+        for (const c of p.fotos.filter((x) => x.tipo === "copia")) {
+          const url = await guardarFoto(id, c.origen, fallas);
+          if (url === c.origen) {
+            const ya = (p.m.imagenes || []).find((i) => i.urlimo === url && i.estimo !== false);
+            if (ya) { conservar.add(ya.codimo); continue; }
+          }
+          const lugar = libres.find((i) => !conservar.has(i.codimo));
+          if (lugar) {
+            await ordenFotoModeloApi(id, lugar.codimo, url, Math.min(Number(c.ordimo) || 1, Number(lugar.ordimo) || 1));
+            conservar.add(lugar.codimo);
+            if (esCopiaTorito(lugar.urlimo)) archivosViejos.push(lugar.urlimo);
+          } else await enlazarFotoModeloApi(id, url, c.ordimo);
+        }
         for (const c of p.fotos.filter((x) => x.tipo === "activar")) await estadoFotoModeloApi(id, c.imagen.codimo, true);
-        for (const c of p.fotos.filter((x) => x.tipo === "quitar")) await estadoFotoModeloApi(id, c.imagen.codimo, false);
-        resultados[id] = { ok: true };
+        for (const c of p.fotos.filter((x) => x.tipo === "quitar" && !conservar.has(x.imagen.codimo))) {
+          await estadoFotoModeloApi(id, c.imagen.codimo, false);
+          if (esCopiaTorito(c.imagen.urlimo)) archivosViejos.push(c.imagen.urlimo);
+        }
+        const rutas = archivosViejos.map((u) => decodeURIComponent(u.split(`/object/public/${BUCKET_FOTOS}/`)[1] || "")).filter(Boolean);
+        if (rutas.length) await borrarArchivoStorage(BUCKET_FOTOS, rutas).catch(() => {});
+        resultados[id] = { ok: true, fallasFotos: fallas.n };
       } catch (e) { resultados[id] = { ok: false, error: mensajeError(e) }; }
       setEstado({ corriendo: true, hecho: false, resultados: { ...resultados } });
     }
@@ -249,6 +292,7 @@ export default function InformacionTorito({ abierto, modelos, onClose, onHecho }
                     </details>
                   )}
                   {r && !r.ok && <p className="mt-1 text-[12.5px] font-medium text-acento">{r.error}</p>}
+                  {r?.fallasFotos > 0 && <p className="mt-1 text-[12.5px] text-amber-700 dark:text-amber-300">{r.fallasFotos} foto{r.fallasFotos === 1 ? "" : "s"} no se pudo copiar: quedó su enlace a torito.pe y se volverá a intentar la próxima vez.</p>}
                 </div>
                 {r && <Pill tono={r.ok ? "verde" : "rojo"}>{r.ok ? "Guardado" : "No se guardó"}</Pill>}
               </li>

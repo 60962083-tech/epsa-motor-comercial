@@ -1,252 +1,142 @@
-// HU-030 · Evidencia de un documento recibido por correo y resolución de sus incidencias
-// Muestra la factura, sus fechas (emisión, recepción e importación), líneas, unidades, compras y el historial,
-// con cada operación atribuida al proceso automático o a la persona que la resolvió.
-import { useMemo, useState } from "react";
+// HU-030 · Detalle de una factura recibida (gerente y administradora)
+// Muestra cada línea de la factura (motos, accesorios y lo que quedó por revisar), las motos que entraron al inventario
+// con su ubicación, la compra vinculada y cada intento de procesamiento. Desde aquí se abre el PDF o el XML guardados
+// y se vuelve a procesar la factura después de asignar un código de Crosland (sin duplicar nada).
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { Link } from "../../components/dashboard/LinkPanel";
+import { MODO_REAL } from "../../lib/config";
+import { BUCKET_FACTURAS, documentoRecibidoApi, urlFirmadaStorage } from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
-import { abrirBlob, archivoDocumentoApi, documentoApi, reintentarDocumentoApi, resolverDocumentoApi, sinRespuesta, useConsultaCentral } from "../../servicios/central";
-import { Aviso, Campo, Card, Modal, PageHeader, btnMini, useConfirm, useToast } from "../../components/ui";
-import { EstadoConexion, Pill } from "../../components/dashboard/Sprint2";
-import { AvisoConexion, BarraActualizacion, ColorUnidad, fechaCompleta } from "../../components/dashboard/Central";
-import { TONO_DOCUMENTO } from "./FacturasRecibidas.HU-030";
+import { useConsultaCentral } from "../../servicios/central";
+import { ESTADO_DOCUMENTO, TONO_DOCUMENTO, reprocesarFactura, textoCodigo } from "../../servicios/facturas";
+import { Aviso, Card, PageHeader, Tabla, Vacio, btnMini, useToast } from "../../components/ui";
+import { Pill } from "../../components/dashboard/Sprint2";
+import { AvisoConexion, BarraActualizacion, capital, fechaCompleta } from "../../components/dashboard/Central";
+import SeccionPendiente from "../../components/dashboard/SeccionPendiente";
 
-const TONO_LINEA = { Importada: "verde", Excluida: "gris", "Pendiente de revisión": "ambar", Error: "rojo", Recibida: "gris" };
-const ABIERTO = ["Pendiente de revisión", "Error", "Recibido"];
+const soles = (n) => (n == null || n === "" ? "—" : `S/ ${Number(n).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+const fecha = (d) => (d ? new Date(`${String(d).slice(0, 10)}T12:00:00`).toLocaleDateString("es-PE", { day: "numeric", month: "short", year: "numeric" }).replace(".", "") : "—");
+const TONO_LINEA = { Procesada: "verde", Revision: "naranja", Error: "rojo", Pendiente: "gris", Omitida: "gris" };
+const ESTADO_LINEA = { Procesada: "Lista", Revision: "Por revisar", Error: "Error", Pendiente: "Pendiente", Omitida: "Omitida" };
 
-export default function FacturaRecibidaRuta() {
+export default function FacturaRecibida() {
   const { id } = useParams();
-  return <FacturaRecibida key={id} id={id} />;
-}
-
-function FacturaRecibida({ id }) {
-  const toast = useToast(); const confirmar = useConfirm();
-  const valido = /^[1-9]\d{0,18}$/.test(String(id));
-  const consulta = useConsultaCentral(() => documentoApi(id), [id], { activo: valido });
-  const d = consulta.data;
-  const [resolver, setResolver] = useState(null);
-  const [trabajando, setTrabajando] = useState(false);
-  const candidatos = useMemo(() => {
-    const m = new Map();
-    for (const l of d?.lineas || []) for (const c of l.detalle?.candidatos || []) m.set(c.codcom, c);
-    return [...m.values()];
-  }, [d]);
-  const codigosSinEquivalencia = useMemo(() => [...new Set((d?.lineas || []).filter((l) => l.estado === "Pendiente de revisión" && /equivalencia/i.test(l.motivo || "")).map((l) => l.codigo_material).filter(Boolean))], [d]);
-
-  if (!valido || (consulta.error?.status === 404 && !consulta.error?.detalle?.sinRuta && !d)) return <div className="space-y-3"><Aviso tipo="error">No encontramos ese documento.</Aviso><Link className="btn btn-secondary" to="/admin/facturas-recibidas">Volver a facturas recibidas</Link></div>;
-  if (!d) return <div><AvisoConexion consulta={consulta} que="el documento" />{!consulta.error && <p className="py-10 text-center text-slate-400">Cargando el documento…</p>}</div>;
-
-  const abierto = ABIERTO.includes(d.estado);
-  async function archivo(tipo, descargar) {
-    try { abrirBlob(await archivoDocumentoApi(d.coddoc, tipo), descargar); }
-    catch (er) { toast(mensajeError(er), "error"); }
-  }
-  async function reintentar() {
-    if (!(await confirmar({ titulo: "¿Reintentar la importación?", texto: "Se vuelve a procesar el XML guardado con las equivalencias y compras actuales. No duplica compras ni motos ya registradas.", boton: "Reintentar" }))) return;
-    setTrabajando(true);
-    try { const r = await reintentarDocumentoApi(d.coddoc); toast(r.message || "Reintento terminado"); }
-    catch (er) { toast(sinRespuesta(er) ? "No se pudo confirmar el resultado. Actualiza para ver el estado vigente." : mensajeError(er), "error"); }
-    finally { setTrabajando(false); consulta.refrescar(true); }
-  }
-
-  return (
-    <div>
-      <PageHeader titulo={`Factura ${d.numero || "sin número legible"}`} subtitulo={`${d.razon_emisor || "Emisor sin leer"}${d.ruc_emisor ? `, RUC ${d.ruc_emisor}` : ""}`}>
-        <EstadoConexion hu="HU-030" consulta={consulta} />
-        <BarraActualizacion consulta={consulta} />
-        <Link to="/admin/facturas-recibidas" className="btn btn-secondary !py-2.5">Facturas recibidas</Link>
-      </PageHeader>
-      <AvisoConexion consulta={consulta} que="el documento" />
-
-      <Card className="mb-6" data-estado-documento={d.estado}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <Pill tono={TONO_DOCUMENTO[d.estado]}>{d.estado}</Pill>
-            {d.motivo && <p className="mt-2 max-w-3xl text-[14px] text-slate-700 dark:text-white/80">{d.motivo}</p>}
-            {d.estado === "Importado" && <p className="mt-2 text-[14px] text-slate-600 dark:text-white/70">Se registraron {d.unidades_registradas} moto{Number(d.unidades_registradas) === 1 ? "" : "s"} en {d.unidades?.[0]?.ubicacion?.nomubi || "Ancón"}. La factura no significa recepción en una sede, armado terminado ni moto lista para entrega.</p>}
-            {d.resuelto_por && <p className="mt-1 text-[12.5px] text-slate-400">Resuelto por {d.resuelto_por}{d.fecha_resolucion ? ` el ${fechaCompleta(d.fecha_resolucion)}` : ""}.</p>}
-          </div>
-          {abierto && (
-            <div className="flex flex-wrap gap-2">
-              {d.tiene_xml && <button className="btn btn-primary !py-2" disabled={trabajando} onClick={reintentar}>{trabajando ? "Reintentando…" : "Reintentar importación"}</button>}
-              <button className="btn btn-secondary !py-2" onClick={() => setResolver({ accion: candidatos.length ? "vincular" : "manual" })}>Resolver incidencia</button>
-            </div>
-          )}
-        </div>
-        {abierto && codigosSinEquivalencia.length > 0 && (
-          <div className="mt-4"><Aviso tipo="aviso">Falta confirmar qué modelo es {codigosSinEquivalencia.length === 1 ? "el código" : "los códigos"} <b className="font-mono">{codigosSinEquivalencia.join(", ")}</b>. {codigosSinEquivalencia.map((c) => <Link key={c} className="ml-1 font-semibold underline" to={`/admin/facturas-recibidas?pestana=equivalencias&codigo=${encodeURIComponent(c)}`}>Confirmar {c}</Link>)}. Después reintenta la importación.</Aviso></div>
-        )}
-        {abierto && candidatos.length > 0 && <div className="mt-4"><Aviso tipo="aviso">Hay compras manuales previas del mismo modelo y color. Indica si esta factura corresponde a una de ellas o si es una compra nueva: el sistema no elige por fecha, color ni nombre.</Aviso></div>}
-        {abierto && !d.tiene_xml && <div className="mt-4"><Aviso tipo="aviso">El correo no trajo el XML de la factura o no se pudo leer. No se registran motos sin ese dato: regístralas a mano en Compras a proveedor o pide que reenvíen el correo con el XML.</Aviso></div>}
-      </Card>
-
-      <div className="grid gap-6 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <h2 className="font-bold text-marino dark:text-white">Datos de la factura</h2>
-          <dl className="mt-3 grid gap-x-6 gap-y-3 text-[13.5px] sm:grid-cols-2">
-            {[["Número", d.numero], ["Tipo de documento", d.tipo_documento === "01" ? "Factura (01)" : d.tipo_documento], ["Emisor", `${d.razon_emisor || "—"}${d.ruc_emisor ? `, RUC ${d.ruc_emisor}` : ""}`], ["Receptor", d.ruc_receptor ? `RUC ${d.ruc_receptor}` : "—"],
-              ["Fecha de emisión", d.fecha_emision || "—"], ["Moneda", d.moneda || "—"], ["Pedidos", (d.pedidos?.length ? d.pedidos : [...new Set((d.lineas || []).map((l) => l.pedido).filter(Boolean))]).join(", ") || "—"], ["Intentos de proceso", `${d.intentos}${d.ultimo_intento ? `, el último ${fechaCompleta(d.ultimo_intento)}` : ""}`]].map(([k, v]) => (
-              <div key={k}><dt className="text-slate-400">{k}</dt><dd className="font-semibold text-marino dark:text-white">{v || "—"}</dd></div>
-            ))}
-          </dl>
-        </Card>
-        <Card>
-          <h2 className="font-bold text-marino dark:text-white">Correo y archivos</h2>
-          <dl className="mt-3 space-y-2 text-[13px]">
-            <div><dt className="text-slate-400">Recibido en Gmail</dt><dd className="font-semibold text-marino dark:text-white">{fechaCompleta(d.correo?.recibido) || "—"}</dd></div>
-            <div><dt className="text-slate-400">Registrado en el sistema</dt><dd className="font-semibold text-marino dark:text-white">{fechaCompleta(d.fecha_registro)}</dd></div>
-            <div><dt className="text-slate-400">Importado</dt><dd className="font-semibold text-marino dark:text-white">{d.fecha_importacion ? fechaCompleta(d.fecha_importacion) : "Todavía no"}</dd></div>
-            <div><dt className="text-slate-400">Remitente</dt><dd className="break-all">{d.correo?.remitente || "—"}</dd></div>
-            <div><dt className="text-slate-400">Asunto</dt><dd>{d.correo?.asunto || "—"}</dd></div>
-          </dl>
-          <p className="mt-2 text-[12px] text-slate-400">La importación no es la hora del pago a Crosland.</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {d.tiene_pdf ? <><button className={btnMini} onClick={() => archivo("pdf", false)}>Ver PDF</button><button className={btnMini} onClick={() => archivo("pdf", true)}>Descargar PDF</button></> : <span className="text-[12.5px] text-slate-400">Sin PDF</span>}
-            {d.tiene_xml && <button className={btnMini} onClick={() => archivo("xml", true)}>Descargar XML</button>}
-          </div>
-          {d.reenvio_distinto && <p className="mt-3 text-[12.5px] font-semibold text-amber-700">Llegó otra versión de esta factura con contenido distinto. Se conservó la primera; revisa el correo.</p>}
-        </Card>
-      </div>
-
-      <Card className="mt-6 !p-0">
-        <div className="px-5 pt-5"><h2 className="font-bold text-marino dark:text-white">Líneas del XML</h2><p className="text-[12.5px] text-slate-500">Las motos se reconocen por su código de material y una equivalencia verificada; aceites, accesorios y bonificaciones quedan excluidos.</p></div>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[820px] text-left text-[13px]">
-            <thead className="bg-slate-50 text-[12px] text-slate-500 dark:bg-white/5"><tr>{["#", "Código", "Descripción", "Cant.", "Pedido", "Modelo y color", "Motor / chasis", "Resultado"].map((c) => <th key={c} className="px-4 py-2.5 font-semibold">{c}</th>)}</tr></thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-white/10">
-              {(d.lineas || []).map((l) => (
-                <tr key={l.coddli} className="align-top" data-linea={l.numero_linea} data-estado={l.estado}>
-                  <td className="px-4 py-2.5 text-slate-400">{l.numero_linea}</td>
-                  <td className="px-4 py-2.5 font-mono text-[12.5px]">{l.codigo_material || "—"}</td>
-                  <td className="max-w-[220px] px-4 py-2.5">{l.descripcion}</td>
-                  <td className="px-4 py-2.5">{l.cantidad}</td>
-                  <td className="px-4 py-2.5 font-mono text-[12.5px]">{l.pedido || "—"}</td>
-                  <td className="px-4 py-2.5">{l.modelo?.nommod || (l.es_vehiculo ? <span className="text-amber-700">Sin equivalencia</span> : "—")}{l.color && <span className="block text-[12px] text-slate-400"><ColorUnidad color={l.color} /></span>}</td>
-                  <td className="px-4 py-2.5 font-mono text-[12px]">{(l.motores || []).map((m, i) => <span key={m} className="block">{m}{l.chasis?.[i] ? ` / ${l.chasis[i]}` : ""}</span>)}{!(l.motores || []).length && "—"}</td>
-                  <td className="max-w-[260px] px-4 py-2.5"><Pill tono={TONO_LINEA[l.estado] || "gris"}>{l.estado}</Pill>{l.motivo && <span className="mt-1 block text-[12px] text-slate-500">{l.motivo}</span>}{l.codcom && <Link className="mt-1 block text-[12px] font-semibold text-marino-700 hover:underline dark:text-white" to={`/admin/compras/${l.codcom}`}>Compra N° {l.codcom}</Link>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {(d.lineas || []).length === 0 && <p className="px-5 pb-5 text-[13px] text-slate-400">No se pudieron leer líneas de este documento.</p>}
-      </Card>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <Card>
-          <h2 className="mb-3 font-bold text-marino dark:text-white">Motos registradas ({(d.unidades || []).length})</h2>
-          {(d.unidades || []).length === 0 ? <p className="text-[13px] text-slate-400">Este documento no registró motos.</p> : (
-            <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-white/10">
-              <table className="w-full text-left text-[13px]">
-                <thead className="bg-slate-50 text-[12px] text-slate-500 dark:bg-white/5"><tr>{["Motor", "Chasis / VIN", "Modelo y ubicación"].map((c) => <th key={c} className="whitespace-nowrap px-3 py-2.5 font-semibold">{c}</th>)}</tr></thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-white/10">
-                  {d.unidades.map((u) => (
-                    <tr key={u.coduni} className="align-top">
-                      <td className="px-3 py-2.5"><Link className="font-mono font-semibold text-marino hover:underline dark:text-white" to={`/admin/inventario/${u.coduni}`}>{u.nummotuni}</Link>{u.pedido && <span className="block text-[11.5px] text-slate-400">Pedido {u.pedido}</span>}</td>
-                      <td className="break-all px-3 py-2.5 font-mono text-[12px]">{u.chauni}{u.vinuni && u.vinuni !== u.chauni ? <span className="block text-slate-400">{u.vinuni}</span> : null}</td>
-                      <td className="px-3 py-2.5">{u.nommod}<span className="block text-[12px] text-slate-400"><ColorUnidad color={u.coluni} />, {u.ubicacion?.nomubi || "sin ubicación"}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {(d.compras || []).length > 0 && (
-            <div className="mt-4 space-y-1.5 text-[13px]">
-              {d.compras.map((c) => <p key={c.codcom}><Link className="font-semibold text-marino-700 hover:underline dark:text-white" to={`/admin/compras/${c.codcom}`}>Compra N° {c.codcom}</Link> · {c.origen === "Automático" ? "creada por la importación" : "manual previa completada"} · {c.nommod}, {c.colcom}, {c.cancom} moto{c.cancom === 1 ? "" : "s"} · {c.estcom}</p>)}
-            </div>
-          )}
-        </Card>
-        <Card>
-          <h2 className="mb-3 font-bold text-marino dark:text-white">Historial del documento</h2>
-          {(d.eventos || []).length === 0 ? <p className="text-[13px] text-slate-400">Sin eventos.</p> : (
-            <ol className="space-y-3 border-l-2 border-slate-200 pl-4 dark:border-white/15">
-              {d.eventos.map((e, i) => (
-                <li key={i} className="relative text-[13px]">
-                  <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-marino dark:bg-white" />
-                  <p className="font-semibold text-marino dark:text-white">{e.tipo}: {e.resultado}</p>
-                  <p className="text-[12px] text-slate-400">{fechaCompleta(e.fecha)}, {e.autor}</p>
-                  {e.detalle && <p className="text-[12.5px] text-slate-500">{e.detalle}</p>}
-                </li>
-              ))}
-            </ol>
-          )}
-        </Card>
-      </div>
-
-      <ModalResolver datos={resolver ? { documento: d, candidatos, accion: resolver.accion } : null} onClose={() => setResolver(null)} onHecho={() => consulta.refrescar(true)} />
-    </div>
-  );
-}
-
-// Resolver una incidencia: vincular a una compra manual, registrar como compra nueva, resolver a mano o descartar
-function ModalResolver({ datos, onClose, onHecho }) {
   const toast = useToast();
-  const [accion, setAccion] = useState(datos?.accion || "manual");
-  const [codcom, setCodcom] = useState("");
-  const [motivo, setMotivo] = useState("");
-  const [err, setErr] = useState({}); const [enviando, setEnviando] = useState(false);
-  const clave = datos ? `${datos.documento.coddoc}|${datos.accion}` : "";
-  const [vista, setVista] = useState("");
-  if (datos && vista !== clave) { setVista(clave); setAccion(datos.accion); setCodcom(""); setMotivo(""); setErr({}); }
-  if (!datos) return null;
-  const { documento: d, candidatos } = datos;
-  const opciones = [
-    ...(candidatos.length ? [{ id: "vincular", t: "Corresponde a una compra manual previa", x: "Completa esa compra con esta factura; no se cuenta dos veces." }, { id: "nueva", t: "Es una compra nueva", x: "Se registra una compra aparte para estas motos." }] : []),
-    { id: "manual", t: "Resolver a mano", x: "La compra y su factura se registran a mano en Compras a proveedor. El documento queda como resuelto manualmente." },
-    { id: "descartar", t: "Descartar", x: "No corresponde importarlo (por ejemplo, documento ajeno o duplicado). No se registra stock." },
-  ];
-  const largo = [...motivo.trim()].length;
-  function validar() {
-    const x = {};
-    if (!opciones.some((o) => o.id === accion)) x.accion = "Elige cómo resolverlo.";
-    if (accion === "vincular" && !codcom) x.codcom = "Elige la compra manual.";
-    if ((accion === "manual" || accion === "descartar") && largo < 5) x.motivo = "Explica el motivo (mínimo 5 caracteres).";
-    if (largo > 500) x.motivo = "Máximo 500 caracteres.";
-    setErr(x);
-    return Object.keys(x).length === 0;
+  const consulta = useConsultaCentral(() => documentoRecibidoApi(id), [id], { clave: `hu030-doc:${id}`, activo: MODO_REAL });
+  const [procesando, setProcesando] = useState(false);
+  if (!MODO_REAL) return <Aviso>Las facturas recibidas se ven con la base conectada.</Aviso>;
+  if (consulta.error?.detalle?.faltaSql) return <SeccionPendiente titulo="Factura recibida" />;
+  const d = consulta.data;
+
+  async function abrir(ruta) {
+    const ventana = window.open("", "_blank");
+    try { const url = await urlFirmadaStorage(BUCKET_FACTURAS, ruta); if (ventana) ventana.location.href = url; else window.open(url, "_blank"); }
+    catch (e) { ventana?.close(); toast(mensajeError(e), "error"); }
   }
-  async function guardar(e) {
-    e.preventDefault();
-    if (enviando || !validar()) return;
-    setEnviando(true);
+  async function reprocesar() {
+    setProcesando(true);
     try {
-      const r = await resolverDocumentoApi(d.coddoc, { accion, ...(accion === "vincular" ? { codcom } : {}), motivo: motivo.trim() || null });
-      toast(r.message || "Incidencia resuelta");
-      onHecho(); onClose();
-    } catch (er) {
-      if (er.status === 409) { setErr({ general: `${er.message}.` }); onHecho(); }
-      else setErr({ general: sinRespuesta(er) ? "No se pudo confirmar el resultado. Cierra y actualiza para ver el estado vigente antes de reintentar." : mensajeError(er) });
-    } finally { setEnviando(false); }
+      const r = await reprocesarFactura(d.rutaXml);
+      toast(`Factura procesada otra vez: ${ESTADO_DOCUMENTO[r.estadoDocumento] || r.estadoDocumento}, ${r.conteos?.importados || 0} moto(s) ingresada(s)`);
+      consulta.refrescar(true);
+    } catch (e) { toast(mensajeError(e), "error"); }
+    finally { setProcesando(false); }
   }
-  const elegido = opciones.find((o) => o.id === accion);
+
+  const porRevisar = (d?.lineas || []).filter((l) => l.estado === "Revision");
+  const motos = (d?.lineas || []).flatMap((l) => l.motos.map((m) => ({ ...m, linea: l.numero, codigo: l.codigo })));
   return (
-    <Modal abierto onClose={onClose} titulo={`Resolver ${d.numero || "documento"}`} ancho="max-w-xl"
-      confirmarGuardar={{ titulo: "¿Confirmar la resolución?", texto: `${elegido?.t}. ${elegido?.x}${accion === "vincular" && codcom ? ` Compra N° ${codcom}.` : ""} Quedará registrado con tu usuario.`, boton: "Confirmar", validar }}
-      pie={<><button className="btn btn-secondary !py-2" onClick={onClose}>Cancelar</button><button form="f-resolver" className="btn btn-primary !py-2" disabled={enviando}>{enviando ? "Guardando…" : "Confirmar"}</button></>}>
-      <form id="f-resolver" onSubmit={guardar} className="space-y-4" noValidate>
-        <fieldset className="space-y-2">
-          {opciones.map((o) => (
-            <label key={o.id} className={`block cursor-pointer rounded-xl border-2 p-3 transition ${accion === o.id ? "border-marino-700 bg-marino-50 dark:border-white/50 dark:bg-white/10" : "border-slate-200 dark:border-white/10"}`}>
-              <input type="radio" name="resolver" className="sr-only" checked={accion === o.id} onChange={() => setAccion(o.id)} />
-              <span className="block text-[14px] font-semibold text-marino dark:text-white">{o.t}</span><span className="block text-[12.5px] text-slate-500">{o.x}</span>
-            </label>
-          ))}
-          {err.accion && <p className="text-[12px] font-medium text-acento">{err.accion}</p>}
-        </fieldset>
-        {accion === "vincular" && (
-          <Campo etiqueta="Compra manual" error={err.codcom}>
-            <select id="resolver-compra" className="field-input" value={codcom} onChange={(e) => setCodcom(e.target.value)}>
-              <option value="">Elige la compra</option>
-              {candidatos.map((c) => <option key={c.codcom} value={c.codcom}>N° {c.codcom}: {c.cancom} moto{c.cancom === 1 ? "" : "s"}, {c.colcom}, registrada {c.feccom}{c.refcom ? `, pedido ${c.refcom}` : ", sin pedido"}</option>)}
-            </select>
-          </Campo>
+    <div data-factura-detalle>
+      <p className="mb-2 text-[13px]"><Link className="font-semibold text-marino-700 hover:underline dark:text-white" to="/admin/facturas-recibidas">← Facturas recibidas</Link></p>
+      <PageHeader titulo={d ? `Factura ${d.factura}` : "Factura"} subtitulo={d ? `${d.emisor?.nombre || "Crosland"} · emitida ${fecha(d.emitida)} · ${d.origen === "Correo" ? "llegó por correo" : "subida en el panel"}` : ""}>
+        <BarraActualizacion consulta={consulta} />
+      </PageHeader>
+      <AvisoConexion consulta={consulta} que="la factura" />
+      {consulta.error && !d && <Vacio titulo="No se encontró la factura" texto={mensajeError(consulta.error)} />}
+      {d && <>
+        <div className="mb-5 grid gap-4 lg:grid-cols-3">
+          <Card>
+            <p className="text-[12.5px] text-slate-400">Estado</p>
+            <div className="mt-1"><Pill tono={TONO_DOCUMENTO[d.estado] || "gris"}>{ESTADO_DOCUMENTO[d.estado] || d.estado}</Pill></div>
+            {d.error && <p className="mt-2 text-[13px] text-slate-600 dark:text-slate-300">{textoCodigo(d.error)}</p>}
+            {d.motivo && <p className="mt-1 text-[12.5px] text-slate-500">{d.motivo}</p>}
+            <p className="mt-3 text-[12.5px] text-slate-400">Recibida {d.recibida ? fechaCompleta(d.recibida) : "—"}</p>
+          </Card>
+          <Card>
+            <dl className="space-y-1 text-[13.5px]">
+              <div className="flex justify-between gap-3"><dt className="text-slate-400">Valor de venta</dt><dd>{soles(d.totales?.valorVenta)}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-slate-400">IGV</dt><dd>{soles(d.totales?.impuestos)}</dd></div>
+              <div className="flex justify-between gap-3 font-bold text-marino dark:text-white"><dt>Total</dt><dd>{soles(d.totales?.total)}</dd></div>
+              {Number(d.totales?.gratuitas) > 0 && <div className="flex justify-between gap-3"><dt className="text-slate-400">Bonificaciones</dt><dd>{soles(d.totales.gratuitas)}</dd></div>}
+            </dl>
+          </Card>
+          <Card>
+            <p className="text-[12.5px] text-slate-400">Archivos</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {d.rutaPdf ? <button className={btnMini} onClick={() => abrir(d.rutaPdf)} data-ver-pdf>Ver PDF</button> : <span className="text-[13px] text-slate-400">{d.pdfPendiente ? "PDF pendiente" : "Sin PDF"}</span>}
+              {d.rutaXml && <button className={btnMini} onClick={() => abrir(d.rutaXml)}>Ver XML</button>}
+            </div>
+            {porRevisar.length > 0 && d.rutaXml && (
+              <button className="btn btn-primary mt-3 !py-2" disabled={procesando} onClick={reprocesar} data-reprocesar>{procesando ? "Procesando…" : "Volver a procesar"}</button>
+            )}
+            {porRevisar.length > 0 && !d.rutaXml && <p className="mt-3 text-[12.5px] text-slate-500">Para volver a procesarla, súbela otra vez en «Subir factura».</p>}
+          </Card>
+        </div>
+
+        {porRevisar.length > 0 && (
+          <div className="mb-5" data-por-revisar><Aviso tipo="aviso">
+            <b>{porRevisar.length} línea{porRevisar.length === 1 ? "" : "s"} por revisar.</b>{" "}
+            {porRevisar.map((l) => `Línea ${l.numero}${l.codigo ? ` (${l.codigo})` : ""}: ${textoCodigo(l.motivo)}`).join(" ")}{" "}
+            {porRevisar.some((l) => /EQUIVALENCIA|SIN_EQUIVALENCIA/.test(l.motivo || "")) && <Link className="font-semibold underline" to={`/admin/facturas-recibidas?pestana=codigos&codigo=${encodeURIComponent(porRevisar.find((l) => l.codigo)?.codigo || "")}`}>Asignar el código</Link>}
+          </Aviso></div>
         )}
-        <Campo etiqueta={accion === "manual" || accion === "descartar" ? "Motivo" : "Comentario (opcional)"} error={err.motivo} ayuda={`${largo}/500`}>
-          <textarea id="resolver-motivo" className="field-input" rows={2} maxLength={520} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
-        </Campo>
-        {err.general && <Aviso tipo="error">{err.general}</Aviso>}
-      </form>
-    </Modal>
+        {(d.advertencias || []).some((c) => c !== "ENCODING_DECLARADO_NO_COINCIDE") && <p className="mb-4 text-[12.5px] text-slate-500">{d.advertencias.filter((c) => c !== "ENCODING_DECLARADO_NO_COINCIDE").map(textoCodigo).join(" ")}</p>}
+
+        <h2 className="mb-2 font-semibold text-marino dark:text-white">Motos de la factura</h2>
+        {motos.length === 0 ? <Vacio titulo="La factura no trae motos" /> : (
+          <Tabla columnas={["Línea", "Motor", "Chasis", "Color", "Ingresó al inventario", "Ubicación"]}>
+            {motos.map((m) => (
+              <tr key={`${m.linea}-${m.orden}`} data-moto-factura={m.motor}>
+                <td className="px-4 py-3 text-slate-500">{m.linea}<span className="block text-[12px]">{m.codigo}</span></td>
+                <td className="px-4 py-3 font-semibold text-marino dark:text-white">{m.motor || "—"}</td>
+                <td className="px-4 py-3">{m.chasis || "—"}</td>
+                <td className="px-4 py-3">{capital(m.color)}</td>
+                <td className="px-4 py-3">{m.coduni ? <Link className="font-semibold text-marino-700 hover:underline dark:text-white" to={`/admin/inventario/${m.coduni}`}>{m.modelo} · N° {m.coduni}</Link> : <span className="text-orange-700 dark:text-orange-300">{m.motivo ? textoCodigo(m.motivo) : "Todavía no"}</span>}</td>
+                <td className="px-4 py-3">{m.ubicacion || "—"}</td>
+              </tr>
+            ))}
+          </Tabla>
+        )}
+
+        <h2 className="mb-2 mt-6 font-semibold text-marino dark:text-white">Compra registrada</h2>
+        {d.compras.length === 0 ? <p className="text-[13.5px] text-slate-500">Todavía no hay compra vinculada.</p> : (
+          <div className="flex flex-wrap gap-2">{d.compras.map((c) => (
+            <Link key={c.codcom} className="btn btn-secondary !py-2" to={`/admin/compras/${c.codcom}`} data-compra-factura={c.codcom}>Compra N° {c.codcom} · {c.cantidad} {c.modelo} {capital(c.color)} {c.vinculo === "Conciliado" ? "(registrada a mano)" : ""}</Link>
+          ))}</div>
+        )}
+
+        <h2 className="mb-2 mt-6 font-semibold text-marino dark:text-white">Líneas de la factura</h2>
+        <Tabla columnas={["N°", "Código", "Descripción", "Cant.", "Es", "Estado"]}>
+          {d.lineas.map((l) => (
+            <tr key={l.numero} className="align-top" data-linea={l.numero}>
+              <td className="px-4 py-3 text-slate-500">{l.numero}</td>
+              <td className="px-4 py-3 font-mono text-[12.5px]">{l.codigo || "—"}</td>
+              <td className="px-4 py-3">{l.descripcion}{l.gratuita && <span className="block text-[12px] text-slate-400">Bonificación</span>}</td>
+              <td className="px-4 py-3">{Number(l.cantidad)}</td>
+              <td className="px-4 py-3">{l.clasificacion === "Vehiculo" ? "Moto" : l.clasificacion === "Accesorio" ? "Accesorio" : "Desconocido"}</td>
+              <td className="px-4 py-3"><Pill tono={TONO_LINEA[l.estado] || "gris"}>{ESTADO_LINEA[l.estado] || l.estado}</Pill>{l.motivo && <span className="mt-1 block max-w-[16rem] text-[12px] text-slate-500">{textoCodigo(l.motivo)}</span>}</td>
+            </tr>
+          ))}
+        </Tabla>
+
+        <h2 className="mb-2 mt-6 font-semibold text-marino dark:text-white">Historial de procesamiento</h2>
+        <ol className="space-y-2 border-l-2 border-slate-200 pl-4 text-[13.5px] dark:border-white/15" data-intentos>
+          {d.intentos.map((i, n) => (
+            <li key={n}><span className="text-slate-400">{fechaCompleta(i.inicio)} · {i.actor}</span><br />{i.resultado === "Exito" ? "Procesada" : i.resultado === "Parcial" ? "Procesada en parte" : i.resultado} · {i.ingresadas} de {i.motos} moto{Number(i.motos) === 1 ? "" : "s"} ingresada{Number(i.motos) === 1 ? "" : "s"}{Number(i.revision) ? `, ${i.revision} por revisar` : ""}{i.error ? ` · ${textoCodigo(i.error)}` : ""}</li>
+          ))}
+        </ol>
+      </>}
+    </div>
   );
 }

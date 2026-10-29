@@ -17,3 +17,13 @@ export function crearClienteSupabase(token: string) {
   });
 }
 
+/** Cliente privilegiado exclusivo del backend para la integración HU-030. */
+export function crearClienteIntegracionSupabase() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) throw new Error('Integración técnica no configurada');
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+  });
+}
+
