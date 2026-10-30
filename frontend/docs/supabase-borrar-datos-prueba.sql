@@ -23,23 +23,53 @@ SELECT 'Moto', u.coduni::text, u.nummotuni || ' / ' || u.chauni
 FROM public.unidad u JOIN public.factura_compra f ON f.codcom = u.codcom
 WHERE f.numero ILIKE 'F999-%';
 
--- 2. Borrar
+-- 2. Borrar (también lo que cuelga de esos registros: seguimiento, historial, preparación, movimientos…;
+--    la base dice qué tablas dependen de cada uno, así sirve aunque se agreguen tablas nuevas)
 BEGIN;
 
--- Interesados de prueba
-DELETE FROM public.seguimientolead WHERE codlea IN (SELECT codlea FROM public.lead WHERE nomlea ILIKE 'prueba %');
-DELETE FROM public.asignacionlead WHERE codlea IN (SELECT codlea FROM public.lead WHERE nomlea ILIKE 'prueba %');
-DELETE FROM public.lead WHERE nomlea ILIKE 'prueba %';
+CREATE OR REPLACE FUNCTION pg_temp.epsa_borrar(p_tabla regclass, p_filtro text, p_nivel integer DEFAULT 0)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE r record;
+BEGIN
+  IF p_nivel < 6 THEN
+    FOR r IN
+      SELECT c.conrelid::regclass AS hija,
+        (SELECT string_agg(quote_ident(a.attname), ', ' ORDER BY k.n) FROM unnest(c.conkey) WITH ORDINALITY k(att, n)
+           JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.att) AS cols_hija,
+        (SELECT string_agg(quote_ident(a.attname), ', ' ORDER BY k.n) FROM unnest(c.confkey) WITH ORDINALITY k(att, n)
+           JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.att) AS cols_padre
+      FROM pg_constraint c
+      WHERE c.contype = 'f' AND c.confrelid = p_tabla AND c.conrelid <> p_tabla AND c.confdeltype IN ('a', 'r')
+    LOOP
+      PERFORM pg_temp.epsa_borrar(r.hija,
+        format('(%s) IN (SELECT %s FROM %s WHERE %s)', r.cols_hija, r.cols_padre, p_tabla, p_filtro), p_nivel + 1);
+    END LOOP;
+  END IF;
+  EXECUTE format('DELETE FROM %s WHERE %s', p_tabla, p_filtro);
+END;
+$$;
 
--- Compras de prueba (factura F999-…) con sus motos y movimientos
-CREATE TEMP TABLE compras_prueba ON COMMIT DROP AS
-  SELECT codcom FROM public.factura_compra WHERE numero ILIKE 'F999-%';
-DELETE FROM public.movimientoubicacion WHERE coduni IN (SELECT coduni FROM public.unidad WHERE codcom IN (SELECT codcom FROM compras_prueba));
-DELETE FROM public.separacion WHERE coduni IN (SELECT coduni FROM public.unidad WHERE codcom IN (SELECT codcom FROM compras_prueba));
-DELETE FROM public.venta WHERE coduni IN (SELECT coduni FROM public.unidad WHERE codcom IN (SELECT codcom FROM compras_prueba));
-DELETE FROM public.unidad WHERE codcom IN (SELECT codcom FROM compras_prueba);
-DELETE FROM public.factura_compra WHERE codcom IN (SELECT codcom FROM compras_prueba);
-DELETE FROM public.compra WHERE codcom IN (SELECT codcom FROM compras_prueba);
+DO $$
+DECLARE v_compras bigint[];
+BEGIN
+  -- El historial de preparación no se puede borrar (es de solo lectura); solo para quitar datos de prueba
+  -- se suspende su protección dentro de esta misma operación y se vuelve a activar al final.
+  IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hu033_historial_preparacion_inmutable') THEN
+    EXECUTE 'ALTER TABLE public.historialpreparacionunidad DISABLE TRIGGER hu033_historial_preparacion_inmutable';
+  END IF;
+  -- Interesados de prueba
+  PERFORM pg_temp.epsa_borrar('public.lead', $f$nomlea ILIKE 'prueba %'$f$);
+  -- Compras de prueba (factura F999-…) con sus motos
+  SELECT coalesce(array_agg(codcom), '{}') INTO v_compras FROM public.factura_compra WHERE numero ILIKE 'F999-%';
+  PERFORM pg_temp.epsa_borrar('public.unidad', format('codcom = ANY (%L::bigint[])', v_compras));
+  PERFORM pg_temp.epsa_borrar('public.compra', format('codcom = ANY (%L::bigint[])', v_compras));
+  IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hu033_historial_preparacion_inmutable') THEN
+    EXECUTE 'ALTER TABLE public.historialpreparacionunidad ENABLE TRIGGER hu033_historial_preparacion_inmutable';
+  END IF;
+END;
+$$;
 
 COMMIT;
 

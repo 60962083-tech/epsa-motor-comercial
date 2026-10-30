@@ -15,7 +15,6 @@ import { fechaLocal, soloDigitos } from "../../lib/validar";
 import { emparejarModelos } from "../../lib/modelos";
 import useAutoRefresco from "../../hooks/useAutoRefresco";
 import { REFRESCO_MS } from "../../servicios/central";
-import { pedidoCompraApi } from "../../servicios/central";
 
 const PALETA = Object.keys(COLOR_HEX);
 
@@ -94,9 +93,9 @@ export default function RegistrarCompra() {
     setEnviando(true);
     try {
       const r = MODO_REAL ? await api.crearCompra(cuerpo, clave.current) : registrarLocal(cuerpo);
-      // HU-030: el pedido de Asiri permite vincular la factura que llegue por correo sin duplicar la compra
+      // El N° de pedido de Asiri se guarda con la compra (guardarPedidoApi, docs/supabase-sprint2-final.sql)
       if (MODO_REAL && f.pedido.trim() && r.data?.codcom) {
-        try { await pedidoCompraApi(r.data.codcom, f.pedido.trim()); }
+        try { await api.guardarPedidoApi(r.data.codcom, f.pedido.trim()); }
         catch (er) { toast(`Compra registrada, pero el N° de pedido no se guardó: ${mensajeError(er)} Agrégalo desde la compra.`, "error"); }
       }
       toast(r.status === 200 ? "Esa compra ya estaba registrada (mismo reintento): se muestra la misma." : MODO_REAL ? "Compra registrada como respaldo. Cuando llegue la factura por correo se completará sola si coincide el pedido y la cantidad." : "Compra registrada. Siguiente paso: registrar la factura y adjuntar el PDF.");

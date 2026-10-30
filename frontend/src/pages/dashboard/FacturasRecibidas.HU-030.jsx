@@ -1,5 +1,5 @@
 // HU-030 · Facturas recibidas (gerente y administradora)
-// Las facturas de Crosland llegan a Gmail y el proceso automático (Apps Script cada 15 minutos → API) las registra
+// Las facturas de Crosland llegan a Gmail y el proceso automático (Apps Script cada 5 minutos → API) las registra
 // solas: compra, una ficha por moto en Almacén Crosland Ancón y sin duplicados. Aquí se ven todas, sus motos y lo
 // que quedó por revisar; también se puede subir una factura (XML y PDF) y asignar los códigos de producto de
 // Crosland a cada modelo. Todo se lee y guarda en la base central (docs/supabase-sprint2-mejoras.sql).
@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Link } from "../../components/dashboard/LinkPanel";
 import { MODO_REAL } from "../../lib/config";
-import { codigosCroslandApi, desactivarCodigoCroslandApi, documentosRecibidosApi, guardarCodigoCroslandApi, modelosAdminApi, recepcionesConErrorApi } from "../../lib/api";
+import { codigosCroslandApi, correosRecibidosApi, desactivarCodigoCroslandApi, documentosRecibidosApi, guardarCodigoCroslandApi, modelosAdminApi, recepcionesConErrorApi } from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
 import { useConsultaCentral } from "../../servicios/central";
 import { ESTADO_DOCUMENTO, TONO_DOCUMENTO, leerFactura, prepararFactura, registrarFactura, textoCodigo } from "../../servicios/facturas";
@@ -36,13 +36,14 @@ export default function FacturasRecibidas() {
   }
   return (
     <div data-hu030>
-      <PageHeader titulo="Facturas recibidas" subtitulo="Las facturas de Crosland llegan al correo y cada 15 minutos se registran solas: la compra y una ficha por moto en Almacén Crosland Ancón. También puedes subir una factura aquí." />
+      <PageHeader titulo="Facturas recibidas" subtitulo="Las facturas de Crosland llegan al correo y cada 5 minutos se registran solas: la compra y una ficha por moto en Almacén Crosland Ancón. Esta lista se actualiza sola. También puedes subir una factura aquí." />
       <div className="mb-5">
         <Pestanas etiqueta="Secciones" valor={pestana} onCambio={cambiar} opciones={[
-          { id: "facturas", label: "Facturas" }, { id: "subir", label: "Subir factura" }, { id: "codigos", label: "Códigos de Crosland" },
+          { id: "facturas", label: "Facturas" }, { id: "correos", label: "Correos recibidos" }, { id: "subir", label: "Subir factura" }, { id: "codigos", label: "Códigos de Crosland" },
         ]} />
       </div>
       {pestana === "facturas" && <Facturas />}
+      {pestana === "correos" && <CorreosRecibidos />}
       {pestana === "subir" && <SubirFactura />}
       {pestana === "codigos" && <CodigosCrosland codigoInicial={params.get("codigo") || ""} />}
     </div>
@@ -84,7 +85,7 @@ function Facturas() {
         </div>
       </Card>
       {consulta.data && lista.length === 0 ? (
-        <Vacio titulo={docs.length ? "No hay facturas con ese filtro" : "Todavía no hay facturas recibidas"} texto={docs.length ? "Cambia el filtro o la búsqueda." : "Llegan solas desde el correo cada 15 minutos. También puedes subir una en «Subir factura»."} />
+        <Vacio titulo={docs.length ? "No hay facturas con ese filtro" : "Todavía no hay facturas recibidas"} texto={docs.length ? "Cambia el filtro o la búsqueda." : "Llegan solas desde el correo cada 5 minutos. También puedes subir una en «Subir factura»."} />
       ) : consulta.data && (
         <Tabla columnas={["Recibida", "Factura", "Origen", "Motos", "Total", "Estado", ""]}>
           {lista.map((d) => (
@@ -108,6 +109,57 @@ function Facturas() {
             {errores.data.slice(0, 10).map((r) => <li key={r.codrec} className="flex flex-wrap gap-x-3"><span className="text-slate-400">{fechaCompleta(r.recibida)}</span><span>{textoCodigo(r.error)}</span></li>)}
           </ul>
         </Card>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Correos recibidos: cada correo con factura que leyó el proceso automático y cómo quedó
+// (los mismos estados que el proceso marca como etiquetas en Gmail)
+// ---------------------------------------------------------------------------------------------
+const TONO_CORREO = { Procesado: "verde", "En revisión": "naranja", Pendiente: "celeste", Error: "rojo" };
+const NOTA_CORREO = {
+  Procesado: "La factura se registró con su compra y sus motos.",
+  "En revisión": "La factura se registró, pero hay líneas o motos por revisar.",
+  Pendiente: "Se está procesando; el proceso lo vuelve a revisar solo.",
+  Error: "No se pudo procesar. El proceso lo reintenta; si sigue, revisa el correo.",
+};
+function CorreosRecibidos() {
+  const consulta = useConsultaCentral(async () => {
+    try { return { lista: await correosRecibidosApi(), completo: true }; }
+    catch (e) {
+      if (!e?.detalle?.faltaSql) throw e;
+      const errores = await recepcionesConErrorApi();
+      return { lista: (errores || []).map((r) => ({ ...r, recibido: r.recibida, estado: "Error" })), completo: false };
+    }
+  }, [], { clave: "hu030-correos" });
+  const lista = consulta.data?.lista || [];
+  const cuenta = (e) => lista.filter((c) => c.estado === e).length;
+  return (
+    <div data-correos>
+      <AvisoConexion consulta={consulta} que="los correos recibidos" />
+      <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {["Procesado", "En revisión", "Pendiente", "Error"].map((e) => <Stat key={e} etiqueta={e} valor={consulta.data ? cuenta(e) : "—"} tono={{ Procesado: "verde", "En revisión": "ambar", Error: "rojo" }[e] || "marino"} nota={NOTA_CORREO[e]} />)}
+      </div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[13px] text-slate-500">El proceso revisa el correo de compras cada 5 minutos y deja cada correo con una de estas etiquetas.{lista[0] ? ` Último correo: ${fechaCompleta(lista[0].recibido)}.` : ""}</p>
+        <BarraActualizacion consulta={consulta} />
+      </div>
+      {consulta.data && !consulta.data.completo && <div className="mb-3"><Aviso tipo="aviso">Se muestran solo los correos con error. Para ver todos, ejecuta en Supabase el SQL de mejoras finales.</Aviso></div>}
+      {consulta.data && lista.length === 0 ? <Vacio titulo="Todavía no llegan correos con facturas" texto="Cuando llegue un correo con el XML y el PDF de una factura de Crosland, aparecerá aquí en unos minutos." /> : consulta.data && (
+        <Tabla columnas={["Recibido", "Etiqueta", "Factura", "Motos", "Archivos", "Detalle"]}>
+          {lista.map((c) => (
+            <tr key={c.codrec} className="align-top" data-correo={c.estado}>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-500">{fechaCompleta(c.recibido)}{Number(c.revisiones) > 1 && <span className="block text-[12px] text-slate-400">Revisado {c.revisiones} veces, sin duplicar</span>}</td>
+              <td className="px-4 py-3"><Pill tono={TONO_CORREO[c.estado] || "gris"}>{c.estado}</Pill></td>
+              <td className="px-4 py-3">{c.coddoc ? <Link className="font-semibold text-marino hover:underline dark:text-white" to={`/admin/facturas-recibidas/${c.coddoc}`}>{c.factura}</Link> : <span className="text-slate-400">—</span>}</td>
+              <td className="px-4 py-3">{c.coddoc ? `${c.motos || 0} ingresada${Number(c.motos) === 1 ? "" : "s"}` : "—"}</td>
+              <td className="px-4 py-3 text-[12.5px]">{c.xml ? "XML" : ""}{c.xml && c.pdf ? " y " : ""}{c.pdf ? "PDF" : ""}{!c.xml && !c.pdf ? <span className="text-slate-400">Sin archivos</span> : ""}</td>
+              <td className="max-w-[22rem] px-4 py-3 text-[12.5px] text-slate-500">{c.error ? textoCodigo(c.error) : NOTA_CORREO[c.estado]}</td>
+            </tr>
+          ))}
+        </Tabla>
       )}
     </div>
   );

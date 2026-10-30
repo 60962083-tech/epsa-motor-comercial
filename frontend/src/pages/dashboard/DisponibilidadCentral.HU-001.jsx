@@ -7,7 +7,7 @@ import { Link } from "../../components/dashboard/LinkPanel";
 import { useApp } from "../../store/appStore.jsx";
 import { COLORES } from "../../data/mockData";
 import { inventarioApi, useConsultaCentral } from "../../servicios/central";
-import { ETAPAS_FILTRO, FILTRO_INICIAL, GRUPOS_LUGAR_API, TONO_COMERCIAL, contar, filtrarUnidades, ubicacionDe } from "../../servicios/inventarioCentral";
+import { ETAPAS_FILTRO_CENTRAL as ETAPAS_FILTRO, FILTRO_INICIAL, GRUPOS_LUGAR_API, TONO_COMERCIAL, contar, filtrarUnidades, ubicacionDe } from "../../servicios/inventarioCentral";
 import ModeloImg from "../../components/ModeloImg";
 import MotoIllustration from "../../components/MotoIllustration";
 import { Card, PageHeader, Stat, Tabla, btnMini } from "../../components/ui";

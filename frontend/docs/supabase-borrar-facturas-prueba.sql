@@ -67,6 +67,11 @@ BEGIN
 
   RAISE NOTICE 'Facturas de prueba: %, compras: %, motos: %', cardinality(v_docs), cardinality(v_compras), cardinality(v_motos);
 
+  -- El historial de preparación no se puede borrar (es de solo lectura); solo para quitar datos de prueba
+  -- se suspende su protección dentro de esta misma operación y se vuelve a activar al final.
+  IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hu033_historial_preparacion_inmutable') THEN
+    EXECUTE 'ALTER TABLE public.historialpreparacionunidad DISABLE TRIGGER hu033_historial_preparacion_inmutable';
+  END IF;
   -- La recepción por correo apunta a su intento activo: se suelta antes de borrar
   UPDATE public.recepcionintegracionfactura SET coditiactivo = NULL WHERE coddoc = ANY (v_docs);
 
@@ -74,6 +79,9 @@ BEGIN
   PERFORM pg_temp.epsa_borrar('public.compra', format('codcom = ANY (%L::bigint[])', v_compras));
   PERFORM pg_temp.epsa_borrar('public.documentocompra', format('coddoc = ANY (%L::bigint[])', v_docs));
 
+  IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'hu033_historial_preparacion_inmutable') THEN
+    EXECUTE 'ALTER TABLE public.historialpreparacionunidad ENABLE TRIGGER hu033_historial_preparacion_inmutable';
+  END IF;
   -- El código de Crosland de prueba
   DELETE FROM public.equivalenciaproducto e
   WHERE upper(e.codext) = 'B3-PRUEBA-NUEVO'

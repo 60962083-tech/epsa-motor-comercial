@@ -1,7 +1,8 @@
 // Sprint 2 · Servicios de la base central (API de Express + Supabase)
 // Todas las lecturas y escrituras pasan por la API con la sesión del usuario: el navegador no guarda copias.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BUCKET_FOTOS, borrarArchivoStorage, cacheConsultas, modelosAdminApi, pedir, pedirBinario, seriesUnidadesApi, subirArchivoStorage, ubicacionInicialSqlApi } from "../lib/api";
+import { BUCKET_FOTOS, borrarArchivoStorage, cacheConsultas, modelosAdminApi, pedir, preparacionListaApi, seriesUnidadesApi, subirArchivoStorage, ubicacionInicialSqlApi } from "../lib/api";
+import { preparacionDesdeOperativa } from "./inventarioCentral";
 import { ApiError, mensajeError } from "../lib/errores";
 import useAutoRefresco from "../hooks/useAutoRefresco";
 
@@ -51,13 +52,15 @@ export const sinRespuesta = (e) => !e || e.status === 0 || e.status >= 500;
 const COMERCIAL_API = { Disponible: "Libre" };
 export function unidadDesdeApi(x = {}) {
   const prep = x.preparacion?.nomepr || "";
+  // HU-033: preparación guardada por etapas (armado y techo); si no llega, la del Sprint 1
+  const po = x.preparacionOperativa && typeof x.preparacionOperativa === "object" ? x.preparacionOperativa : null;
   return {
     coduni: String(x.coduni), codmod: x.modelo?.codmod ? String(x.modelo.codmod) : "", nommod: x.modelo?.nommod || "",
     coluni: x.color || "", nummotuni: x.nummotuni || "", chauni: x.chauni || "",
     ubicacion: x.ubicacionConfirmada || null,
     movimiento_activo: x.movimientoActivo ? { ...x.movimientoActivo, origen: x.ubicacionConfirmada || null } : null,
     comercial: COMERCIAL_API[x.situacionComercial] || x.situacionComercial || "Sin dato",
-    preparacion: { central: true, estado: prep, lista_para_entrega: /lista para entrega/i.test(prep), techo: { configuracion: x.techo?.nomtte || "" } },
+    preparacion: po ? preparacionDesdeOperativa(po, x.techo?.nomtte) : { central: true, estado: prep, lista_para_entrega: /lista para entrega/i.test(prep), techo: { configuracion: x.techo?.nomtte || "" } },
   };
 }
 async function paginas(ruta, params, items) {
@@ -76,14 +79,22 @@ export const inventarioApi = ({ codubi, codmod } = {}) => unaVez(`inventario:${c
 // Motor y chasis no vienen en el inventario de la API: se completan con la función SQL del PASO 5 (si está)
 let sinSeries = false;
 const leerSeries = () => (sinSeries ? Promise.resolve(null) : seriesUnidadesApi().catch((e) => { if (e?.detalle?.faltaSql) sinSeries = true; return null; }));
+// HU-033: preparación de todas las motos en una consulta (función SQL), aunque la API publicada sea anterior
+let sinPreparacion = false;
+const leerPreparacion = () => (sinPreparacion ? Promise.resolve(null) : preparacionListaApi().catch((e) => { if (e?.detalle?.faltaSql || e?.status === 403) sinPreparacion = true; return null; }));
 async function leerInventario({ codubi, codmod }) {
-  const [inv, ubic, series] = await Promise.all([
+  const [inv, ubic, series, prep] = await Promise.all([
     paginas("/api/inventario", { codubi, codmod }, (d) => d?.items),
     pedir("/api/ubicaciones").then((r) => r.data || []).catch(() => null),
     leerSeries(),
+    leerPreparacion(),
   ]);
   const porUnidad = new Map((Array.isArray(series) ? series : []).map((s) => [String(s.coduni), s]));
-  const unidades = inv.lista.map((x) => { const s = porUnidad.get(String(x.coduni)); return unidadDesdeApi(s ? { ...x, nummotuni: x.nummotuni || s.nummotuni, chauni: x.chauni || s.chauni } : x); });
+  const prepPorUnidad = new Map((Array.isArray(prep) ? prep : []).map((p) => [String(p.coduni), p]));
+  const unidades = inv.lista.map((x) => {
+    const s = porUnidad.get(String(x.coduni)); const p = prepPorUnidad.get(String(x.coduni));
+    return unidadDesdeApi({ ...x, ...(s ? { nummotuni: x.nummotuni || s.nummotuni, chauni: x.chauni || s.chauni } : {}), ...(p ? { preparacionOperativa: p } : {}) });
+  });
   const ubicaciones = ubic ? ubic.map((l) => ({ codubi: String(l.codubi), nomubi: l.nomubi, tipubi: l.tipubi, estubi: l.estubi !== false }))
     : [...new Map(unidades.filter((u) => u.ubicacion).map((u) => [u.ubicacion.codubi, { ...u.ubicacion, estubi: true }])).values()];
   return { unidades, ubicaciones, total: inv.total, resumen: inv.resto?.resumen || null };
@@ -139,13 +150,8 @@ export async function ubicacionInicialApi(coduni, cuerpo, clave) {
 // Fecha y hora de un movimiento tal como las registra el servidor («2026-10-21» y «10:45:12»)
 export const momentoMov = (fecha, hora) => (fecha ? `${fecha}T${String(hora || "00:00:00").slice(0, 8)}` : "");
 
-// HU-033 · Preparación
-export const preparacionApi = (coduni) => pedir(`/api/unidades/${coduni}/preparacion`).then((r) => r.data);
-export const actualizarPreparacionApi = (coduni, cuerpo, clave) => pedir(`/api/unidades/${coduni}/preparacion`, { metodo: "PUT", cuerpo, headers: { "Idempotency-Key": clave } });
-
-// HU-023 · Compras pendientes
-export const comprasPendientesApi = ({ situacion, origen, limite = 200, offset = 0 } = {}) => pedir(`/api/compras-pendientes${consulta({ situacion, origen, limite, offset })}`).then((r) => r.data);
-export const pedidoCompraApi = (codcom, refcom) => pedir(`/api/compras/${codcom}/pedido`, { metodo: "PUT", cuerpo: { refcom } });
+// HU-023 · Compras pendientes (ruta de la API; la pantalla usa primero la función SQL, que es la misma)
+export const comprasPendientesApi = ({ origen, limite = 200, offset = 0 } = {}) => pedir(`/api/compras-pendientes${consulta({ origen, limite, offset })}`).then((r) => r.data);
 
 // ---------------------------------------------------------------------------------------------
 // HU-015 · Leads (diseño de Michelle): lista paginada, responsables y asignación con el responsable esperado
@@ -167,19 +173,6 @@ export async function leadsCentralApi() {
 export const responsablesApi = () => pedir("/api/leads/responsables").then((r) => (r.data || []).map((u) => ({ codusu: String(u.codusu), nombre: nombreUsuario(u), rol: u.rol, activo: true })));
 export const asignarLeadApi = (codlea, { codusuNuevo, codusuEsperado, motivo }) =>
   pedir(`/api/leads/${encodeURIComponent(codlea)}/responsable`, { metodo: "PATCH", cuerpo: { codusuNuevo: String(codusuNuevo), codusuEsperado: codusuEsperado == null ? null : String(codusuEsperado), motivo: motivo || "" } });
-
-// HU-030 · Facturas recibidas por correo
-export const documentosApi = ({ estado, limite = 50, offset = 0 } = {}) => pedir(`/api/documentos-compra${consulta({ estado, limite, offset })}`).then((r) => r.data);
-export const documentoApi = (coddoc) => pedir(`/api/documentos-compra/${coddoc}`).then((r) => r.data);
-export const reintentarDocumentoApi = (coddoc) => pedir(`/api/documentos-compra/${coddoc}/reintentar`, { metodo: "POST" });
-export const resolverDocumentoApi = (coddoc, cuerpo) => pedir(`/api/documentos-compra/${coddoc}/resolver`, { metodo: "POST", cuerpo });
-export const archivoDocumentoApi = (coddoc, tipo) => pedirBinario(`/api/documentos-compra/${coddoc}/archivo/${tipo}`);
-export const equivalenciasApi = () => pedir("/api/equivalencias").then((r) => r.data);
-export const guardarEquivalenciaApi = (cuerpo) => pedir("/api/equivalencias", { metodo: "PUT", cuerpo });
-export const ajustesImportacionApi = () => pedir("/api/importaciones/ajustes").then((r) => r.data);
-export const guardarAjustesImportacionApi = (cuerpo) => pedir("/api/importaciones/ajustes", { metodo: "PUT", cuerpo });
-export const generarCredencialApi = () => pedir("/api/importaciones/credencial", { metodo: "POST" });
-export const revocarCredencialApi = () => pedir("/api/importaciones/credencial", { metodo: "DELETE" });
 
 // HU-036 · Imágenes de modelos (diseño de Michelle): el archivo se sube al bucket «modelos» de Supabase en
 // <codmod>/<uuid>.<ext> y después se registra su dirección con las rutas de HU-012. Si el registro falla, se borra
@@ -262,14 +255,4 @@ export function useConsultaCentral(cargar, deps = [], { intervalo = REFRESCO_MS,
     return () => { window.removeEventListener("offline", caida); window.removeEventListener("online", vuelve); };
   }, [activo, refrescar]);
   return { ...estado, refrescar };
-}
-
-// Descargar o abrir un archivo privado recibido como Blob
-export function abrirBlob({ blob, nombre }, descargar = false) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.rel = "noopener";
-  if (descargar) a.download = nombre || "archivo"; else a.target = "_blank";
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }

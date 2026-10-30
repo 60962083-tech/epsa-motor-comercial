@@ -1,5 +1,5 @@
 // Sprint 2 · Piezas de las vistas conectadas a la base central
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { mensajeError } from "../../lib/errores";
 import { useConsultaCentral } from "../../servicios/central";
@@ -9,12 +9,6 @@ import { Link } from "./LinkPanel";
 import { TONO_COMERCIAL, preparacionDe, techoDe, ubicacionDe } from "../../servicios/inventarioCentral";
 import { Aviso, btnMini } from "../ui";
 import { ColorPunto, Pill } from "./Sprint2";
-
-// Vuelve a pintar los textos «hace X min»
-export function useReloj(ms = 15000) {
-  const [, setN] = useState(0);
-  useEffect(() => { const t = setInterval(() => setN((x) => x + 1), ms); return () => clearInterval(t); }, [ms]);
-}
 
 export const hora = (iso) => (iso ? new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false }) : "");
 

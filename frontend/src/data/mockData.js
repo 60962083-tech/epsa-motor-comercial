@@ -1,12 +1,5 @@
 // Datos de la web y del panel (catálogo, sedes, ejemplos)
 const TORITO = "https://torito.pe/wp-content/uploads";
-export const TORITO_ICONOS = {
-  Motor: `${TORITO}/2025/06/icono-motor-1.svg`, Cilindrada: `${TORITO}/2025/06/cilindrada.svg`, Llantas: `${TORITO}/2025/06/llantas.svg`,
-  Potencia: `${TORITO}/2025/06/potencia.svg`, Torque: `${TORITO}/2025/06/torque.svg`,
-  motor: `${TORITO}/2025/06/motor-1.svg`, chasis: `${TORITO}/2025/06/icono-carroceria-2.svg`, consumo: `${TORITO}/2025/06/icono-consumo-1.svg`,
-  dimensiones: `${TORITO}/2025/06/icono-dimesiones.svg`, electrico: `${TORITO}/2025/12/icono-sistema-electrico.svg`,
-};
-export const LOGO_TORITO = `${TORITO}/2026/01/logotipo-torito-bajaj-1.png`;
 export const FOTOS_FAMILIA = {
   cuatroValvulas: `${TORITO}/2026/09/torito-4v-gsl-azul-02-34-frontal-der.png`,
   dosTiempos: `${TORITO}/2025/10/Para-pasajeros-2-T.png`,
@@ -22,7 +15,6 @@ export const EVENTOS_TORITO = [
   { foto: `${TORITO}/2025/03/672cd2d9704c7145862703.jpg`, titulo: "El Crom Plus en Ilave" },
   { foto: `${TORITO}/2025/03/673208ffe0d70475384436-scaled.jpeg`, titulo: "Gran Campeonato Torito en Puno" },
 ];
-export const SELLO_BAJAJ = `${TORITO}/2025/12/bajaj-favorita-en-100-paises-125x53-1.png`;
 
 // Catálogo de modelos
 export const FAMILIAS = ["Motores 4 Válvulas", "Motores 2 Tiempos", "Motores Crom Plus"];
@@ -357,7 +349,6 @@ export const COMPRAS = [
 // Sprint 2 · Reglas de movimientos, preparación y separaciones
 export const ORIGEN_RECEPCION = "Crossland Ancón";
 export const ESTADOS_MOVIMIENTO = ["En tránsito", "Finalizado", "Cancelado"];
-export const ESTADOS_SEPARACION = ["Activa", "Vencida", "Cancelada", "Convertida en venta"];
 export const MEDIOS_PAGO = ["Efectivo", "Transferencia", "Yape / Plin", "Depósito", "Tarjeta"];
 export const MEDIOS_CON_OPERACION = ["Transferencia", "Yape / Plin", "Depósito", "Tarjeta"];
 export const ADELANTO_MINIMO = 100;
@@ -456,7 +447,6 @@ for (const m of MODELOS) {
 }
 
 // Opiniones
-export const ETIQUETAS_OPINION = ["Pasajeros", "Inicio de negocio", "Carga", "Financiamiento", "Ahorro", "Logística"];
 export const OPINIONES = [
   { id: 1, nombre: "Cliente de Comas", sede: "Comas", modelo: "torito-crom-plus-glp", etiqueta: "Pasajeros", estrellas: 5, texto: "Trabajo turnos largos y necesitaba un motor parejo. Me explicaron bien el financiamiento y salí con mi unidad el mismo mes.", publicado: true, ejemplo: true },
   { id: 2, nombre: "Cliente de Ventanilla", sede: "Ventanilla", modelo: "torito-2t-ug-gsl", etiqueta: "Inicio de negocio", estrellas: 5, texto: "Buscaba algo accesible para empezar. Me mostraron opciones al contado y a crédito sin presión, y por WhatsApp respondieron rápido.", publicado: true, ejemplo: true },
