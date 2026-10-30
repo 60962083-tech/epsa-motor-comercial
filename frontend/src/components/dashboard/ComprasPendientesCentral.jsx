@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "./LinkPanel";
 import { comprasPendientesApi, useConsultaCentral } from "../../servicios/central";
+import { comprasPendientesSqlApi } from "../../lib/api";
 import { Stat, Tabla, Vacio, btnMini } from "../ui";
 import { Pill } from "./Sprint2";
 import { AvisoConexion, BarraActualizacion, ColorUnidad, fechaCompleta } from "./Central";
@@ -16,11 +17,21 @@ const SITUACIONES = [
 ];
 const TONO = Object.fromEntries(SITUACIONES.map((s) => [s.id, s.tono]));
 
+// La consulta es la función SQL de Michelle (la misma que usa GET /api/compras-pendientes): así no depende de que
+// el servidor publicado tenga la ruta. Si la función no estuviera en la base, se usa la ruta de la API.
+const esAutomatico = (o) => /^autom/i.test(String(o || ""));
+async function leerPendientes(origen) {
+  let d;
+  try { d = await comprasPendientesSqlApi({ origen: origen || null }); }
+  catch (e) { if (!e?.detalle?.faltaSql) throw e; d = await comprasPendientesApi({ origen: origen || undefined }); }
+  return { ...d, compras: (d?.compras || []).map((c) => ({ ...c, situaciones: c.situaciones || [], origen: esAutomatico(c.origen) ? "Automático" : c.origen })) };
+}
+
 export default function ComprasPendientesCentral({ onSinApi }) {
   const [situacion, setSituacion] = useState("");
   const [origen, setOrigen] = useState("");
-  const consulta = useConsultaCentral(() => comprasPendientesApi({ origen: origen || undefined }), [origen]);
-  // Si el servidor aún no tiene GET /api/compras-pendientes, la página abre la lista de compras del Sprint 1
+  const consulta = useConsultaCentral(() => leerPendientes(origen === "Automático" ? "Automatico" : origen), [origen], { clave: `hu023:${origen}` });
+  // Si no hay ni función ni ruta, la página abre la lista de compras
   const sinApi = Boolean(consulta.error?.detalle?.sinRuta);
   useEffect(() => { if (sinApi) onSinApi?.(); }, [sinApi]); // eslint-disable-line
   const datos = consulta.data;

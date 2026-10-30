@@ -7,7 +7,6 @@ export const GRUPOS_LUGAR_API = [
   { tipo: "Almacen", titulo: "Almacenes" },
   { tipo: "Proveedor", titulo: "Fibreras y proveedores de techo" },
 ];
-export const SITUACIONES_COMERCIALES = ["Libre", "No disponible", "Separada", "Vendida"];
 export const TONO_COMERCIAL = { Libre: "verde", "No disponible": "gris", Separada: "ambar", Vendida: "oscuro" };
 
 // Dónde está la moto (y si va en camino o tiene un traslado programado)
@@ -35,6 +34,7 @@ export function techoDe(p) {
 export function preparacionDe(p) {
   if (!p) return { etapa: "Sin datos", tono: "gris", nota: "" };
   // Inventario central: el estado de preparación viene tal cual de la base (HU-004)
+  if (p.central && p.operativa) return etapaOperativa(p.operativa);
   if (p.central) return p.estado ? { etapa: p.estado, tono: p.lista_para_entrega ? "verde" : "celeste", nota: "" } : { etapa: "Sin registrar", tono: "gris", nota: "" };
   if (p.lista_para_entrega) return { etapa: "Lista para entrega", tono: "verde", nota: "Preparación terminada. No equivale a entregada al comprador." };
   if (p.armado !== "Armado terminado") return { etapa: "Pendiente de armado", tono: "ambar", nota: (p.pendientes || []).join(". ") };
@@ -46,6 +46,32 @@ export function preparacionDe(p) {
 }
 
 export const ETAPAS_FILTRO = ["Pendiente de armado", "Techo por definir", "Falta instalar techo", "Techo en proceso", "Por confirmar entrega", "Lista para entrega"];
+// Con la base central (HU-033 de Michelle) la entrega no se marca a mano: está lista cuando se cumplen sus etapas
+export const ETAPAS_FILTRO_CENTRAL = ["Pendiente de armado", "Techo por definir", "Falta instalar techo", "Techo en proceso", "Lista para entrega"];
+
+// HU-033 · Etapa visible a partir de la preparación guardada (armado, techo y condiciones que faltan)
+export function etapaOperativa(po) {
+  if (!po) return { etapa: "Sin registrar", tono: "gris", nota: "" };
+  const t = po.techo || {};
+  const nota = (po.condicionesFaltantes || []).join(". ");
+  if (po.preparacionCompleta) return { etapa: "Lista para entrega", tono: "verde", nota: "Cumple todas las etapas. No equivale a entregada al comprador." };
+  if (po.armado !== "Terminado") return { etapa: "Pendiente de armado", tono: "ambar", nota };
+  if (!t.configuracion) return { etapa: "Techo por definir", tono: "ambar", nota };
+  if (t.estado === "En proceso") return { etapa: "Techo en proceso", tono: "celeste", nota };
+  if (t.requiereInstalacion && t.estado !== "Instalado") return { etapa: "Falta instalar techo", tono: "celeste", nota };
+  return { etapa: "Revisar techo", tono: "ambar", nota };
+}
+// Preparación de la base central en la forma que usan las pantallas
+export function preparacionDesdeOperativa(po, nomtte) {
+  const e = etapaOperativa(po);
+  const t = po?.techo || {};
+  const config = t.configuracion || nomtte || "";
+  return {
+    central: true, operativa: po, estado: e.etapa, nota: e.nota, lista_para_entrega: Boolean(po?.preparacionCompleta),
+    armado: po?.armado === "Terminado" ? "Armado terminado" : "Pendiente de armado",
+    techo: { configuracion: config, avance: config ? t.estado || "Pendiente" : "Por definir", proveedor: po?.proveedorTecho || "", detalle: po?.detalleTecho || "" },
+  };
+}
 
 export const FILTRO_INICIAL = { color: "", techo: "", prep: "", comercial: "activas", q: "" };
 

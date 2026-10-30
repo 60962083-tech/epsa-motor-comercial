@@ -175,7 +175,6 @@ export const seguimientoRegistrarApi = (d) => rpc("seguimiento_registrar", {
 // Mejoras del Sprint 2 (docs/supabase-sprint2-mejoras.sql)
 // HU-003: motivos de traslado y el motivo guardado de cada movimiento
 export const motivosTrasladoApi = () => rpc("hu003_motivos_traslado");
-export const motivosMovimientosApi = () => rpc("hu003_motivos_movimientos");
 // HU-015: última actualización de cada interesado y su historial completo
 export const ultimasActualizacionesApi = () => rpc("hu015_ultimas_actualizaciones");
 export const historialLeadApi = (codlea) => rpc("hu015_historial_lead", { p_codlea: Number(codlea) });
@@ -193,6 +192,31 @@ export const codigosCroslandApi = () => rpc("hu030_equivalencias_listar");
 export const guardarCodigoCroslandApi = (d) => rpc("hu030_guardar_equivalencia", { p_codigo: d.codigo, p_clasificacion: d.clasificacion, p_codmod: d.codmod ? Number(d.codmod) : null, p_observacion: d.observacion || null });
 export const desactivarCodigoCroslandApi = (codequ) => rpc("hu030_desactivar_equivalencia", { p_codequ: Number(codequ) });
 export const registrarSubidaPanelApi = (d) => rpc("hu030_registrar_subida_panel", { p_coddoc: Number(d.coddoc), p_rutaxml: d.rutaxml || null, p_sha256xml: d.sha256xml || null, p_rutapdf: d.rutapdf || null, p_sha256pdf: d.sha256pdf || null });
+export const correosRecibidosApi = () => rpc("hu030_correos_listar");
+
+// Mejoras finales del Sprint 2 (docs/supabase-sprint2-final.sql)
+// Compras a proveedor: proveedores, registro de varias compras a la vez, lista completa, pedido y compras del mismo registro
+export const proveedoresCompraApi = () => rpc("hu034_proveedores_compra");
+export const registrarCarritoApi = (codpro, items, clave) => rpc("hu034_registrar_carrito", {
+  p_codpro: Number(codpro), p_clave: clave,
+  p_items: items.map((x) => ({ codmod: Number(x.codmod), color: x.color, cantidad: Number(x.cantidad), pedido: x.pedido || null })),
+});
+export const comprasListarApi = () => rpc("hu034_compras_listar");
+export const compraExtraApi = (codcom) => rpc("hu034_compra_extra", { p_codcom: Number(codcom) });
+export const guardarPedidoApi = (codcom, pedido) => rpc("hu034_guardar_pedido", { p_codcom: Number(codcom), p_pedido: pedido || "" });
+// HU-001: poner una moto lista para entrega a la venta («Disponible») o retirarla («No disponible»)
+export const situacionComercialApi = (coduni, situacion) => rpc("hu001_cambiar_situacion_comercial", { p_coduni: Number(coduni), p_situacion: situacion });
+// Web y catálogo: eliminar un modelo (solo gerencia)
+export const eliminarModeloApi = (codmod) => rpc("hu012_eliminar_modelo", { p_codmod: Number(codmod) });
+// HU-023 (función de Michelle): compras pendientes sin depender de la ruta de Render
+export const comprasPendientesSqlApi = ({ origen, limite = 200, offset = 0 } = {}) => rpc("hu023_consultar_compras_pendientes", { p_origen: origen || null, p_limite: limite, p_offset: offset });
+// HU-033 (funciones de Michelle): preparación de cada moto, su historial y el registro de avances
+export const preparacionListaApi = () => rpc("hu033_preparacion_listar");
+export const preparacionUnidadApi = (coduni) => rpc("hu033_consultar_preparacion_unidad", { p_coduni: Number(coduni) });
+export const actualizarPreparacionApi = (coduni, d, clave) => rpc("hu033_actualizar_preparacion_unidad", {
+  p_coduni: Number(coduni), p_etapa: d.etapa, p_estado: d.estado, p_version_esperada: Number(d.version),
+  p_observacion: d.observacion || null, p_fuente: d.fuente || "Interno", p_idempotencia: clave,
+});
 
 // Renovar la sesión
 async function refrescar() {
@@ -232,26 +256,6 @@ export async function pedir(ruta, { metodo = "GET", cuerpo, formulario, headers 
   if (r.status === 404 && !esJson(r)) throw sinRuta(metodo, ruta);
   if (!r.ok || j.ok === false) throw new ApiError(r.status, j.message || "Error", j);
   return { data: j.data, message: j.message, status: r.status };
-}
-
-// Archivo privado (PDF o XML de una factura): se pide con la sesión y se recibe como Blob, sin enlace público
-export async function pedirBinario(ruta, reintento = true) {
-  if (!MODO_REAL) throw new ApiError(0, "Esta función necesita conexión.");
-  let r;
-  try {
-    r = await fetch(`${API_URL}${ruta}`, { headers: { Authorization: `Bearer ${leerSesion()?.access_token || ""}` } });
-  } catch { throw new ApiError(0, "No se pudo conectar. Revisa tu internet e inténtalo de nuevo."); }
-  if (r.status === 401 && reintento) {
-    try { await refrescar(); return pedirBinario(ruta, false); } catch {}
-  }
-  if (r.status === 404 && !esJson(r)) throw sinRuta("GET", ruta);
-  if (!r.ok) {
-    const j = await r.json().catch(() => ({}));
-    throw new ApiError(r.status, j.message || "No se pudo abrir el archivo.", j);
-  }
-  const disposicion = r.headers.get("content-disposition") || "";
-  const nombre = (/filename="([^"]+)"/i.exec(disposicion) || [])[1] || "";
-  return { blob: await r.blob(), nombre, tipo: r.headers.get("content-type") || "" };
 }
 
 // HU-036 · Almacenamiento central de Supabase (bucket «modelos», diseño de Michelle)

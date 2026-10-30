@@ -15,6 +15,10 @@ import { MOTIVOS_TRASLADO, leerMotivo } from "../../lib/motivos";
 import { haceCuanto } from "../../lib/validar";
 
 const LIMITE = 50;
+// Buscador: modelo, motor, chasis, N° de moto, color o ubicación (almacén, sede, taller)
+const normal = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const coincideUnidad = (u, q) => !q || normal(`${u.coduni} ${u.nummotuni} ${u.chauni} ${u.nommod} ${u.coluni} ${u.ubicacion?.nomubi || ""} ${u.movimiento_activo?.destino?.nomubi || ""}`).includes(q);
+const coincideMov = (m, q) => !q || normal(`${m.coduni} ${m.unidad?.nummotuni || ""} ${m.unidad?.nommod || ""} ${m.unidad?.coluni || ""} ${m.origen?.nomubi || ""} ${m.destino?.nomubi || ""} ${m.observacion || ""}`).includes(q);
 
 export default function MovimientosCentral() {
   const { puede } = useAuth();
@@ -23,15 +27,25 @@ export default function MovimientosCentral() {
   const [offset, setOffset] = useState(0);
   const [filtroHist, setFiltroHist] = useState("");
   const [filtroMotivo, setFiltroMotivo] = useState("");
+  const [busca, setBusca] = useState({ q: "", lugar: "", modelo: "" });
+  const q = normal(busca.q.trim());
   const [modal, setModal] = useState(null);
   const inventario = useConsultaCentral(() => inventarioApi(), [], { clave: "inventario::" });
   const enCurso = useConsultaCentral(() => historialMovimientosApi({ estado: "En transito", limite: 200 }), [], { clave: "movimientos:curso" });
   const historial = useConsultaCentral(() => historialMovimientosApi({ estado: filtroHist || undefined, limite: LIMITE, offset }), [filtroHist, offset], { activo: vista === "historial" });
   const unidades = useMemo(() => inventario.data?.unidades || [], [inventario.data]);
   const ubicaciones = inventario.data?.ubicaciones || [];
-  const activos = (enCurso.data?.movimientos || []).filter((m) => m.estado === "En transito");
-  const enAlmacen = unidades.filter((u) => u.ubicacion?.tipubi === "Almacen" && !u.movimiento_activo);
-  const sinUbicacion = unidades.filter((u) => !u.ubicacion);
+  const activosTodos = (enCurso.data?.movimientos || []).filter((m) => m.estado === "En transito");
+  const enAlmacenTodas = unidades.filter((u) => u.ubicacion?.tipubi === "Almacen" && !u.movimiento_activo);
+  const sinUbicacionTodas = unidades.filter((u) => !u.ubicacion);
+  // Lo que se ve en cada pestaña, con el buscador aplicado
+  const porModelo = (codmod, nommod) => !busca.modelo || String(codmod || "") === busca.modelo || (!codmod && nommod === modelosInv.find((x) => x.codmod === busca.modelo)?.nommod);
+  const modelosInv = useMemo(() => [...new Map(unidades.filter((u) => u.codmod).map((u) => [u.codmod, { codmod: u.codmod, nommod: u.nommod }])).values()].sort((a, b) => a.nommod.localeCompare(b.nommod, "es")), [unidades]);
+  const almacenes = useMemo(() => [...new Map(enAlmacenTodas.map((u) => [u.ubicacion.codubi, u.ubicacion.nomubi])).entries()].map(([codubi, nomubi]) => ({ codubi, nomubi, n: enAlmacenTodas.filter((u) => u.ubicacion.codubi === codubi).length })), [enAlmacenTodas]);
+  const activos = activosTodos.filter((m) => coincideMov(m, q) && porModelo(unidades.find((u) => String(u.coduni) === String(m.coduni))?.codmod, m.unidad?.nommod));
+  const enAlmacen = enAlmacenTodas.filter((u) => coincideUnidad(u, q) && porModelo(u.codmod) && (!busca.lugar || u.ubicacion.codubi === busca.lugar));
+  const sinUbicacion = sinUbicacionTodas.filter((u) => coincideUnidad(u, q) && porModelo(u.codmod));
+  const filtrando = Boolean(q || busca.modelo || (vista === "almacen" && busca.lugar));
   const recargar = () => { inventario.refrescar(true); enCurso.refrescar(true); historial.refrescar(true); };
   // La moto completa para las ventanas (si el inventario ya cargó)
   const unidadDe = (m) => unidades.find((u) => String(u.coduni) === String(m.coduni)) || { ...m.unidad, coduni: m.coduni };
@@ -56,23 +70,39 @@ export default function MovimientosCentral() {
       {!enCurso.fallo && <AvisoConexion consulta={inventario} que="el inventario" />}
 
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat etiqueta="En tránsito" valor={activos.length} tono={activos.length ? "ambar" : "marino"} nota="Salieron y aún no se confirma la llegada" />
-        <Stat etiqueta="En almacén" valor={enAlmacen.length} nota="En Ancón u otro almacén" />
+        <Stat etiqueta="En tránsito" valor={activosTodos.length} tono={activosTodos.length ? "ambar" : "marino"} nota="Salieron y aún no se confirma la llegada" />
+        <Stat etiqueta="En almacén" valor={enAlmacenTodas.length} nota="En Ancón u otro almacén" />
         <Stat etiqueta="En sedes" valor={unidades.filter((u) => u.ubicacion?.tipubi === "Sede" && !u.movimiento_activo).length} tono="verde" nota="Listas para mostrarse en tienda" />
-        <Stat etiqueta="Sin ubicación" valor={sinUbicacion.length} tono={sinUbicacion.length ? "rojo" : "marino"} nota="Identificadas a mano, sin ubicación" />
+        <Stat etiqueta="Sin ubicación" valor={sinUbicacionTodas.length} tono={sinUbicacionTodas.length ? "rojo" : "marino"} nota="Identificadas a mano, sin ubicación" />
       </div>
 
       <div className="mb-4">
         <Pestanas etiqueta="Movimientos" valor={vista} onCambio={(v) => { setVista(v); setOffset(0); }} opciones={[
-          { id: "curso", label: "En tránsito", n: activos.length },
-          { id: "almacen", label: "En almacén", n: enAlmacen.length },
-          { id: "sin", label: "Sin ubicación", n: sinUbicacion.length, alerta: true },
+          { id: "curso", label: "En tránsito", n: activosTodos.length },
+          { id: "almacen", label: "En almacén", n: enAlmacenTodas.length },
+          { id: "sin", label: "Sin ubicación", n: sinUbicacionTodas.length, alerta: true },
           { id: "historial", label: "Historial" },
         ]} />
       </div>
 
+      {/* Buscador: sirve en todas las pestañas */}
+      <Card className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-buscador-movimientos>
+        <div className="sm:col-span-2"><label className="field-label" htmlFor="mov-buscar">Buscar moto</label>
+          <input id="mov-buscar" className="field-input" value={busca.q} maxLength={60} onChange={(e) => { setBusca({ ...busca, q: e.target.value }); setOffset(0); }} placeholder="Modelo, motor, chasis, N°, color o ubicación" /></div>
+        <div><label className="field-label" htmlFor="mov-modelo">Modelo</label>
+          <select id="mov-modelo" className="field-input" value={busca.modelo} onChange={(e) => setBusca({ ...busca, modelo: e.target.value })}>
+            <option value="">Todos los modelos</option>{modelosInv.map((m) => <option key={m.codmod} value={m.codmod}>{m.nommod}</option>)}
+          </select></div>
+        {vista === "almacen" ? <div><label className="field-label" htmlFor="mov-almacen">Almacén</label>
+          <select id="mov-almacen" className="field-input" value={busca.lugar} onChange={(e) => setBusca({ ...busca, lugar: e.target.value })}>
+            <option value="">Todos los almacenes</option>{almacenes.map((a) => <option key={a.codubi} value={a.codubi}>{a.nomubi} ({a.n})</option>)}
+          </select></div>
+          : <div className="flex items-end">{(busca.q || busca.modelo || busca.lugar) && <button className="pb-2 text-[13px] font-semibold text-acento hover:underline" onClick={() => setBusca({ q: "", lugar: "", modelo: "" })}>Limpiar búsqueda</button>}</div>}
+        {filtrando && vista !== "historial" && <p className="text-[12.5px] text-slate-500 sm:col-span-2 lg:col-span-4" data-resultado-busqueda>{vista === "curso" ? `${activos.length} de ${activosTodos.length} en tránsito` : vista === "almacen" ? `${enAlmacen.length} de ${enAlmacenTodas.length} en almacén` : `${sinUbicacion.length} de ${sinUbicacionTodas.length} sin ubicación`} coinciden con la búsqueda.</p>}
+      </Card>
+
       {/* En tránsito: salieron y falta confirmar la llegada */}
-      {vista === "curso" && enCurso.data && (activos.length === 0 ? <Vacio titulo="Ninguna moto en tránsito" texto="Cuando registres la salida de una moto, aparecerá aquí hasta que confirmes su llegada." /> : (
+      {vista === "curso" && enCurso.data && (activos.length === 0 ? <Vacio titulo={filtrando ? "Ninguna moto en tránsito coincide" : "Ninguna moto en tránsito"} texto={filtrando ? "Cambia o limpia la búsqueda." : "Cuando registres la salida de una moto, aparecerá aquí hasta que confirmes su llegada."} /> : (
         <div className="space-y-3" data-lista="en-curso">
           {activos.map((m) => {
             const salida = momentoMov(m.fechaSalida, m.horaSalida);
@@ -94,7 +124,7 @@ export default function MovimientosCentral() {
       ))}
 
       {/* En almacén: las motos que llegan con la factura empiezan en Ancón */}
-      {vista === "almacen" && inventario.data && (enAlmacen.length === 0 ? <Vacio titulo="No hay motos en almacén" texto="Las motos importadas desde una factura empiezan en el almacén de Crossland (Ancón) hasta que registres su traslado." /> : (
+      {vista === "almacen" && inventario.data && (enAlmacen.length === 0 ? <Vacio titulo={filtrando ? "Ninguna moto en almacén coincide" : "No hay motos en almacén"} texto={filtrando ? "Cambia o limpia la búsqueda." : "Las motos importadas desde una factura empiezan en el almacén de Crossland (Ancón) hasta que registres su traslado."} /> : (
         <Tabla columnas={["Moto", "Modelo", "Almacén", "Preparación", "Situación comercial", "Acción"]}>
           {enAlmacen.map((u) => (
             <tr key={u.coduni} data-en-almacen={u.coduni}>
@@ -110,7 +140,7 @@ export default function MovimientosCentral() {
       ))}
 
       {/* Sin ubicación: identificadas a mano en HU-002 */}
-      {vista === "sin" && inventario.data && (sinUbicacion.length === 0 ? <Vacio titulo="Todas las motos tienen ubicación" texto="Las que se identifican a mano en Compras aparecen aquí hasta registrar dónde están." /> : (
+      {vista === "sin" && inventario.data && (sinUbicacion.length === 0 ? <Vacio titulo={filtrando ? "Ninguna moto sin ubicación coincide" : "Todas las motos tienen ubicación"} texto={filtrando ? "Cambia o limpia la búsqueda." : "Las que se identifican a mano en Compras aparecen aquí hasta registrar dónde están."} /> : (
         <Tabla columnas={["Moto", "Modelo", "Compra", "Identificada", "Acción"]}>
           {sinUbicacion.map((u) => (
             <tr key={u.coduni} data-sin-ubicacion={u.coduni}>
@@ -143,7 +173,7 @@ export default function MovimientosCentral() {
         {historial.data && historial.data.movimientos.length === 0 ? <Vacio titulo="Sin movimientos registrados" /> : historial.data && (
           <>
             <Tabla columnas={["Salida", "Moto", "Ruta", "Estado", "Registró", "Llegada", "Motivo"]}>
-              {historial.data.movimientos.filter((m) => { const mo = leerMotivo(m.observacion).motivo; return !filtroMotivo || (filtroMotivo === "__sin" ? !mo : mo === filtroMotivo); }).map((m) => (
+              {historial.data.movimientos.filter((m) => { const mo = leerMotivo(m.observacion).motivo; return (!filtroMotivo || (filtroMotivo === "__sin" ? !mo : mo === filtroMotivo)) && coincideMov(m, q) && porModelo(unidades.find((u) => String(u.coduni) === String(m.coduni))?.codmod, m.unidad?.nommod); }).map((m) => (
                 <tr key={m.codmub} className="align-top" data-historial={m.codmub}>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-500">{cuandoMov(m.fechaSalida, m.horaSalida)}</td>
                   <td className="px-4 py-3"><Link className="font-semibold text-marino hover:underline dark:text-white" to={`/admin/inventario/${m.coduni}`}>{m.unidad?.nummotuni || `N° ${m.coduni}`}</Link><span className="block text-[12px] text-slate-400">{m.unidad?.nommod}</span></td>

@@ -11,9 +11,9 @@ import { mensajeError } from "../../lib/errores";
 import { unidadCentralApi, useConsultaCentral } from "../../servicios/central";
 import { preparacionDe, techoDe, ubicacionDe } from "../../servicios/inventarioCentral";
 import { Aviso, Campo, Card, PageHeader, useConfirm, useToast } from "../../components/ui";
-import { AvisoConexion, BarraActualizacion, ColorUnidad, PillComercial, PillPreparacion, capital, fechaCompleta } from "../../components/dashboard/Central";
-import { ModalPreparacionCentral } from "../../components/dashboard/ModalesCentral";
+import { AvisoConexion, BarraActualizacion, PillComercial, PillPreparacion, capital, nombreUnidad } from "../../components/dashboard/Central";
 import MovimientosUnidad from "../../components/dashboard/MovimientosUnidad";
+import { PreparacionUnidadCard } from "../../components/dashboard/PreparacionUnidad";
 const DESCRIPCION_TECHO = {
   "Sin techo": "La unidad no lleva techo instalado.",
   Lona: "Techo de lona. No necesita proveedor externo.",
@@ -36,7 +36,6 @@ function FichaCentral({ id }) {
   // Si se llegó desde la compra, se suman el motor y el chasis (el inventario central no los envía)
   const desdeCompra = state?.unidad?.coduni === String(id) ? state.unidad : null;
   const u = consulta.data && desdeCompra ? { ...consulta.data, nummotuni: consulta.data.nummotuni || desdeCompra.nummotuni || "", chauni: consulta.data.chauni || desdeCompra.chauni || "" } : consulta.data;
-  const [modal, setModal] = useState(null);
   const [ubicaciones, setUbicaciones] = useState([]);
   useEffect(() => {
     if (!gestiona) return;
@@ -71,145 +70,54 @@ function FichaCentral({ id }) {
   const p = u.preparacion;
   const t = techoDe(p);
   const prep = preparacionDe(p);
-  const abrirPrep = (etapa, estado) => setModal({ tipo: "prep", etapa, estado });
+  const textoSituacion = { Libre: "Disponible para vender: el vendedor la ve libre en Disponibilidad.", "No disponible": "Todavía no está a la venta.", Separada: "Tiene una separación activa.", Vendida: "Tiene una venta registrada." }[u.comercial] || "";
 
   // Inventario central (API de Michelle): ubicación, techo, preparación y situación tal como están en la base,
-  // con los movimientos (HU-003) y la configuración de techo (HU-004). La preparación por etapas es de HU-033.
-  if (p?.central) {
-    const textoSituacion = { Libre: "Disponible para vender.", "No disponible": "Todavía no está a la venta.", Separada: "Tiene una separación activa.", Vendida: "Tiene una venta registrada." }[u.comercial] || "";
-    return (
-      <div>
-        <PageHeader titulo={`${u.nommod}${u.nummotuni ? ` · motor ${u.nummotuni}` : ""}`} subtitulo={`${capital(u.coluni) || "Sin color"}${u.chauni ? ` · chasis ${u.chauni}` : ""} · unidad N° ${u.coduni}`}>
-          <BarraActualizacion consulta={consulta} />
-          <Link to="/admin/inventario" className="btn btn-secondary !py-2.5">Inventario</Link>
-        </PageHeader>
-        <AvisoConexion consulta={consulta} que="la ficha de la unidad" />
-        <div className="mb-6 grid gap-4 md:grid-cols-3" data-ejes>
-          <Card data-eje="ubicacion"><p className="text-[12px] font-semibold text-slate-400">Ubicación registrada</p><p className={`mt-1 text-[1.25rem] font-bold ${x.transito ? "text-sky-700 dark:text-sky-300" : x.sin ? "text-amber-700 dark:text-amber-300" : "text-marino dark:text-white"}`}>{x.texto}</p><p className="text-[12.5px] text-slate-500">{x.detalle}</p></Card>
-          <Card data-eje="preparacion"><p className="text-[12px] font-semibold text-slate-400">Preparación</p><div className="mt-1.5"><PillPreparacion preparacion={p} /></div><p className="mt-1.5 text-[12.5px] text-slate-500">Techo: {t.config}</p></Card>
-          <Card data-eje="comercial"><p className="text-[12px] font-semibold text-slate-400">Situación comercial</p><div className="mt-1.5"><PillComercial comercial={u.comercial} /></div><p className="mt-1.5 text-[12.5px] text-slate-500">{textoSituacion}</p></Card>
-        </div>
-        <div className="grid gap-6 xl:grid-cols-[1fr_1.15fr]">
-          <MovimientosUnidad unidad={u} gestiona={gestiona} ubicaciones={ubicaciones} onCambio={recargar} />
-          <ConfigTecho unidad={u} gestiona={gestiona} onGuardado={recargar} />
-        </div>
-      </div>
-    );
-  }
-
+  // con la preparación por etapas (HU-033), los movimientos (HU-003) y la configuración de techo (HU-004).
   return (
     <div>
-      <PageHeader titulo={`${u.nommod} · motor ${u.nummotuni}`} subtitulo={`${capital(u.coluni)} · chasis ${u.chauni} · unidad N° ${u.coduni}`}>
+      <PageHeader titulo={`${u.nommod}${u.nummotuni ? ` · motor ${u.nummotuni}` : ""}`} subtitulo={`${capital(u.coluni) || "Sin color"}${u.chauni ? ` · chasis ${u.chauni}` : ""} · unidad N° ${u.coduni}`}>
         <BarraActualizacion consulta={consulta} />
         <Link to="/admin/inventario" className="btn btn-secondary !py-2.5">Inventario</Link>
       </PageHeader>
       <AvisoConexion consulta={consulta} que="la ficha de la unidad" />
-
-      {/* Tres datos independientes */}
       <div className="mb-6 grid gap-4 md:grid-cols-3" data-ejes>
-        <Card data-eje="ubicacion">
-          <p className="text-[12px] font-semibold text-slate-400">Ubicación registrada</p>
-          <p className={`mt-1 text-[1.25rem] font-bold ${x.transito ? "text-sky-700 dark:text-sky-300" : x.sin ? "text-amber-700 dark:text-amber-300" : "text-marino dark:text-white"}`}>{x.texto}</p>
-          <p className="text-[12.5px] text-slate-500">{x.detalle}</p>
-        </Card>
-        <Card data-eje="preparacion">
-          <p className="text-[12px] font-semibold text-slate-400">Preparación</p>
-          <div className="mt-1.5"><PillPreparacion preparacion={p} /></div>
-          <p className="mt-1.5 text-[12.5px] text-slate-500">{prep.nota || (p?.pendientes?.length ? p.pendientes.join(". ") : "")}</p>
-        </Card>
-        <Card data-eje="comercial">
-          <p className="text-[12px] font-semibold text-slate-400">Situación comercial</p>
-          <div className="mt-1.5"><PillComercial comercial={u.comercial} /></div>
-          <p className="mt-1.5 text-[12.5px] text-slate-500">{u.comercial === "Libre" ? "Sin separación ni venta registradas." : u.comercial === "Separada" ? "Tiene una separación activa." : "Tiene una venta registrada."} No cambia con traslados ni con la preparación.</p>
-        </Card>
+        <Card data-eje="ubicacion"><p className="text-[12px] font-semibold text-slate-400">Ubicación registrada</p><p className={`mt-1 text-[1.25rem] font-bold ${x.transito ? "text-sky-700 dark:text-sky-300" : x.sin ? "text-amber-700 dark:text-amber-300" : "text-marino dark:text-white"}`}>{x.texto}</p><p className="text-[12.5px] text-slate-500">{x.detalle}</p></Card>
+        <Card data-eje="preparacion"><p className="text-[12px] font-semibold text-slate-400">Preparación</p><div className="mt-1.5"><PillPreparacion preparacion={p} /></div><p className="mt-1.5 text-[12.5px] text-slate-500">{prep.nota || `Techo: ${t.config}`}</p></Card>
+        <Card data-eje="comercial"><p className="text-[12px] font-semibold text-slate-400">Situación comercial</p><div className="mt-1.5"><PillComercial comercial={u.comercial} /></div><p className="mt-1.5 text-[12.5px] text-slate-500">{textoSituacion}</p>{gestiona && <PonerALaVenta unidad={u} onCambio={recargar} />}</Card>
       </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
-        <div className="min-w-0 space-y-6">
-          {/* HU-033 · Preparación por etapas */}
-          <Card data-card-preparacion>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold text-marino dark:text-white">Preparación</h2>
-                <p className="text-[13px] text-slate-500">Armado, techo y condición de entrega. Una factura o una compra no marcan nada como terminado.</p>
-              </div>
-            </div>
-            <ol className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-100 dark:divide-white/10 dark:border-white/10">
-              <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3" data-etapa="Armado">
-                <div><p className="text-[14px] font-semibold text-marino dark:text-white">1. Armado</p><p className="text-[12.5px] text-slate-500">{p.armado}{p.armado !== "Armado terminado" ? ". Se termina en Ventanilla." : "."}</p></div>
-                {gestiona && <button className="btn btn-secondary !px-3 !py-1.5 text-[13px]" onClick={() => abrirPrep("Armado", p.armado === "Armado terminado" ? "Pendiente de armado" : "Armado terminado")}>{p.armado === "Armado terminado" ? "Corregir armado" : "Marcar armado terminado"}</button>}
-              </li>
-              <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3" data-etapa="Techo">
-                <div className="min-w-0">
-                  <p className="text-[14px] font-semibold text-marino dark:text-white">2. Techo</p>
-                  <p className="text-[12.5px] text-slate-500">Configuración: <b className="text-marino dark:text-white">{t.config}</b>{t.proveedor ? ` con ${t.proveedor}` : ""}{t.detalle ? `, ${t.detalle}` : ""}. Instalación: <b className="text-marino dark:text-white">{t.avance === "No requiere" ? "no requiere" : t.avance.toLowerCase()}</b>.</p>
-                </div>
-                {gestiona && t.requiereInstalacion && <button className="btn btn-secondary !px-3 !py-1.5 text-[13px]" onClick={() => abrirPrep("Techo")}>Registrar avance del techo</button>}
-              </li>
-              <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3" data-etapa="Entrega">
-                <div><p className="text-[14px] font-semibold text-marino dark:text-white">3. Condición de entrega</p><p className="text-[12.5px] text-slate-500">{p.lista_para_entrega ? "Lista para entrega. No equivale a entregada al comprador." : p.condiciones_cumplidas ? "Cumple las condiciones; falta marcarla lista." : `Pendiente: ${(p.pendientes || []).join(". ")}.`}</p></div>
-                {gestiona && !p.lista_para_entrega && <button className={`btn !px-3 !py-1.5 text-[13px] ${p.condiciones_cumplidas ? "btn-primary" : "btn-secondary"}`} onClick={() => abrirPrep("Entrega", "Lista para entrega")}>Marcar lista para entrega</button>}
-              </li>
-            </ol>
-            {!gestiona && <p className="mt-3 text-[12.5px] text-slate-400">Solo gerencia y administración registran avances de preparación.</p>}
-            <Historial titulo="Historial de preparación" vacio="Aún no se registraron avances." items={(u.historial_preparacion || []).map((h) => ({
-              id: h.codhpr, fecha: h.fecha, autor: h.autor,
-              texto: `${h.etapa === "Configuración" ? "Configuración de techo" : h.etapa}: ${h.anterior ? `${h.anterior} → ` : ""}${h.nuevo}`,
-              extra: [h.origen === "Aviso de proveedor" ? `Aviso de ${h.proveedor || "proveedor"}` : "", h.accesorios ? `Accesorios: ${h.accesorios}` : "", h.observacion].filter(Boolean).join(". "),
-            }))} />
-          </Card>
-
-          {/* HU-004 · Configuración de techo */}
-          <ConfigTecho unidad={u} gestiona={gestiona} onGuardado={recargar} />
-        </div>
-
-        <div className="space-y-6">
-          {/* HU-003 · Ubicación y movimientos */}
-          <MovimientosUnidad unidad={u} gestiona={gestiona} ubicaciones={ubicaciones} onCambio={recargar} />
-
-          {/* Datos de la unidad; la compra y el documento solo para gestión */}
-          <Card>
-            <h2 className="mb-3 font-bold text-marino dark:text-white">Datos de la unidad</h2>
-            <dl className="divide-y divide-slate-100 text-[13.5px] dark:divide-white/10">
-              {[["Modelo", u.nommod], ["Color", <ColorUnidad key="c" color={u.coluni} />], ["N° de motor", u.nummotuni], ["N° de chasis", u.chauni],
-                ...(u.vinuni ? [["VIN", u.vinuni]] : []), ...(u.anofabuni ? [["Año de fabricación", u.anofabuni]] : []), ...(u.anomoduni ? [["Año de modelo", u.anomoduni]] : []),
-                ["Ingreso", `${u.origen}${u.ingreso ? `, ${fechaCompleta(u.ingreso)}` : ""}`]].map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-4 py-2"><dt className="text-slate-500">{k}</dt><dd className="text-right font-semibold text-marino dark:text-white">{v}</dd></div>
-              ))}
-              {gestiona && u.codcom && <div className="flex justify-between gap-4 py-2"><dt className="text-slate-500">Compra</dt><dd className="text-right font-semibold"><Link className="text-marino-700 hover:underline dark:text-white" to={`/admin/compras/${u.codcom}`}>N° {u.codcom}</Link></dd></div>}
-              {gestiona && u.documento && <div className="flex justify-between gap-4 py-2"><dt className="text-slate-500">Factura</dt><dd className="text-right font-semibold"><Link className="text-marino-700 hover:underline dark:text-white" to={`/admin/facturas-recibidas/${u.documento.coddoc}`}>{u.documento.numero}</Link><span className="block text-[12px] font-normal text-slate-400">Emitida {u.documento.fecha_emision}{u.documento.pedido ? `, pedido ${u.documento.pedido}` : ""}</span></dd></div>}
-            </dl>
-          </Card>
-        </div>
+      <div className="mb-6"><PreparacionUnidadCard unidad={u} gestiona={gestiona} onCambio={recargar} /></div>
+      <div className="grid gap-6 xl:grid-cols-[1fr_1.15fr]">
+        <MovimientosUnidad unidad={u} gestiona={gestiona} ubicaciones={ubicaciones} onCambio={recargar} />
+        <ConfigTecho unidad={u} gestiona={gestiona} onGuardado={recargar} />
       </div>
-
-      <ModalPreparacionCentral datos={modal?.tipo === "prep" ? { unidad: u, preparacion: p, etapa: modal.etapa, estado: modal.estado } : null} onClose={() => setModal(null)} onHecho={recargar} onConflicto={recargar} />
     </div>
   );
 }
 
-// Historial con autor y fecha
-function Historial({ titulo, vacio, items }) {
-  const [todos, setTodos] = useState(false);
-  const visibles = todos ? items : items.slice(0, 5);
-  return (
-    <div className="mt-5">
-      <h3 className="text-[13.5px] font-semibold text-marino dark:text-white">{titulo}</h3>
-      {items.length === 0 ? <p className="mt-1 text-[13px] text-slate-400">{vacio}</p> : (
-        <ol className="mt-2 space-y-2.5 border-l-2 border-slate-200 pl-4 dark:border-white/15">
-          {visibles.map((h) => (
-            <li key={h.id} className="relative text-[13px]">
-              <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-marino dark:bg-white" />
-              <p className="flex flex-wrap items-center gap-2"><span className="font-semibold text-marino dark:text-white">{h.texto}</span>{h.pill}</p>
-              <p className="text-[12px] text-slate-400">{fechaCompleta(h.fecha)}{h.autor ? `, ${h.autor}` : ""}</p>
-              {h.extra && <p className="text-[12.5px] text-slate-500">{h.extra}</p>}
-            </li>
-          ))}
-        </ol>
-      )}
-      {items.length > 5 && <button className="mt-2 text-[12.5px] font-semibold text-marino-700 hover:underline dark:text-white" onClick={() => setTodos(!todos)}>{todos ? "Ver menos" : `Ver los ${items.length}`}</button>}
-    </div>
-  );
+// Poner la moto a la venta (o retirarla) cuando ya está lista para entrega (docs/supabase-sprint2-final.sql).
+// Solo cambia entre «No disponible» y «Disponible»: separaciones y ventas no se tocan aquí.
+function PonerALaVenta({ unidad, onCambio }) {
+  const toast = useToast(); const confirmar = useConfirm();
+  const [enviando, setEnviando] = useState(false);
+  const lista = Boolean(unidad.preparacion?.lista_para_entrega);
+  if (!["No disponible", "Libre"].includes(unidad.comercial)) return null;
+  const aLaVenta = unidad.comercial === "Libre";
+  async function cambiar() {
+    const ok = await confirmar(aLaVenta
+      ? { titulo: "¿Retirar de la venta?", texto: `${nombreUnidad(unidad)} dejará de verse libre para los vendedores.`, boton: "Retirar de la venta" }
+      : { titulo: "¿Poner a la venta?", texto: `${nombreUnidad(unidad)} quedará disponible y los vendedores la verán libre en Disponibilidad.`, boton: "Poner a la venta" });
+    if (!ok) return;
+    setEnviando(true);
+    try {
+      await api.situacionComercialApi(unidad.coduni, aLaVenta ? "No disponible" : "Disponible");
+      toast(aLaVenta ? "La moto se retiró de la venta" : "La moto ya está a la venta");
+      onCambio?.();
+    } catch (e) { toast(mensajeError(e), "error"); }
+    finally { setEnviando(false); }
+  }
+  if (!aLaVenta && !lista) return <p className="mt-2 text-[12px] text-slate-400">Se podrá poner a la venta cuando esté lista para entrega.</p>;
+  return <button className={`btn mt-3 !py-2 text-[13px] ${aLaVenta ? "btn-secondary" : "btn-primary"}`} disabled={enviando} onClick={cambiar} data-poner-venta>{enviando ? "Guardando…" : aLaVenta ? "Retirar de la venta" : "Poner a la venta"}</button>;
 }
 
 // HU-004 · Tipo de techo y proveedor (la API de Michelle; el avance de instalación es de HU-033)

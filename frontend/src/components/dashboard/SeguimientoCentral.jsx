@@ -22,7 +22,6 @@ import SeccionPendiente from "./SeccionPendiente";
 // Estados y tipos de contacto (los mismos que acepta la base)
 // ---------------------------------------------------------------------------------------------
 export const ETIQUETA_ESTADO = { Nuevo: "Nuevo", Contactado: "Contactado", "En seguimiento": "En seguimiento", Convertido: "Venta concretada", Cerrado: "Cerrado sin venta" };
-export const TONO_ESTADO = { Nuevo: "celeste", Contactado: "marino", "En seguimiento": "ambar", Convertido: "verde", Cerrado: "gris" };
 export const ABIERTO = (l) => ["Nuevo", "Contactado", "En seguimiento"].includes(l.estlea);
 const TIPOS = ["Llamada", "WhatsApp", "Visita", "Prueba de manejo", "Correo", "Nota"];
 const PAGOS = ["Contado", "Financiamiento", "Crédito directo"];

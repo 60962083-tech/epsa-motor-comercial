@@ -36,6 +36,7 @@ const Inventario = diferido(() => import("./pages/dashboard/Inventario.HU-004"))
 const Facturas = diferido(() => import("./pages/dashboard/Facturas"));
 const FichaUnidad = diferido(() => import("./pages/dashboard/FichaUnidad.HU-004"));
 const RegistrarCompra = diferido(() => import("./pages/dashboard/RegistrarCompra.HU-034"));
+const RegistrarCompraCarrito = diferido(() => import("./pages/dashboard/RegistrarCompraCarrito.HU-034"));
 const Ubicaciones = diferido(() => import("./pages/dashboard/Ubicaciones.HU-026"));
 const Compras = diferido(() => import("./pages/dashboard/Compras.HU-034"));
 const CompraDetalle = diferido(() => import("./pages/dashboard/CompraDetalle.HU-002"));
@@ -118,7 +119,7 @@ export default function App() {
               <Route path="inventario/:id" element={<P s="inventario">{MODO_REAL ? <FichaCentral /> : <FichaUnidad />}</P>} />
               <Route path="ubicaciones" element={<P s="ubicaciones"><Ubicaciones /></P>} />
               <Route path="compras" element={<P s="compras"><Compras /></P>} />
-              <Route path="compras/nueva" element={<P s="compras"><RegistrarCompra /></P>} />
+              <Route path="compras/nueva" element={<P s="compras">{MODO_REAL ? <RegistrarCompraCarrito /> : <RegistrarCompra />}</P>} />
               <Route path="compras/:id" element={<P s="compras"><CompraDetalle /></P>} />
               <Route path="equipo" element={<P s="equipo"><Equipo /></P>} />
               <Route path="permisos" element={<P s="permisos"><RolesPermisos /></P>} />

@@ -6,15 +6,13 @@ import { useApp } from "../../store/appStore.jsx";
 import { useAuth } from "../../context/AuthContext";
 import { MODO_REAL } from "../../lib/config";
 import * as api from "../../lib/api";
-import { recordarCompra } from "../../servicios/comprasRecientes";
 import { mensajeError } from "../../lib/errores";
 import { Aviso, Campo, Card, PageHeader, Tabla, useConfirm, useToast } from "../../components/ui";
 import { Progreso } from "../../components/charts";
 import { ESTADO_COMPRA } from "./Compras.HU-034";
 import { adjuntoRecordado, buscarPdfFactura, recordarAdjunto, subirPdfFactura, urlPdfFactura, validarPdf, validarPdfContenido } from "../../lib/archivos";
-import { soloDigitos } from "../../lib/validar";
 import { claveModelo } from "../../lib/modelos";
-import { REFRESCO_MS, abrirBlob, archivoDocumentoApi, pedidoCompraApi } from "../../servicios/central";
+import { REFRESCO_MS } from "../../servicios/central";
 import useAutoRefresco from "../../hooks/useAutoRefresco";
 
 const FILA = () => ({ nummotuni: "", chauni: "" });
@@ -40,6 +38,10 @@ export default function CompraDetalle() {
   const inputPdf = useRef(null); const inputPdf2 = useRef(null);
   const [adjReal, setAdjReal] = useState(null);
   const [pedido, setPedido] = useState(""); const [pedidoErr, setPedidoErr] = useState(""); const [guardandoPedido, setGuardandoPedido] = useState(false);
+  // Proveedor, pedido y compras registradas junto con esta (docs/supabase-sprint2-final.sql)
+  const [extra, setExtra] = useState(null);
+  const [aGrupo, setAGrupo] = useState(true);
+  const leerExtra = () => (MODO_REAL ? api.compraExtraApi(id).then((x) => { setExtra(x); return x; }).catch(() => null) : Promise.resolve(null));
 
   // Cargar la compra
   async function cargar() {
@@ -47,8 +49,8 @@ export default function CompraDetalle() {
     try {
       if (MODO_REAL) {
         const c = (await api.obtenerCompra(id)).data;
-        recordarCompra(c?.codcom || id);
-        setCompra(c); setPedido(c?.refcom || "");
+        const x = await leerExtra();
+        setCompra(c); setPedido(x?.pedido || c?.refcom || "");
         if (gestiona) {
           try {
             const d = (await api.listarUnidadesCompra(id)).data;
@@ -71,12 +73,15 @@ export default function CompraDetalle() {
     if (!MODO_REAL || !compra || enviando || enviandoFactura) return;
     try {
       const c = (await api.obtenerCompra(id)).data;
+      leerExtra();
       if (!gestiona) { setCompra((x) => ({ ...x, ...c })); return; }
       const d = (await api.listarUnidadesCompra(id)).data;
       setDet({ factura: d?.factura || null, unidades: d?.unidades || [], requiere_revision: !!(d?.factura && d.factura.cantidad_motos !== d.cantidad_comprada) });
       setCompra((x) => ({ ...x, ...c, cantidad_pendiente: d?.cantidad_pendiente ?? c.cantidad_pendiente, estcom: d?.estcom || c.estcom }));
     } catch { /* se reintenta en el siguiente ciclo */ }
   }, REFRESCO_MS, MODO_REAL);
+  // El emisor propuesto es el proveedor elegido al registrar la compra
+  useEffect(() => { if (extra?.proveedor) setFac((x) => (x.emisor === "Crosland Perú S.A.C." && !x.numero ? { ...x, emisor: extra.proveedor } : x)); }, [extra?.proveedor]);
 
   if (cargando && !compra) return <p className="py-10 text-center text-slate-400">Cargando compra…</p>;
   if (errorCarga) return <div className="space-y-3"><Aviso tipo="error">{errorCarga}</Aviso><Link className="btn btn-secondary" to="/admin/compras">Volver a compras</Link></div>;
@@ -88,8 +93,9 @@ export default function CompraDetalle() {
   const modeloLocal = modelos.find((m) => claveModelo(m.nombre) === claveModelo(compra.nommod))
     || (MODO_REAL ? publicos.find((m) => m.codmodApi === String(compra.codmod)) : modelos.find((m) => m.codmod === compra.codmod)) || null;
   // HU-001 y HU-030: con la base central las unidades no se copian a este navegador
-  const automatica = MODO_REAL && (compra.origen === "Automático" || det.origen === "Automático" || Boolean(det.factura?.coddoc));
-  const coddoc = det.factura?.coddoc || compra.coddoc || null;
+  // La factura llegó por correo (o se subió en Facturas recibidas) y completó esta compra
+  const automatica = MODO_REAL && (Boolean(extra?.coddoc) || compra.origen === "Automático" || Boolean(det.factura?.coddoc));
+  const coddoc = extra?.coddoc || det.factura?.coddoc || compra.coddoc || null;
 
   const adjunto = MODO_REAL ? adjReal : (det.factura?.adjunto || adjuntoRecordado(compra.codcom));
 
@@ -127,21 +133,28 @@ export default function CompraDetalle() {
     } catch (er) { ventana?.close(); toast(mensajeError(er), "error"); }
   }
 
-  // HU-030 · PDF del documento importado (privado: se pide con la sesión)
+  // HU-030 · PDF guardado de la factura que llegó por correo (archivo privado: se abre con un enlace firmado)
   async function abrirPdfDocumento(descargar) {
-    try { abrirBlob(await archivoDocumentoApi(coddoc, "pdf"), descargar); }
-    catch (er) { toast(mensajeError(er), "error"); }
+    const ventana = descargar ? null : window.open("", "_blank");
+    try {
+      const d = await api.documentoRecibidoApi(coddoc);
+      if (!d?.rutaPdf) throw new Error("La factura de este correo no trajo PDF.");
+      const url = await api.urlFirmadaStorage(api.BUCKET_FACTURAS, d.rutaPdf);
+      if (descargar) { const a = document.createElement("a"); a.href = url; a.download = `factura-${f?.numero || coddoc}.pdf`; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
+      else if (ventana) ventana.location.href = url; else window.open(url, "_blank");
+    } catch (er) { ventana?.close(); toast(mensajeError(er), "error"); }
   }
   // HU-030 · N° de pedido de Asiri: permite vincular la factura que llegue por correo sin duplicar la compra
   async function guardarPedido(e) {
     e.preventDefault();
     const v = pedido.trim();
     if (v && !/^[A-Za-z0-9-]{1,40}$/.test(v)) { setPedidoErr("Usa solo letras, números o guiones (máximo 40), tal como figura en Asiri."); return; }
-    if ((compra.refcom || "") === v) { setPedidoErr(v ? "Ese pedido ya está registrado." : "No hay pedido que quitar."); return; }
+    const actual = extra?.pedido || compra.refcom || "";
+    if (actual.toUpperCase() === v.toUpperCase()) { setPedidoErr(v ? "Ese pedido ya está registrado." : "No hay pedido que quitar."); return; }
     setPedidoErr(""); setGuardandoPedido(true);
     try {
-      const r = await pedidoCompraApi(compra.codcom, v || null);
-      setCompra((c) => ({ ...c, refcom: r.data?.refcom ?? (v || null) }));
+      const guardado = (await api.guardarPedidoApi(compra.codcom, v)).pedido;
+      setCompra((c) => ({ ...c, refcom: guardado || null })); setExtra((x) => (x ? { ...x, pedido: guardado || null } : x)); setPedido(guardado || "");
       toast(v ? "N° de pedido guardado" : "N° de pedido quitado");
     } catch (er) { setPedidoErr(mensajeError(er)); }
     finally { setGuardandoPedido(false); }
@@ -150,7 +163,8 @@ export default function CompraDetalle() {
   // Registrar la factura (PUT /api/compras/:id/factura)
   async function guardarFactura(e) {
     e.preventDefault(); const x = {};
-    const cuerpo = { emisor: norm(fac.emisor), numero: norm(fac.numero), fecha_emision: fac.fecha_emision, cantidad_motos: Number(fac.cantidad_motos) };
+    // La cantidad de motos de la factura es la de la compra (se llena sola)
+    const cuerpo = { emisor: norm(fac.emisor), numero: norm(fac.numero), fecha_emision: fac.fecha_emision, cantidad_motos: Number(compra.cancom) };
     if (!cuerpo.emisor) x.emisor = "Copia el emisor tal como aparece en la factura."; else if (cuerpo.emisor.length > 160) x.emisor = "Máximo 160 caracteres.";
     if (!cuerpo.numero) x.numero = "Copia el número de la factura tal como figura en el documento."; else if (cuerpo.numero.length > 80) x.numero = "Máximo 80 caracteres.";
     else if (cuerpo.numero.length < 4 || !/\d/.test(cuerpo.numero) || !/^[\p{L}\d][\p{L}\d ./-]*$/u.test(cuerpo.numero)) x.numero = "Revisa el número: debe tener serie y correlativo, por ejemplo F001-000123.";
@@ -163,7 +177,7 @@ export default function CompraDetalle() {
     const difiere = cuerpo.cantidad_motos !== compra.cancom;
     const ok = await confirmar(difiere
       ? { titulo: "La cantidad no coincide", texto: `La factura declara ${cuerpo.cantidad_motos} motos y la compra es de ${compra.cancom}. Se registrará el documento, pero la identificación quedará bloqueada hasta que la gerencia revise el dato . ¿Registrar igual?`, boton: "Registrar con revisión", peligro: true }
-      : { titulo: "Registrar factura", texto: `Factura ${cuerpo.numero} de ${cuerpo.emisor}, emitida el ${cuerpo.fecha_emision}, por ${cuerpo.cantidad_motos} motos. Una vez registrada no se puede sobrescribir.`, boton: "Registrar factura" });
+      : { titulo: "Registrar factura", texto: `Factura ${cuerpo.numero} de ${cuerpo.emisor}, emitida el ${cuerpo.fecha_emision}, por ${cuerpo.cantidad_motos} motos.${hermanas.length && aGrupo ? ` También se registrará en ${hermanas.map((h) => `la compra N° ${h.codcom} (${h.cancom} motos)`).join(", ")}.` : ""} Una vez registrada no se puede sobrescribir.`, boton: "Registrar factura" });
     if (!ok || guardandoFactura.current) return;
     guardandoFactura.current = true; setEnviandoFactura(true);
     try {
@@ -171,7 +185,17 @@ export default function CompraDetalle() {
       if (MODO_REAL) {
         const r = await api.registrarFactura(id, cuerpo);
         if (pdf) adj = await subirPdf(pdf).catch((er) => { toast(`Factura registrada, pero el PDF no se subió: ${mensajeError(er)}`, "error"); return null; });
-        toast(r.data?.requiere_revision ? (r.message || "Factura registrada con discrepancia: requiere revisión.") : "Factura registrada. La compra pasa a «Pendiente de identificación».", r.data?.requiere_revision ? "error" : "ok");
+        // La misma factura en las compras registradas junto con esta (cada una con su propia cantidad)
+        const fallas = [];
+        if (aGrupo) for (const h of hermanas) {
+          try {
+            await api.registrarFactura(h.codcom, { ...cuerpo, cantidad_motos: Number(h.cancom) });
+            if (pdf) await subirPdfFactura(h.codcom, pdf).catch(() => fallas.push(`PDF de la N° ${h.codcom}`));
+          } catch (er) { fallas.push(`N° ${h.codcom}: ${mensajeError(er)}`); }
+        }
+        toast(r.data?.requiere_revision ? (r.message || "Factura registrada con discrepancia: requiere revisión.") : `Factura registrada${aGrupo && hermanas.length ? ` en ${hermanas.length + 1 - fallas.length} compras` : ""}. Ya puedes identificar las motos.`, r.data?.requiere_revision ? "error" : "ok");
+        if (fallas.length) toast(`No se pudo registrar en: ${fallas.join("; ")}. Regístrala desde esa compra.`, "error");
+        leerExtra();
       } else {
         if (pdf) { adj = await subirPdfFactura(compra.codcom, pdf); recordarAdjunto(compra.codcom, adj); }
         actualizar("compras", compra.id, { estcom: "Pendiente de identificación", factura: { codfac: String(Date.now()).slice(-5), ...cuerpo, archivo_adjuntado: !!adj, adjunto: adj, requiere_revision: difiere } }, `Factura ${cuerpo.numero} registrada (compra #${id})${adj ? " con PDF" : ""}`);
@@ -236,21 +260,35 @@ export default function CompraDetalle() {
   }
 
   const f = det.factura;
+  const grupo = extra?.grupo || [];
+  const hermanas = grupo.filter((h) => h.estcom === "Pendiente de factura");
   return (
     <div>
-      <PageHeader titulo={`Compra #${compra.codcom} · ${compra.nommod}`} subtitulo={`${compra.colcom} · ${compra.cancom} motos · ${automatica ? "registrada por la factura recibida por correo" : "registrada"} el ${compra.feccom} a las ${String(compra.horcom).slice(0, 5)}`}>
+      <PageHeader titulo={`Compra #${compra.codcom} · ${compra.nommod}`} subtitulo={`${compra.colcom} · ${compra.cancom} motos${extra?.proveedor ? ` · ${extra.proveedor}` : ""}${extra?.pedido ? ` · pedido ${extra.pedido}` : ""} · ${automatica ? "registrada por la factura recibida por correo" : "registrada"} el ${compra.feccom} a las ${String(compra.horcom).slice(0, 5)}`}>
         <Link to="/admin/compras" className="btn btn-secondary !py-2.5">← Compras</Link>
         {hechas > 0 && <Link to="/admin/inventario" className="btn btn-secondary !py-2.5">Ver en inventario</Link>}
       </PageHeader>
 
       <ol className="mb-6 grid gap-3 sm:grid-cols-3">
-        {[["Compra registrada", `${compra.feccom}`, true], ["Factura recibida", automatica ? (det.factura?.archivo_adjuntado ? "Importada del correo, con PDF" : "Importada del correo") : tieneFactura ? (adjunto ? "Con PDF adjunto" : "Falta adjuntar el PDF") : "Pendiente", tieneFactura || automatica], ["Unidades identificadas", `${hechas} de ${compra.cancom}`, completa]].map(([t, hu, ok], i) => (
+        {[["Compra registrada", `${compra.feccom}`, true], ["Factura recibida", automatica ? (extra?.pdf || det.factura?.archivo_adjuntado ? "Importada del correo, con PDF" : "Importada del correo") : tieneFactura ? (adjunto ? "Con PDF adjunto" : "Falta adjuntar el PDF") : "Pendiente", tieneFactura || automatica], ["Unidades identificadas", `${hechas} de ${compra.cancom}`, completa]].map(([t, hu, ok], i) => (
           <li key={t} className={`flex items-center gap-3 rounded-xl2 border p-4 ${ok ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-[#121a2b]"}`}>
             <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[14px] font-bold ${ok ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500 dark:bg-white/10"}`}>{ok ? "✓" : i + 1}</span>
             <div><p className="font-semibold text-marino dark:text-white">{t}</p><p className="text-[12px] text-slate-400">{hu}</p></div>
           </li>
         ))}
       </ol>
+
+      {grupo.length > 0 && (
+        <Card className="mb-6" data-grupo-compra>
+          <h2 className="font-bold text-marino dark:text-white">Registrada junto con</h2>
+          <p className="text-[12.5px] text-slate-500">Compras del mismo registro. Cada una lleva su factura y sus motos.</p>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {grupo.map((h) => (
+              <li key={h.codcom}><Link className="btn btn-secondary !py-2 text-[13px]" to={`/admin/compras/${h.codcom}`}>N° {h.codcom} · {h.nommod} {h.colcom} x{h.cancom} <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${ESTADO_COMPRA[h.estcom] || "bg-slate-200"}`}>{h.factura ? h.factura : h.estcom}</span></Link></li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* Avance y factura */}
       <div className="grid gap-6 xl:grid-cols-3">
@@ -275,8 +313,8 @@ export default function CompraDetalle() {
               <dl className="grid gap-x-6 gap-y-3 p-5 text-[13.5px] sm:grid-cols-2">
                 <div><dt className="text-slate-400">Emisor</dt><dd className="font-semibold text-marino dark:text-white">{f.emisor}</dd></div>
                 <div><dt className="text-slate-400">Fecha de emisión</dt><dd className="font-semibold text-marino dark:text-white">{f.fecha_emision}</dd></div>
-                <div><dt className="text-slate-400">Origen</dt><dd className="font-semibold text-marino dark:text-white">Factura recibida por correo</dd></div>
-                <div><dt className="text-slate-400">PDF</dt><dd>{f.archivo_adjuntado ? (
+                <div><dt className="text-slate-400">Origen</dt><dd className="font-semibold text-marino dark:text-white">{extra?.vinculo === "Conciliado" ? "Compra registrada a mano, completada por la factura recibida" : "Factura recibida por correo"}</dd></div>
+                <div><dt className="text-slate-400">PDF</dt><dd>{extra?.pdf || f.archivo_adjuntado ? (
                   <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-secondary !px-3 !py-1.5 !text-[12.5px]" onClick={() => abrirPdfDocumento(false)}>Ver</button><button type="button" className="btn btn-secondary !px-3 !py-1.5 !text-[12.5px]" onClick={() => abrirPdfDocumento(true)}>Descargar</button></div>
                 ) : <span className="text-slate-500">El correo no trajo PDF</span>}</dd></div>
               </dl>
@@ -316,7 +354,13 @@ export default function CompraDetalle() {
               <Campo etiqueta="Emisor (tal como figura en la factura)" error={ferr.emisor}><input className="field-input" maxLength={170} value={fac.emisor} onChange={(e) => setFac({ ...fac, emisor: e.target.value })} /></Campo>
               <Campo etiqueta="N° de factura" error={ferr.numero}><input id="fac-numero" className="field-input" maxLength={90} value={fac.numero} onChange={(e) => setFac({ ...fac, numero: e.target.value })} placeholder="F001-000123" /></Campo>
               <Campo etiqueta="Fecha de emisión" error={ferr.fecha_emision}><input type="date" min={fechaMinimaFactura(compra.feccom)} max={hoyISO()} className="field-input" value={fac.fecha_emision} onChange={(e) => setFac({ ...fac, fecha_emision: e.target.value })} /></Campo>
-              <Campo etiqueta="Cantidad de motos en la factura" error={ferr.cantidad_motos} ayuda={`La compra es de ${compra.cancom} motos. No cuentes aceites ni bonificaciones.`}><input id="fac-cantidad" className="field-input" inputMode="numeric" maxLength={4} value={fac.cantidad_motos} onChange={(e) => setFac({ ...fac, cantidad_motos: soloDigitos(e.target.value, 4).replace(/^0+/, "") })} /></Campo>
+              <Campo etiqueta="Cantidad de motos en la factura" error={ferr.cantidad_motos} ayuda="Se llena sola con la cantidad de esta compra."><input id="fac-cantidad" className="field-input bg-slate-50 font-bold dark:bg-white/5" value={compra.cancom} readOnly aria-readonly="true" tabIndex={-1} /></Campo>
+              {MODO_REAL && hermanas.length > 0 && (
+                <label className="flex items-start gap-2 rounded-xl bg-marino-50 p-3 text-[13.5px] font-medium dark:bg-white/5 sm:col-span-2" data-factura-grupo>
+                  <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[#0e2c52]" checked={aGrupo} onChange={(e) => setAGrupo(e.target.checked)} />
+                  <span>Registrar esta misma factura también en {hermanas.map((h) => `la compra N° ${h.codcom} (${h.nommod} ${h.colcom}, ${h.cancom} motos)`).join(", ")}. Cada una con su propia cantidad.</span>
+                </label>
+              )}
               <div className="sm:col-span-2">
                 <span className="field-label">PDF de la factura</span>
                 <input ref={inputPdf} id="fac-pdf" type="file" accept="application/pdf,.pdf" className="hidden" onChange={elegirPdf} />

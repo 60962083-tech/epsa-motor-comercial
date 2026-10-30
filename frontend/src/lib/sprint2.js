@@ -17,19 +17,6 @@ export const CONECTADO = {
   "EMT-97": MODO_REAL, // Mejora técnica de HU-026: contacto en ubicaciones de trabajo
 };
 
-export const NOMBRE_HU = {
-  "HU-001": "Consultar disponibilidad compartida",
-  "HU-003": "Registrar movimientos de ubicación",
-  "HU-005": "Separar una moto con adelanto confirmado",
-  "HU-011": "Enviar una consulta desde la web",
-  "HU-015": "Asignar o transferir un interesado",
-  "HU-023": "Consultar compras pendientes de identificación o recepción",
-  "HU-030": "Registrar automáticamente compras y unidades desde facturas recibidas por correo",
-  "HU-033": "Actualizar la preparación de una unidad",
-  "HU-036": "Gestionar imágenes de modelos mediante API y almacenamiento central",
-  "EMT-97": "Registrar contacto en ubicaciones de trabajo (mejora técnica de HU-026)",
-};
-
 export const siguienteId = (lista = []) => lista.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0) + 1;
 
 // Nombre visible del cliente (persona o empresa)

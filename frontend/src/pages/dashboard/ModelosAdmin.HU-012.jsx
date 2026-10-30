@@ -18,7 +18,7 @@ import GaleriaCentral from "../../components/dashboard/GaleriaCentral";
 import { aplicarFotosCentrales } from "../../lib/galeria";
 import { fichaATexto } from "../../lib/fichaModelo";
 import InformacionTorito from "../../components/dashboard/InformacionTorito";
-import { REFRESCO_MS } from "../../servicios/central";
+import { REFRESCO_MS, reemplazarFotoModeloApi, subirFotoModeloApi } from "../../servicios/central";
 
 // Conexión con la base (HU-012)
 const CODTMO = { "Motores 2 Tiempos": "2", "Motores 4 Válvulas": "3", "Motores Crom Plus": "4" };
@@ -53,6 +53,17 @@ function leerFoto(file) {
   });
 }
 
+// Foto elegida en la computadora (ya reducida) lista para subir a Supabase Storage
+async function archivoDeFoto(dataUrl) {
+  const blob = await (await fetch(dataUrl)).blob();
+  return new File([blob], "foto-modelo.webp", { type: blob.type || "image/webp" });
+}
+// Ruta en el bucket «modelos» de una foto guardada en nuestro Storage (las de otros sitios no se tocan)
+const rutaEnStorage = (url) => {
+  const base = `${SUPABASE_URL}/storage/v1/object/public/${api.BUCKET_FOTOS}/`;
+  return SUPABASE_URL && String(url || "").startsWith(base) ? decodeURIComponent(String(url).slice(base.length).split("?")[0]) : "";
+};
+
 function imagenValida(v) {
   const t = String(v || "").trim();
   if (/^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,/i.test(t)) return true;
@@ -66,6 +77,7 @@ function imagenValida(v) {
 export default function ModelosAdmin() {
   const { modelos: locales, apiModelos, unidades, agregar, actualizar, eliminar, refrescarWeb, modelosConFotos = [], imagenes = [] } = useApp();
   const [galeria, setGaleria] = useState(null);
+  const [aEliminar, setAEliminar] = useState(null);
   const [torito, setTorito] = useState(false);
   // HU-036: si se editaron sus fotos, la miniatura usa la foto principal de la galería
   const conFotos = (m) => { if (MODO_REAL) return m; const x = modelosConFotos.find((y) => y.id === m.id); return x?.fotoPropia && x.galeria ? { ...m, imagen: x.imagen, fotosColor: x.fotosColor, colorFoto: x.colorFoto, fotoPropia: true, imagenApi: undefined } : m; };
@@ -116,7 +128,7 @@ export default function ModelosAdmin() {
 
   const lista = useMemo(() => modelos.filter((m) => (!q || m.nombre.toLowerCase().includes(q.toLowerCase())) && (!est || m.estado === est) && (!fam || m.familia === fam)), [modelos, q, est, fam]);
 
-  const faltantes = (m) => enBase ? [!fotoActiva(m) ? "foto (enlace https://)" : null, !m.descripcion?.trim() ? "descripción" : null].filter(Boolean) : [!m.descripcion || m.descripcion.trim().length < 40 ? "descripción (mín. 40 caracteres)" : null, !m.precioDesde ? "precio" : null, !m.imagen && !m.local ? "imagen" : null, !m.colores?.length ? "al menos un color" : null].filter(Boolean);
+  const faltantes = (m) => enBase ? [!fotoActiva(m) ? "foto" : null, !m.descripcion?.trim() ? "descripción" : null].filter(Boolean) : [!m.descripcion || m.descripcion.trim().length < 40 ? "descripción (mín. 40 caracteres)" : null, !m.precioDesde ? "precio" : null, !m.imagen && !m.local ? "imagen" : null, !m.colores?.length ? "al menos un color" : null].filter(Boolean);
 
   function abrir(modelo) {
     setErr({});
@@ -154,8 +166,8 @@ export default function ModelosAdmin() {
     if (["cilindrada", "potencia", "torque", "llantas"].some((k) => String(f[k] || "").trim().length > 30)) x.datos = "Cada dato técnico admite como máximo 30 caracteres.";
     if (f.destacadosTxt.length > 600) x.destacados = "Máximo 600 caracteres.";
     if (TABS.some((t) => String(f[`spec_${t.id}`] || "").length > 2000)) x.specs = "Cada pestaña de la ficha técnica admite como máximo 2000 caracteres.";
-    if (enBase && f.imagen?.startsWith("data:")) x.imagen = "Para subir una foto desde tu computadora, guarda el modelo y usa el botón «Fotos»: se guarda en el almacenamiento central.";
-    else if (enBase && f.imagen && !urlParaBase(f.imagen)) x.imagen = "Usa un enlace https:// completo o una ruta /images/...";
+    if (enBase && f.imagen?.startsWith("data:")) { /* foto elegida en la computadora: se sube al guardar */ }
+    else if (enBase && f.imagen && !urlParaBase(f.imagen)) x.imagen = "Sube la foto desde tu computadora.";
     else if (f.imagen && !imagenValida(f.imagen)) x.imagen = "Usa un enlace https:// completo (con dominio), una ruta /images/... o sube una foto.";
     if (!f.colores.length) x.colores = "Elige al menos un color.";
     const quedaPublicado = modal.m ? modal.m.estado === "Publicado" : publicarYa && publica;
@@ -198,8 +210,8 @@ export default function ModelosAdmin() {
     const m = modal.m;
     // HU-036: la ficha completa (familia, motor, combustible, uso, destacados, resumen, pestañas y fotos por color) va en carmod
     const cuerpo = { codtmo: CODTMO[datos.familia] || datos.codtmo || "3", nommod: datos.nombre, marmod: "Bajaj", desmod: datos.descripcion, carmod: fichaATexto(datos), premod: datos.precioDesde, colores: datos.colores };
-    const url = urlParaBase(datos.imagen) || (datos.local && urlParaBase(datos.local)) || "";
-    const ficha = { ...datos }; delete ficha.codmodApi; delete ficha.imagenesApi; delete ficha.estmod; delete ficha.soloLocal; delete ficha.soloBackend;
+    const url = datos.imagen?.startsWith("data:") ? "" : urlParaBase(datos.imagen) || (datos.local && urlParaBase(datos.local)) || "";
+    const ficha = { ...datos }; if (ficha.imagen?.startsWith("data:")) ficha.imagen = ""; delete ficha.codmodApi; delete ficha.imagenesApi; delete ficha.estmod; delete ficha.soloLocal; delete ficha.soloBackend;
     setGuardando(true);
     let codmod = m?.codmodApi;
     try {
@@ -208,9 +220,14 @@ export default function ModelosAdmin() {
         codmod = String((await api.crearModeloApi(cuerpo)).data.codmod);
         setModal((x) => (x ? { m: { ...datos, id: m?.id, codmodApi: codmod, imagenesApi: [], estado: "Borrador" } } : x));
       }
-      // La foto principal solo se toca si se cambió en este formulario (las demás se manejan en «Fotos»)
+      // La foto principal solo se toca si se cambió en este formulario (las demás se manejan en «Fotos»).
+      // Una foto elegida en la computadora se sube a Supabase Storage y queda registrada en la base.
       const actual = fotoActiva(m);
-      if (url && !actual) await api.agregarImagenModeloApi(codmod, url);
+      if (datos.imagen?.startsWith("data:")) {
+        const archivo = await archivoDeFoto(datos.imagen);
+        if (actual) await reemplazarFotoModeloApi(codmod, actual.codimo, archivo, actual.ordimo || 1);
+        else await subirFotoModeloApi(codmod, archivo, 1);
+      } else if (url && !actual) await api.agregarImagenModeloApi(codmod, url);
       else if (url && datos.imagen !== m?.imagen && actual.urlimo !== url) await api.editarImagenModeloApi(codmod, actual.codimo, url);
       const publicar = !m?.codmodApi && publicarYa && publica;
       if (publicar) await api.estadoModeloApi(codmod, "Publicado");
@@ -230,7 +247,7 @@ export default function ModelosAdmin() {
     if (enBase) {
       if (m.soloLocal) return toast("Primero guarda este modelo con Editar y luego Guardar.", "error");
       const publicar = m.estado !== "Publicado";
-      if (publicar && !fotoActiva(m)) return toast("No se puede publicar: falta la foto. Edítalo y pega el enlace https:// de la foto.", "error");
+      if (publicar && !fotoActiva(m)) return toast("No se puede publicar: falta la foto. Edítalo y usa «Subir foto».", "error");
       if (!publicar && !(await confirmar({ titulo: "Retirar de la web", texto: `${m.nombre} dejará de verse en el catálogo público y en Compras. Podrás publicarlo otra vez.`, boton: "Retirar" }))) return;
       try {
         await api.estadoModeloApi(m.codmodApi, publicar ? "Publicado" : "No publicado");
@@ -294,7 +311,9 @@ export default function ModelosAdmin() {
                   ? <button className={btnMini} onClick={() => setGaleria(m)} disabled={m.soloLocal} title={m.soloLocal ? "Guárdalo primero" : ""}>Fotos{(m.imagenesApi || []).length ? ` (${(m.imagenesApi || []).filter((i) => i.estimo).length})` : ""}</button>
                   : <button className={btnMini} onClick={() => setGaleria(m)}>Fotos{imagenes.filter((i) => i.modelo === m.id).length ? ` (${imagenes.filter((i) => i.modelo === m.id).length})` : ""}</button>)}
                 {publica && <button className={btnMini} onClick={() => alternar(m)}>{m.estado === "Publicado" ? "Retirar" : "Publicar"}</button>}
-                {puede("eliminar") && !m.codmodApi && <button className={btnMiniPeligro} onClick={() => borrar(m)}>Eliminar</button>}
+                {puede("eliminar") && (enBase && m.codmodApi
+                  ? <button className={btnMiniPeligro} onClick={() => setAEliminar(m)} data-eliminar-modelo={m.codmodApi}>Eliminar</button>
+                  : !m.codmodApi && <button className={btnMiniPeligro} onClick={() => borrar(m)}>Eliminar</button>)}
               </div></td>
             </tr>
           ))}
@@ -302,6 +321,10 @@ export default function ModelosAdmin() {
       )}
       {!editar && <p className="mt-3 text-[12.5px] text-slate-400">Tu rol puede consultar el catálogo, pero no modificarlo.</p>}
       {editar && !puede("eliminar") && <p className="mt-3 text-[12.5px] text-slate-400">Eliminar modelos es una acción exclusiva de la gerencia.</p>}
+
+      <ModalEliminarModelo modelo={aEliminar} onClose={() => setAEliminar(null)} imagen={aEliminar ? conFotos(aEliminar) : null}
+        onRetirar={publica ? (m) => { setAEliminar(null); alternar(m); } : null}
+        onEliminado={(m) => { if (locales.some((x) => x.id === m.id)) eliminar("modelos", m.id, `Modelo eliminado: ${m.nombre}`); setAEliminar(null); cargarAdmin(true); refrescarWeb(); }} />
 
       {enBase ? <GaleriaCentral modelo={galeria} onClose={() => setGaleria(null)} onCambio={() => { cargarAdmin(true); refrescarWeb(); }} />
         : <GaleriaModelo modelo={galeria} onClose={() => setGaleria(null)} />}
@@ -320,15 +343,17 @@ export default function ModelosAdmin() {
           <Campo etiqueta="Combustible"><select className="field-input" value={f.combustible} onChange={set("combustible")}>{FILTROS_CATALOGO.combustible.map((x) => <option key={x}>{x}</option>)}</select></Campo>
           <Campo etiqueta="Uso"><select className="field-input" value={f.uso} onChange={set("uso")}>{FILTROS_CATALOGO.uso.map((x) => <option key={x}>{x}</option>)}</select></Campo>
           <Campo etiqueta="Descripción (se muestra en la web)" error={err.descripcion} className="sm:col-span-2"><textarea id="mod-desc" rows={4} maxLength={1220} className="field-input" value={f.descripcion} onChange={set("descripcion")} /></Campo>
-          <Campo etiqueta="Foto del modelo" error={err.imagen} className="sm:col-span-2" ayuda="Sube la foto en el primer color marcado (ideal: rojo, fondo transparente). Para los demás colores la web ajusta el tono de la foto.">
+          <Campo etiqueta="Foto del modelo" error={err.imagen} className="sm:col-span-2" ayuda="Elige la foto desde tu computadora (PNG, JPG o WebP, hasta 6 MB), ideal en el primer color marcado y con fondo transparente. Para los demás colores la web ajusta el tono.">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="grid h-28 w-36 shrink-0 place-items-center overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50 dark:border-white/15 dark:bg-white/5">
                 {f.imagen ? <ModeloImg modelo={{ ...f, id: "vista", local: "" }} className="h-full w-full object-contain" /> : <span className="px-2 text-center text-[12px] text-slate-400">Sin foto</span>}
               </div>
               <div className="flex-1 space-y-2">
-                <input className="field-input" value={f.imagen?.startsWith("data:") ? "(foto subida desde tu computadora)" : f.imagen} readOnly={f.imagen?.startsWith("data:")} onChange={set("imagen")} placeholder="https://torito.pe/wp-content/uploads/…png" />
+                {enBase ? (
+                  <p className="text-[13px] text-slate-500" data-foto-estado>{f.imagen?.startsWith("data:") ? "Foto elegida. Se guardará en el almacenamiento al presionar «Guardar»." : f.imagen ? "Foto actual del modelo. Para cambiarla, sube otra." : "Todavía no tiene foto."}</p>
+                ) : <input className="field-input" value={f.imagen?.startsWith("data:") ? "(foto subida desde tu computadora)" : f.imagen} readOnly={f.imagen?.startsWith("data:")} onChange={set("imagen")} placeholder="https://torito.pe/wp-content/uploads/…png" />}
                 <div className="flex flex-wrap gap-2">
-                  {!enBase && <label className={`${btnMini} cursor-pointer`}>Subir foto<input id="mod-foto" type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={subirFoto} /></label>}
+                  <label className={`${enBase ? "btn btn-primary !py-2 text-[13.5px]" : btnMini} cursor-pointer`}>{f.imagen ? "Cambiar foto" : "Subir foto"}<input id="mod-foto" type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={subirFoto} /></label>
                   {f.imagen && <button type="button" className={btnMiniPeligro} onClick={() => setF({ ...f, imagen: "" })}>Quitar foto</button>}
                 </div>
               </div>
@@ -380,5 +405,53 @@ export default function ModelosAdmin() {
         </form>
       </Modal>
     </div>
+  );
+}
+
+// Eliminar un modelo (solo gerencia): ventana con casilla de confirmación. Si el modelo tiene motos, compras o
+// interesados, la base no lo borra y se ofrece retirarlo de la web.
+function ModalEliminarModelo({ modelo, imagen, onClose, onEliminado, onRetirar }) {
+  const toast = useToast();
+  const [seguro, setSeguro] = useState(false);
+  const [borrando, setBorrando] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { setSeguro(false); setError(""); }, [modelo?.codmodApi]);
+  if (!modelo) return null;
+  async function eliminarYa() {
+    if (!seguro || borrando) return;
+    setBorrando(true); setError("");
+    try {
+      const r = await api.eliminarModeloApi(modelo.codmodApi);
+      // Fotos que estaban en nuestro almacenamiento: ya no las usa ningún modelo
+      const rutas = (r?.fotos || []).map(rutaEnStorage).filter(Boolean);
+      if (rutas.length) await api.borrarArchivoStorage(api.BUCKET_FOTOS, rutas).catch(() => {});
+      toast(`${modelo.nombre} se eliminó`);
+      onEliminado(modelo);
+    } catch (e) { setError(mensajeError(e)); }
+    finally { setBorrando(false); }
+  }
+  const bloqueado = /no se puede eliminar/i.test(error);
+  return (
+    <Modal abierto onClose={onClose} titulo="Eliminar modelo" ancho="max-w-lg"
+      pie={<>
+        <button type="button" className="btn btn-secondary !py-2" onClick={onClose}>Cancelar</button>
+        {bloqueado && onRetirar && modelo.estado === "Publicado"
+          ? <button type="button" className="btn btn-primary !py-2" onClick={() => onRetirar(modelo)}>Retirar de la web</button>
+          : <button type="button" data-confirmar-eliminar className="btn !py-2 bg-acento text-white hover:bg-acento-600 disabled:cursor-not-allowed disabled:opacity-40" disabled={!seguro || borrando || bloqueado} onClick={eliminarYa}>{borrando ? "Eliminando…" : "Eliminar modelo"}</button>}
+      </>}>
+      <div data-modal-eliminar>
+        <h3 className="text-[18px] font-bold leading-snug text-marino dark:text-white">¿Estás seguro de que deseas eliminar el {modelo.nombre}?</h3>
+        <p className="mt-1 text-[14px] text-slate-500">Se borrará el modelo con sus colores y fotos, y dejará de verse en la web. Esta acción no se puede deshacer.</p>
+        <div className="mt-4 flex items-center gap-3 rounded-xl bg-marino-50 p-3 dark:bg-white/5">
+          <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-white dark:bg-white/10">{imagen && <ModeloImg modelo={imagen} className="h-full w-full object-contain" />}</div>
+          <div><p className="font-semibold text-marino dark:text-white">{modelo.nombre} <Badge estado={modelo.estado} /></p><p className="text-[12.5px] text-slate-500">{modelo.familia}{modelo.precioDesde ? ` · ${formatoSoles(modelo.precioDesde)}` : ""}</p></div>
+        </div>
+        <label className="mt-4 flex items-start gap-2 text-[14px] font-semibold text-marino dark:text-white">
+          <input type="checkbox" data-casilla-eliminar className="mt-0.5 h-4 w-4 accent-[#c62828]" checked={seguro} onChange={(e) => setSeguro(e.target.checked)} disabled={bloqueado} />
+          Sí, entiendo que el modelo se eliminará para siempre.
+        </label>
+        {error && <div className="mt-3"><Aviso tipo={bloqueado ? "aviso" : "error"}>{error}</Aviso></div>}
+      </div>
+    </Modal>
   );
 }
