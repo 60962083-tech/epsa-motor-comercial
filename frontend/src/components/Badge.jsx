@@ -8,6 +8,7 @@ const ESTILOS = {
   "Pendiente de factura": "bg-slate-200 text-slate-600",
   "Publicado": "bg-emerald-100 text-emerald-700",
   "Borrador": "bg-amber-100 text-amber-700",
+  "No publicado": "bg-slate-200 text-slate-700",
   "Activo": "bg-emerald-100 text-emerald-700",
   "Inactivo": "bg-slate-200 text-slate-600",
   "Nuevo": "bg-sky-100 text-sky-700",

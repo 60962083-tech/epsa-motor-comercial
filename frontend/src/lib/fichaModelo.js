@@ -31,6 +31,8 @@ export const SECCIONES_FICHA = [
 const GENERALES = [
   ["familia", "Familia"], ["tipoMotor", "Tipo de motor"], ["combustible", "Combustible"], ["uso", "Uso"],
   ["tipoTecho", "Techo"], ["colorFoto", "Color de la foto"], ["paginaTorito", "Página en torito.pe"],
+  // Origen del registro: «Manual» (creado por EPSA en el panel; la sincronización con torito.pe no lo toca)
+  ["origen", "Origen"],
 ];
 const RESUMEN = ["Motor", "Cilindrada", "Llantas", "Potencia", "Torque"];
 const sinTildes = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -50,6 +52,20 @@ export function fichaATexto(m = {}) {
   for (const s of SECCIONES_FICHA) bloque(s.titulo, (m.specs?.[s.id] || []).filter(([k, v]) => limpio(k) && limpio(v)).map(([k, v]) => `${limpio(k)}: ${limpio(v)}`));
   bloque("Fotos por color", Object.entries(m.fotosColor || {}).filter(([, u]) => /^https:\/\//i.test(String(u || ""))).map(([c, u]) => `${limpio(c)}: ${String(u).trim()}`));
   return b.join("\n").trim();
+}
+
+// Pone (o cambia) un dato general en el texto de carmod sin tocar el resto de la ficha
+export function conDatoGeneral(texto, clave, valor) {
+  const titulo = GENERALES.find(([k]) => k === clave)?.[1];
+  const t = String(texto || "").trim();
+  if (!titulo || !limpio(valor) || !t.includes("\n")) return t;
+  const lineas = t.split("\n");
+  const fin = lineas.findIndex((l) => !l.trim());
+  const cabecera = fin < 0 ? lineas.length : fin;
+  const linea = `${titulo}: ${limpio(valor)}`;
+  const i = lineas.slice(0, cabecera).findIndex((l) => sinTildes(par(l)?.[0]) === sinTildes(titulo));
+  if (i >= 0) lineas[i] = linea; else lineas.splice(cabecera, 0, linea);
+  return lineas.join("\n");
 }
 
 // ¿El carmod ya trae la ficha completa por secciones?

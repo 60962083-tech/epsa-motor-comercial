@@ -53,6 +53,8 @@ export function modeloDesdeApi(a, idsOcupados = new Set()) {
     estado: a.estmod === "Publicado" || !a.estmod ? "Publicado" : "Borrador", soloBackend: true, precioDesde: a.premod == null || a.premod === "" ? null : Number(a.premod), colores,
     badges: ficha.badges, destacados: ficha.destacados, descripcion: a.desmod || "", imagen: oficial, imagenApi: fotos[0] || undefined, fotos,
     colorFoto, fotosColor: ficha.fotosColor, resumen, specs: ficha.specs, fichaCompleta: esFichaCompleta(a.carmod),
+    // Vínculo con torito.pe (por su página, no por el nombre) y origen del registro; se conservan al editar
+    paginaTorito: g.paginaTorito || "", origen: g.origen || "",
   };
 }
 

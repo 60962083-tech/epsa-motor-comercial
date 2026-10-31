@@ -6,10 +6,13 @@
 // equipo subió se conservan y solo se ocultan fotos de torito.pe repetidas o que torito.pe ya reemplazó.
 // Los modelos que torito.pe publica y aún no están en la base se crean con POST /api/modelos (precio, colores,
 // descripción y ficha), se les enlazan sus fotos y se publican: aparecen en el panel y en la web.
+// Cada modelo se une a su producto de torito.pe por su página (guardada en su ficha), no por el nombre comercial.
+// Los modelos creados a mano en el panel («Origen: Manual», como el Torito 250 anterior) nunca se vinculan ni se
+// cambian: no se les copia la ficha de otro modelo, ni se ocultan o despublican porque torito.pe no los muestre.
 import { useEffect, useMemo, useState } from "react";
 import { CATALOGO_TORITO } from "../../data/catalogoTorito";
 import { claveModelo } from "../../lib/modelos";
-import { esFichaCompleta } from "../../lib/fichaModelo";
+import { conDatoGeneral, esFichaCompleta, textoAFicha } from "../../lib/fichaModelo";
 import { crearModeloApi, editarModeloApi, estadoModeloApi } from "../../lib/api";
 import { enlazarFotoModeloApi, estadoFotoModeloApi, ordenFotoModeloApi } from "../../servicios/central";
 import { BUCKET_FOTOS, borrarArchivoStorage } from "../../lib/api";
@@ -21,11 +24,13 @@ import { Aviso, Modal } from "../ui";
 import { Pill } from "./Sprint2";
 
 const deTorito = (url) => /^https:\/\/torito\.pe\//i.test(String(url || ""));
-// Ficha propuesta: la de su página de torito.pe o, si no la tiene, la del mismo nombre (se puede cambiar o no vincular)
+// Ficha propuesta: la de su página de torito.pe (se puede cambiar o no vincular). Un modelo manual no se vincula.
 const slugDe = (o) => o.slug || PAGINA_TORITO[o.nombre] || "";
+export const esManual = (m) => /^manual$/i.test(String(textoAFicha(m?.carmod).generales.origen || "").trim());
 const fichaDe = (m, catalogo) => {
+  if (esManual(m)) return null;
   const pagina = paginaDe(m);
-  return (pagina && catalogo.find((o) => slugDe(o) === pagina)) || catalogo.find((o) => claveModelo(o.nombre) === claveModelo(m.nommod)) || null;
+  return (pagina && catalogo.find((o) => slugDe(o) === pagina)) || null;
 };
 const vinculoInicial = (modelos, catalogo) => Object.fromEntries(modelos.map((m) => [String(m.codmod), fichaDe(m, catalogo)?.nombre || ""]));
 // Modelos de torito.pe que no tienen ningún modelo en la base (ni por su página ni por el nombre)
@@ -37,7 +42,7 @@ const nuevosDe = (modelos, catalogo) => catalogo.filter((o) => o.enVivo && o.slu
 // Con «reemplazar», también se actualiza lo que ya tiene un valor distinto al de torito.pe
 const igualesColores = (a = [], b = []) => a.length === b.length && a.every((c) => b.includes(c));
 export function planInformacion(modelos = [], vinculo = {}, reemplazar = false, catalogo = CATALOGO_TORITO, copiaDe = null) {
-  const oficialDe = (m) => catalogo.find((o) => o.nombre === vinculo[String(m.codmod)]) || null;
+  const oficialDe = (m) => (esManual(m) ? null : catalogo.find((o) => o.nombre === vinculo[String(m.codmod)]) || null);
   // Fotos activas en uso y foto principal oficial de cada modelo vinculado
   const usoFoto = new Map();
   for (const m of modelos) for (const i of m.imagenes || []) if (i.estimo !== false) usoFoto.set(i.urlimo, (usoFoto.get(i.urlimo) || 0) + 1);
@@ -51,6 +56,14 @@ export function planInformacion(modelos = [], vinculo = {}, reemplazar = false, 
     if (oficial.colores.length && (!(m.colores || []).length || (reemplazar && !igualesColores(m.colores || [], oficial.colores)))) datos.colores = oficial.colores;
     if (oficial.descripcion && (String(m.desmod || "").trim().length < 40 || (reemplazar && String(m.desmod || "").trim() !== oficial.descripcion))) datos.desmod = oficial.descripcion;
     if (!esFichaCompleta(m.carmod) || (reemplazar && String(m.carmod || "").trim() !== oficial.ficha)) datos.carmod = oficial.ficha;
+    // La ficha guarda la página de torito.pe del modelo: así el vínculo no depende del nombre en las próximas veces
+    let soloVinculo = false;
+    const pagina = slugDe(oficial);
+    const ficha = datos.carmod ?? m.carmod;
+    if (pagina && textoAFicha(ficha).generales.paginaTorito !== pagina) {
+      const conPagina = conDatoGeneral(ficha, "paginaTorito", pagina);
+      if (conPagina !== String(ficha || "").trim()) { soloVinculo = !datos.carmod; datos.carmod = conPagina; }
+    }
     // Fotos: una oficial extra no se agrega si es la principal de otro modelo (así ninguna moto se repite).
     // Con «copiaDe», cada foto de torito.pe se guarda como archivo propio en Supabase Storage y reemplaza a las
     // fotos de torito.pe anteriores (enlaces directos o copias que torito.pe ya no muestra). Las fotos que subió
@@ -78,19 +91,19 @@ export function planInformacion(modelos = [], vinculo = {}, reemplazar = false, 
         if (!existe) fotos.push({ tipo: copiaDe ? "copia" : "foto", origen: n.origen, url: n.url, ordimo: n.url === principalDestino && !quedanOtras ? 1 : ++orden });
       }
     }
-    return { m, oficial, datos, fotos };
+    return { m, oficial, datos, fotos, soloVinculo };
   });
 }
 
 // Lo que cambia, en pocas palabras
-function resumen({ datos, fotos, oficial, m }) {
+function resumen({ datos, fotos, oficial, m, soloVinculo }) {
   const nuevas = fotos.filter((c) => c.tipo !== "quitar").length;
   const quitar = fotos.filter((c) => c.tipo === "quitar").length;
   return [
     datos.premod ? `Precio ${formatoSoles(datos.premod)}${m.premod != null && m.premod !== "" ? ` (antes ${formatoSoles(Number(m.premod))})` : ""}` : null,
     datos.colores ? `Colores: ${datos.colores.join(", ")}` : null,
     datos.desmod ? "Descripción" : null,
-    datos.carmod ? `Ficha técnica (${oficial.datos} datos)` : null,
+    datos.carmod ? (soloVinculo ? "Guarda su página de torito.pe" : `Ficha técnica (${oficial.datos} datos)`) : null,
     nuevas ? `${nuevas} foto${nuevas === 1 ? "" : "s"} de torito.pe${fotos.some((c) => c.tipo === "copia") ? " (se guardan en la base)" : ""}` : null,
     quitar ? `${fotos.some((c) => c.tipo === "copia") ? "Reemplaza" : "Ocultar"} ${quitar} foto${quitar === 1 ? "" : "s"} anterior${quitar === 1 ? "" : "es"}` : null,
   ].filter(Boolean);
@@ -266,23 +279,23 @@ export default function InformacionTorito({ abierto, modelos, onClose, onHecho }
         )}
         <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100 dark:divide-white/10 dark:border-white/10">
           {plan.map((p) => {
-            const id = String(p.m.codmod); const r = estado.resultados[id]; const cambios = resumen(p);
+            const id = String(p.m.codmod); const r = estado.resultados[id]; const cambios = resumen(p); const manual = esManual(p.m);
             return (
-              <li key={id} className="grid gap-2 px-4 py-3 sm:grid-cols-[auto_1fr_auto] sm:items-start" data-torito-modelo={p.m.nommod}>
-                <input type="checkbox" className="mt-1 h-4 w-4" checked={cambios.length > 0 && marcados.has(id)} disabled={bloqueado || !cambios.length} onChange={() => alternar(id)} aria-label={`Guardar ${p.m.nommod}`} />
+              <li key={id} className="grid gap-2 px-4 py-3 sm:grid-cols-[auto_1fr_auto] sm:items-start" data-torito-modelo={p.m.nommod} data-torito-manual={manual ? "" : undefined}>
+                <input type="checkbox" className="mt-1 h-4 w-4" checked={cambios.length > 0 && marcados.has(id)} disabled={bloqueado || manual || !cambios.length} onChange={() => alternar(id)} aria-label={`Guardar ${p.m.nommod}`} />
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold text-marino dark:text-white">{p.m.nommod}</p>
                     <span className="text-[12px] text-slate-400">N° {id}</span>
                   </div>
-                  <label className="mt-1 flex flex-wrap items-center gap-2 text-[12.5px] text-slate-500">Ficha de torito.pe
+                  {manual ? <p className="mt-1 text-[12.5px] text-slate-500">Registro manual de EPSA: no se actualiza desde torito.pe.</p> : <label className="mt-1 flex flex-wrap items-center gap-2 text-[12.5px] text-slate-500">Ficha de torito.pe
                     <select className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[12.5px] dark:border-white/15 dark:bg-white/5" value={vinculo[id] || ""} disabled={bloqueado} onChange={(e) => { setVinculo({ ...vinculo, [id]: e.target.value }); setElegidos(null); }} data-vinculo-torito>
                       <option value="">No vincular</option>
                       {catalogo.map((o) => <option key={o.nombre} value={o.nombre}>{o.nombre}</option>)}
                     </select>
-                  </label>
+                  </label>}
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {!p.oficial ? <span className="text-[12.5px] text-slate-400">Sin ficha vinculada: no se toca.</span>
+                    {!p.oficial ? <span className="text-[12.5px] text-slate-400">{manual ? "Se mantiene tal como está." : "Sin ficha vinculada: no se toca."}</span>
                       : cambios.length ? cambios.map((t) => <Pill key={t} tono="marino">{t}</Pill>) : <Pill tono="verde">Ya tiene toda su información</Pill>}
                   </div>
                   {p.datos.carmod && (
