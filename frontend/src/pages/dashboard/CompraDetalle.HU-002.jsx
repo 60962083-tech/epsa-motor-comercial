@@ -90,8 +90,10 @@ export default function CompraDetalle() {
   const tieneFactura = compra.estcom !== "Pendiente de factura";
   const completa = compra.estcom === "Identificada";
   const bloqueada = det.requiere_revision;
-  const modeloLocal = modelos.find((m) => claveModelo(m.nombre) === claveModelo(compra.nommod))
-    || (MODO_REAL ? publicos.find((m) => m.codmodApi === String(compra.codmod)) : modelos.find((m) => m.codmod === compra.codmod)) || null;
+  // Con la base conectada, el modelo se busca por su número (codmod) entre los de la base, nunca por nombre en los
+  // datos de ejemplo: así el Torito 250 anterior y el 250 4V no se cruzan
+  const modeloLocal = MODO_REAL ? publicos.find((m) => m.codmodApi === String(compra.codmod)) || null
+    : modelos.find((m) => claveModelo(m.nombre) === claveModelo(compra.nommod)) || modelos.find((m) => m.codmod === compra.codmod) || null;
   // HU-001 y HU-030: con la base central las unidades no se copian a este navegador
   // La factura llegó por correo (o se subió en Facturas recibidas) y completó esta compra
   const automatica = MODO_REAL && (Boolean(extra?.coddoc) || compra.origen === "Automático" || Boolean(det.factura?.coddoc));

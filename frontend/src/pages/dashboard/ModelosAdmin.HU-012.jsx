@@ -11,18 +11,21 @@ import Badge from "../../components/Badge";
 import { MODO_REAL, SUPABASE_URL } from "../../lib/config";
 import * as api from "../../lib/api";
 import { mensajeError } from "../../lib/errores";
-import { emparejarModelos, modeloDesdeApi } from "../../lib/modelos";
-import useAutoRefresco from "../../hooks/useAutoRefresco";
+import { modeloDesdeApi, ordenCatalogo } from "../../lib/modelos";
 import GaleriaModelo from "../../components/dashboard/GaleriaModelo";
 import GaleriaCentral from "../../components/dashboard/GaleriaCentral";
 import { aplicarFotosCentrales } from "../../lib/galeria";
 import { fichaATexto } from "../../lib/fichaModelo";
 import InformacionTorito from "../../components/dashboard/InformacionTorito";
-import { REFRESCO_MS, reemplazarFotoModeloApi, subirFotoModeloApi } from "../../servicios/central";
+import { inventarioApi, reemplazarFotoModeloApi, subirFotoModeloApi, useConsultaCentral } from "../../servicios/central";
+import { AvisoConexion, BarraActualizacion } from "../../components/dashboard/Central";
 
 // Conexión con la base (HU-012)
 const CODTMO = { "Motores 2 Tiempos": "2", "Motores 4 Válvulas": "3", "Motores Crom Plus": "4" };
-const estadoPanel = (e) => (e === "Publicado" ? "Publicado" : "Borrador");
+// Existir en la base y estar publicado en la web son cosas distintas: un modelo «No publicado» se sigue usando
+// para el inventario, las compras históricas y los interesados, pero no se ve en la web ni en Compras.
+const estadoPanel = (e) => (e === "Publicado" ? "Publicado" : "No publicado");
+const ESTADOS_PANEL = MODO_REAL ? ["Publicado", "No publicado"] : ["Publicado", "Borrador"];
 const urlParaBase = (u) => { const t = String(u || "").trim(); return /^\/images\/[\w./-]+\.(png|jpe?g|webp|svg|gif)$/i.test(t) || /^https:\/\/[^\s]+$/i.test(t) ? t : ""; };
 const fotoActiva = (m) => [...(m?.imagenesApi || [])].filter((i) => i.estimo).sort((a, b) => (a.ordimo ?? 0) - (b.ordimo ?? 0))[0];
 
@@ -75,7 +78,7 @@ function imagenValida(v) {
 
 // Página de modelos
 export default function ModelosAdmin() {
-  const { modelos: locales, apiModelos, unidades, agregar, actualizar, eliminar, refrescarWeb, modelosConFotos = [], imagenes = [] } = useApp();
+  const { modelos: locales, unidades, agregar, actualizar, eliminar, refrescarWeb, modelosConFotos = [], imagenes = [] } = useApp();
   const [galeria, setGaleria] = useState(null);
   const [aEliminar, setAEliminar] = useState(null);
   const [torito, setTorito] = useState(false);
@@ -84,41 +87,41 @@ export default function ModelosAdmin() {
   const { puede } = useAuth();
   const enBase = MODO_REAL && puede("modelos.editar");
 
-  // Lista desde la base: GET /api/modelos/admin (se actualiza sola)
-  const [admin, setAdmin] = useState(null);
-  const [errorApi, setErrorApi] = useState("");
+  // Con la base conectada, la lista sale solo de la base (gerencia y administración ven todos los modelos,
+  // publicados o no; las demás cuentas, los publicados). Nada de modelos ni precios de ejemplo del front, ni
+  // copias en el navegador: mientras carga se ve la espera, si falla la primera vez el error con «Reintentar», y si
+  // falla una actualización posterior queda lo último que confirmó la base, con su hora.
+  const consulta = useConsultaCentral(
+    () => (enBase ? api.modelosAdminApi() : api.modelosPublicos()).then((r) => (Array.isArray(r.data) ? r.data : [])),
+    [enBase], { activo: MODO_REAL, clave: `modelos-panel:${enBase ? "todos" : "publicados"}` });
+  const admin = MODO_REAL ? consulta.data : null;
+  const cargarAdmin = () => consulta.refrescar(true);
   const [guardando, setGuardando] = useState(false);
-  async function cargarAdmin(silencioso = false) {
-    if (!enBase) return;
-    try { const r = await api.modelosAdminApi(); setAdmin(Array.isArray(r.data) ? r.data : []); setErrorApi(""); }
-    catch (e) { if (!silencioso) setErrorApi(mensajeError(e)); }
-  }
-  useEffect(() => { cargarAdmin(); }, []); // eslint-disable-line
-  useAutoRefresco(() => cargarAdmin(true), REFRESCO_MS, enBase);
 
-  // Ficha del panel + datos reales de la base
+  // Unidades registradas de cada modelo: motos del inventario central unidas a su número de modelo (codmod)
+  const inventario = useConsultaCentral(() => inventarioApi(), [], { activo: MODO_REAL, clave: "inventario::", intervalo: 30000 });
+  const unidadesPorModelo = useMemo(() => {
+    const c = new Map();
+    for (const u of inventario.data?.unidades || []) if (u.codmod) c.set(String(u.codmod), (c.get(String(u.codmod)) || 0) + 1);
+    return c;
+  }, [inventario.data]);
+  const unidadesDe = (m) => (!MODO_REAL ? unidades.filter((u) => u.modelo === m.id).length : inventario.data ? unidadesPorModelo.get(String(m.codmodApi)) || 0 : "—");
+
+  // Modelos: con la base conectada, toda la información sale de ella (precio, colores, descripción, ficha de carmod,
+  // fotos, origen y vínculo con torito.pe), igual que en la web
   const modelos = useMemo(() => {
-    if (!enBase || !admin) return locales;
-    const par = emparejarModelos(admin, locales);
-    const ocupados = new Set(locales.map((m) => m.id));
-    // HU-036: toda la información sale de la base (precio, colores, descripción, ficha de carmod y fotos), igual
-    // que en la web. La ficha oficial de torito.pe solo se propone al editar si la base todavía no la tiene.
-    const deBase = (a, m) => {
+    if (!MODO_REAL) return locales;
+    if (!admin) return [];
+    const ocupados = new Set();
+    return admin.map((a) => {
       const b = modeloDesdeApi(a, ocupados);
-      if (!m) ocupados.add(b.id);
+      ocupados.add(b.id);
       return aplicarFotosCentrales({
-        ...b, id: m?.id || b.id, codtmo: a.codtmo, estmod: a.estmod, estado: estadoPanel(a.estmod), carmod: a.carmod || "",
-        colores: COLORES.filter((c) => (a.colores || []).includes(c)),
-        precioSugerido: m?.precioDesde ?? null, coloresSugeridos: m?.colores || [], fichaSugerida: m || null,
-        imagenesApi: a.imagenes || [],
+        ...b, codtmo: a.codtmo, estmod: a.estmod, estado: estadoPanel(a.estmod), carmod: a.carmod || "",
+        colores: COLORES.filter((c) => (a.colores || []).includes(c)), imagenesApi: a.imagenes || [],
       }, a.imagenes);
-    };
-    const conFicha = locales.flatMap((m) => { const a = par.porLocal.get(m.id); return a ? [deBase(a, m)] : []; });
-    const soloBase = par.sinFicha.map((a) => deBase(a, null));
-    const soloNavegador = locales.filter((m) => !par.porLocal.has(m.id)).map((m) => ({ ...m, estado: "Borrador", soloLocal: true }));
-    return [...conFicha, ...soloBase, ...soloNavegador];
-  }, [enBase, admin, locales]);
-  const soloLocales = modelos.filter((m) => m.soloLocal);
+    }).sort(ordenCatalogo);
+  }, [admin, locales]);
   const toast = useToast(); const confirmar = useConfirm();
   const [q, setQ] = useState(""); const [est, setEst] = useState(""); const [fam, setFam] = useState("");
   const [modal, setModal] = useState(null); const [f, setF] = useState(NUEVO); const [err, setErr] = useState({});
@@ -132,8 +135,9 @@ export default function ModelosAdmin() {
 
   function abrir(modelo) {
     setErr({});
-    // Si la base todavía no tiene la ficha completa, se propone la de torito.pe para completarla al guardar
-    const s = modelo?.fichaSugerida && !modelo.fichaCompleta ? modelo.fichaSugerida : null;
+    // Solo la vista de ejemplo propone su ficha local; con la base, la ficha oficial llega con «Traer información de
+    // torito.pe» (y nunca a un modelo creado a mano)
+    const s = !MODO_REAL && modelo?.fichaSugerida && !modelo.fichaCompleta ? modelo.fichaSugerida : null;
     const m = s ? { ...modelo, familia: s.familia, tipoMotor: s.tipoMotor, combustible: s.combustible, uso: s.uso, tipoTecho: s.tipoTecho, badges: s.badges, destacados: s.destacados, resumen: s.resumen, specs: s.specs, colorFoto: s.colorFoto || modelo.colorFoto, descripcion: modelo.descripcion || s.descripcion } : modelo;
     setF(m ? {
       ...m, badges: (m.badges || []).join(", "), precioDesde: String(m.precioDesde ?? m.precioSugerido ?? ""),
@@ -209,16 +213,18 @@ export default function ModelosAdmin() {
   async function guardarEnBase(datos) {
     const m = modal.m;
     // HU-036: la ficha completa (familia, motor, combustible, uso, destacados, resumen, pestañas y fotos por color) va en carmod
-    const cuerpo = { codtmo: CODTMO[datos.familia] || datos.codtmo || "3", nommod: datos.nombre, marmod: "Bajaj", desmod: datos.descripcion, carmod: fichaATexto(datos), premod: datos.precioDesde, colores: datos.colores };
+    // Un modelo creado aquí queda como «Origen: Manual»: la sincronización con torito.pe no lo vincula ni lo cambia.
+    // Al editar se conservan su origen y su página de torito.pe (vienen de su ficha en la base).
+    const origen = m?.codmodApi ? datos.origen : "Manual";
+    const cuerpo = { codtmo: CODTMO[datos.familia] || datos.codtmo || "3", nommod: datos.nombre, marmod: "Bajaj", desmod: datos.descripcion, carmod: fichaATexto({ ...datos, origen }), premod: datos.precioDesde, colores: datos.colores };
     const url = datos.imagen?.startsWith("data:") ? "" : urlParaBase(datos.imagen) || (datos.local && urlParaBase(datos.local)) || "";
-    const ficha = { ...datos }; if (ficha.imagen?.startsWith("data:")) ficha.imagen = ""; delete ficha.codmodApi; delete ficha.imagenesApi; delete ficha.estmod; delete ficha.soloLocal; delete ficha.soloBackend;
     setGuardando(true);
     let codmod = m?.codmodApi;
     try {
       if (codmod) await api.editarModeloApi(codmod, cuerpo);
       else {
         codmod = String((await api.crearModeloApi(cuerpo)).data.codmod);
-        setModal((x) => (x ? { m: { ...datos, id: m?.id, codmodApi: codmod, imagenesApi: [], estado: "Borrador" } } : x));
+        setModal((x) => (x ? { m: { ...datos, id: m?.id, codmodApi: codmod, imagenesApi: [], estado: "No publicado" } } : x));
       }
       // La foto principal solo se toca si se cambió en este formulario (las demás se manejan en «Fotos»).
       // Una foto elegida en la computadora se sube a Supabase Storage y queda registrada en la base.
@@ -231,16 +237,10 @@ export default function ModelosAdmin() {
       else if (url && datos.imagen !== m?.imagen && actual.urlimo !== url) await api.editarImagenModeloApi(codmod, actual.codimo, url);
       const publicar = !m?.codmodApi && publicarYa && publica;
       if (publicar) await api.estadoModeloApi(codmod, "Publicado");
-      // Ficha extendida del panel (pestañas, etiquetas, destacados)
-      if (m && locales.some((x) => x.id === m.id)) actualizar("modelos", m.id, { ...ficha, estado: publicar ? "Publicado" : m.estado }, `Modelo editado: ${datos.nombre}`);
-      else {
-        let id = m?.id || slug(datos.nombre); if (locales.some((x) => x.id === id)) id = `${id}-${codmod}`;
-        agregar("modelos", { ...ficha, id, codmod, estado: publicar ? "Publicado" : "Borrador", local: datos.local || "", creadoEnPanel: true, fotoPropia: !datos.local, fotosColor: {} }, `Modelo ${m ? "editado" : "creado"}: ${datos.nombre}`);
-      }
-      toast(publicar ? `${datos.nombre} guardado y publicado en la web` : m?.estado === "Publicado" ? "Cambios guardados: ya se ven en la web" : "Guardado como borrador. Publícalo para que aparezca en la web y en Compras.");
+      toast(publicar ? `${datos.nombre} guardado y publicado en la web` : m?.estado === "Publicado" ? "Cambios guardados: ya se ven en la web" : "Guardado sin publicar: ya se puede usar en el inventario. Publícalo para que aparezca en la web y en Compras.");
       setModal(null);
     } catch (e) { toast(mensajeError(e), "error"); }
-    finally { setGuardando(false); await Promise.all([cargarAdmin(true), refrescarWeb()]); }
+    finally { setGuardando(false); await Promise.all([cargarAdmin(), refrescarWeb()]); }
   }
 
   async function alternar(m) {
@@ -251,10 +251,9 @@ export default function ModelosAdmin() {
       if (!publicar && !(await confirmar({ titulo: "Retirar de la web", texto: `${m.nombre} dejará de verse en el catálogo público y en Compras. Podrás publicarlo otra vez.`, boton: "Retirar" }))) return;
       try {
         await api.estadoModeloApi(m.codmodApi, publicar ? "Publicado" : "No publicado");
-        if (locales.some((x) => x.id === m.id)) actualizar("modelos", m.id, { estado: publicar ? "Publicado" : "Borrador" }, `Modelo ${publicar ? "publicado" : "retirado"}: ${m.nombre}`);
         toast(publicar ? `${m.nombre} ya está visible en la web y en Compras` : `${m.nombre} se retiró de la web`);
       } catch (e) { toast(mensajeError(e), "error"); }
-      finally { await Promise.all([cargarAdmin(true), refrescarWeb()]); }
+      finally { await Promise.all([cargarAdmin(), refrescarWeb()]); }
       return;
     }
     if (m.estado !== "Publicado") {
@@ -276,34 +275,28 @@ export default function ModelosAdmin() {
   return (
     <div>
       <PageHeader titulo="Modelos" subtitulo="Lo que publiques, edites o elimines aquí cambia al instante en la web de clientes.">
+        {MODO_REAL && <BarraActualizacion consulta={consulta} />}
         {enBase && <button className="btn btn-secondary !py-2.5" onClick={() => setTorito(true)} disabled={!admin} data-abrir-torito>Traer información de torito.pe</button>}
-        {editar && <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)}>+ Nuevo modelo</button>}
+        {editar && <button className="btn btn-primary !py-2.5" onClick={() => abrir(null)} disabled={MODO_REAL && !admin}>+ Nuevo modelo</button>}
       </PageHeader>
-      <InformacionTorito abierto={torito} modelos={admin || []} onClose={() => setTorito(false)} onHecho={() => { cargarAdmin(true); refrescarWeb(); }} />
-      {/* Estado del catálogo */}
-      {MODO_REAL && (
-        <div className="mb-4 space-y-2" data-diagnostico-modelos>
-          {!apiModelos && <Aviso tipo="error">No se pudo cargar el catálogo publicado. Intenta de nuevo en un momento.</Aviso>}
-          {errorApi && <Aviso tipo="error">No se pudo leer los modelos de la base: {errorApi}</Aviso>}
-          {enBase && soloLocales.length > 0 && <Aviso tipo="aviso">Estos modelos todavía no están guardados: <b>{soloLocales.map((m) => m.nombre).join(", ")}</b>. Ábrelos con Editar y guarda para subirlos.</Aviso>}
-        </div>
-      )}
+      <InformacionTorito abierto={torito} modelos={admin || []} onClose={() => setTorito(false)} onHecho={() => { cargarAdmin(); refrescarWeb(); }} />
+      {MODO_REAL && <AvisoConexion consulta={consulta} que="los modelos" />}
       <div className="mb-5 grid gap-3 rounded-xl2 border border-slate-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#121a2b] sm:grid-cols-3">
         <div><label className="field-label">Buscar</label><input className="field-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre del modelo" /></div>
-        <div><label className="field-label">Estado</label><select className="field-input" value={est} onChange={(e) => setEst(e.target.value)}><option value="">Todos</option><option>Publicado</option><option>Borrador</option></select></div>
+        <div><label className="field-label">Estado</label><select className="field-input" value={est} onChange={(e) => setEst(e.target.value)}><option value="">Todos</option>{ESTADOS_PANEL.map((x) => <option key={x}>{x}</option>)}</select></div>
         <div><label className="field-label">Familia</label><select className="field-input" value={fam} onChange={(e) => setFam(e.target.value)}><option value="">Todas</option>{FAMILIAS.map((x) => <option key={x}>{x}</option>)}</select></div>
       </div>
       {/* Tabla de modelos */}
-      {lista.length === 0 ? <Vacio titulo="No hay modelos" texto="Crea un modelo nuevo o cambia los filtros." /> : (
-        <Tabla columnas={["Modelo", "Familia", "Motor", "Desde", "Unidades", "Estado", "Acciones"]}>
+      {MODO_REAL && !admin ? (consulta.error ? null : <CargandoModelosPanel />) : lista.length === 0 ? <Vacio titulo="No hay modelos" texto="Crea un modelo nuevo o cambia los filtros." /> : (
+        <Tabla columnas={["Modelo", "Familia", "Motor", "Desde", MODO_REAL ? "Unidades registradas" : "Unidades", "Estado", "Acciones"]}>
           {lista.map((m) => (
             <tr key={m.id}>
               <td className="px-4 py-3"><div className="flex items-center gap-3"><ModeloImg modelo={conFotos(m)} className="h-12 w-16 shrink-0 rounded-md bg-marino-50 object-contain" /><div><p className="font-semibold text-marino dark:text-white">{m.nombre}</p><p className="max-w-[240px] truncate text-[12px] text-slate-400">{m.descripcion}</p></div></div></td>
               <td className="px-4 py-3">{m.familia}</td>
               <td className="px-4 py-3">{m.tipoMotor} · {m.combustible}</td>
               <td className="whitespace-nowrap px-4 py-3">{m.precioDesde ? formatoSoles(m.precioDesde) : <span className="text-[12.5px] font-semibold text-amber-700 dark:text-amber-300" title="En la web sale «A consultar». Ponlo con Editar.">Sin precio</span>}</td>
-              <td className="px-4 py-3">{unidades.filter((u) => u.modelo === m.id).length}</td>
-              <td className="px-4 py-3"><Badge estado={m.estado} />{m.soloLocal && <p className="mt-1 text-[11.5px] text-slate-400">Sin guardar</p>}</td>
+              <td className="px-4 py-3" data-unidades-modelo={m.codmodApi || m.id} title={MODO_REAL ? "Motos registradas en el inventario con este modelo (incluye vendidas y no disponibles)" : undefined}>{unidadesDe(m)}</td>
+              <td className="px-4 py-3"><Badge estado={m.estado} />{m.origen === "Manual" && <p className="mt-1 text-[11.5px] text-slate-400" data-origen-manual>Registro manual</p>}</td>
               <td className="px-4 py-3"><div className="flex flex-wrap gap-1.5">
                 {m.estado === "Publicado" && <Link className={btnMini} to={`/modelos/${m.id}`} target="_blank">Ver en la web</Link>}
                 {editar && <button className={btnMini} onClick={() => abrir(m)}>Editar</button>}
@@ -324,16 +317,16 @@ export default function ModelosAdmin() {
 
       <ModalEliminarModelo modelo={aEliminar} onClose={() => setAEliminar(null)} imagen={aEliminar ? conFotos(aEliminar) : null}
         onRetirar={publica ? (m) => { setAEliminar(null); alternar(m); } : null}
-        onEliminado={(m) => { if (locales.some((x) => x.id === m.id)) eliminar("modelos", m.id, `Modelo eliminado: ${m.nombre}`); setAEliminar(null); cargarAdmin(true); refrescarWeb(); }} />
+        onEliminado={() => { setAEliminar(null); cargarAdmin(); refrescarWeb(); }} />
 
-      {enBase ? <GaleriaCentral modelo={galeria} onClose={() => setGaleria(null)} onCambio={() => { cargarAdmin(true); refrescarWeb(); }} />
+      {enBase ? <GaleriaCentral modelo={galeria} onClose={() => setGaleria(null)} onCambio={() => { cargarAdmin(); refrescarWeb(); }} />
         : <GaleriaModelo modelo={galeria} onClose={() => setGaleria(null)} />}
 
       {/* Nuevo / editar modelo */}
       <Modal abierto={!!modal} onClose={() => setModal(null)} titulo={modal?.m ? `Editar ${modal.m.nombre}` : "Nuevo modelo"} ancho="max-w-3xl"
         confirmarGuardar={modal?.m
-          ? { titulo: "¿Guardar los cambios?", texto: modal.m.estado === "Publicado" ? `${modal.m.nombre} está publicado: los cambios se verán al instante en la web de clientes.` : "Los cambios se guardarán en el catálogo. El modelo sigue como borrador hasta que lo publiques.", boton: "Guardar cambios", validar: validarModelo }
-          : { titulo: "¿Crear este modelo?", texto: publicarYa && publica ? "Se creará y aparecerá en la web de clientes al instante." : "Se creará como borrador. Para que aparezca en la web, publícalo desde la lista.", boton: "Crear modelo", validar: validarModelo }}
+          ? { titulo: "¿Guardar los cambios?", texto: modal.m.estado === "Publicado" ? `${modal.m.nombre} está publicado: los cambios se verán al instante en la web de clientes.` : "Los cambios se guardarán en el catálogo. El modelo sigue sin publicar hasta que lo publiques.", boton: "Guardar cambios", validar: validarModelo }
+          : { titulo: "¿Crear este modelo?", texto: publicarYa && publica ? "Se creará y aparecerá en la web de clientes al instante." : MODO_REAL ? "Se creará sin publicar: queda guardado en la base para el inventario. Para que aparezca en la web y en Compras, publícalo desde la lista." : "Se creará como borrador. Para que aparezca en la web, publícalo desde la lista.", boton: "Crear modelo", validar: validarModelo }}
         pie={<><button className="btn btn-secondary !py-2" onClick={() => setModal(null)}>Cancelar</button><button form="f-mod" className="btn btn-primary !py-2" disabled={guardando}>{guardando ? "Guardando…" : "Guardar"}</button></>}>
         <form id="f-mod" onSubmit={guardar} className="grid gap-4 sm:grid-cols-2" noValidate>
           <Campo etiqueta="Nombre" error={err.nombre}><input id="mod-nombre" className="field-input" maxLength={60} value={f.nombre} onChange={set("nombre")} /></Campo>
@@ -404,6 +397,22 @@ export default function ModelosAdmin() {
           )}
         </form>
       </Modal>
+    </div>
+  );
+}
+
+// Filas de espera mientras llega la lista de modelos de la base
+function CargandoModelosPanel() {
+  return (
+    <div className="space-y-2 rounded-xl2 border border-slate-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#121a2b]" data-cargando-modelos role="status" aria-live="polite">
+      <span className="sr-only">Cargando modelos…</span>
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="flex animate-pulse items-center gap-3 py-2 motion-reduce:animate-none" aria-hidden="true">
+          <div className="h-12 w-16 rounded-md bg-slate-200/80 dark:bg-white/10" />
+          <div className="h-4 w-1/4 rounded bg-slate-200/80 dark:bg-white/10" />
+          <div className="ml-auto h-4 w-1/3 rounded bg-slate-200/60 dark:bg-white/[0.07]" />
+        </div>
+      ))}
     </div>
   );
 }

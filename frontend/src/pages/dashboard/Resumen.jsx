@@ -237,7 +237,7 @@ const SinDatos = ({ texto = "Sin datos todavía." }) => <p className="py-8 text-
 
 function ResumenCentral() {
   const { puedeVer, puede } = useAuth();
-  const { publicos = [] } = useApp();
+  const { publicos = [], catalogo } = useApp();
   const verMotos = puedeVer("inventario") || puedeVer("disponibilidad");
   const inventario = useConsultaCentral(() => inventarioApi(), [], { activo: verMotos, clave: "inventario::" });
   const leadsC = useConsultaCentral(() => leadsCentralApi({ limite: 200 }), [], { activo: puedeVer("leads"), clave: "leads" });
@@ -275,7 +275,7 @@ function ResumenCentral() {
         {motosOk && <Stat etiqueta="En tránsito" valor={valor(hayInventario, transito.length)} tono={transito.length ? "ambar" : "marino"} nota="Falta confirmar la llegada" />}
         {motosOk && <Stat etiqueta="Listas para entrega" valor={valor(hayInventario, listas.length)} tono="verde" nota="Preparación terminada" />}
         {leadsOk && <Stat etiqueta="Leads abiertos" valor={valor(hayLeads, leads.filter((l) => ABIERTOS.includes(l.estlea)).length)} nota={hayLeads ? `${leadsC.data.total ?? leads.length} registrados` : "Aún sin datos"} />}
-        <Stat etiqueta="Modelos en la web" valor={publicos.length} nota="Publicados en el catálogo" />
+        <Stat etiqueta="Modelos en la web" valor={valor(catalogo?.estado === "listo", publicos.length)} nota={catalogo?.estado === "error" ? "No se pudo leer el catálogo" : "Publicados en el catálogo"} />
         {compras && <Stat etiqueta="Compras por completar" valor={compras.length} tono={compras.length ? "ambar" : "marino"} nota="Esperan su factura" />}
         {motosOk && hayInventario && sinUbicacion.length > 0 && <Stat etiqueta="Sin ubicación" valor={sinUbicacion.length} tono="rojo" nota="Falta registrar dónde están" />}
       </div>
