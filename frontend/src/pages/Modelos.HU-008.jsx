@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { FILTROS_CATALOGO, FAMILIAS, COLOR_HEX, formatoSoles } from "../data/mockData";
 import { useApp } from "../store/appStore.jsx";
+import { BloqueCatalogo } from "../components/EstadoCatalogo";
 import { useCotizar } from "../components/CotizarModal";
 import ModeloImg from "../components/ModeloImg";
 import MotoIllustration from "../components/MotoIllustration";
@@ -119,7 +120,7 @@ function PanelFiltros({ grupos, sel, alternar, conteo, precio, setPrecio, rango 
 const VITRINA = [["torito-2t-ug-gsl", "Azul"], ["torito-crom-plus-gsl", ""], ["torito-250-4v-glp", ""]];
 
 export default function Modelos() {
-  const { publicos } = useApp();
+  const { publicos, catalogo } = useApp();
   const [params] = useSearchParams();
   // Desde el inicio se puede llegar con un combustible elegido (?combustible=GLP)
   const [sel, setSel] = useState(() => ({ ...VACIO, combustible: params.get("combustible") ? [params.get("combustible")] : [] }));
@@ -224,7 +225,7 @@ export default function Modelos() {
 
           {/* Filtros activos */}
           <div className="mt-5 flex min-h-[32px] flex-wrap items-center gap-2" aria-live="polite">
-            <p className="mr-2 text-[14.5px] font-semibold text-marino dark:text-white">{nModelos(lista.length)}</p>
+            <p className="mr-2 text-[14.5px] font-semibold text-marino dark:text-white">{catalogo?.estado === "cargando" ? "Cargando modelos…" : catalogo?.estado === "error" ? "" : nModelos(lista.length)}</p>
             {activos.map((a) => (
               <button key={a.id} type="button" onClick={a.quitar} aria-label={`Quitar filtro ${a.texto}`}
                 className="inline-flex items-center gap-1.5 rounded-full bg-marino-50 py-1 pl-3 pr-2 text-[13px] font-medium text-marino transition hover:bg-slate-200 dark:bg-white/10 dark:text-white dark:hover:bg-white/15">
@@ -234,8 +235,10 @@ export default function Modelos() {
             {activos.length > 1 && <button type="button" onClick={limpiar} className="ml-1 text-[13px] font-semibold text-acento hover:underline">Limpiar todo</button>}
           </div>
 
-          {/* Resultados */}
-          {lista.length === 0 ? (
+          {/* Resultados (con la base conectada, primero se espera el catálogo central) */}
+          {catalogo?.estado !== "listo" ? (
+            <BloqueCatalogo n={3} className="mt-6 grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 xl:grid-cols-3">{null}</BloqueCatalogo>
+          ) : lista.length === 0 ? (
             <div className="mt-6 rounded-2xl border border-dashed border-slate-300 px-6 py-16 text-center dark:border-white/15">
               <MotoIllustration className="mx-auto w-28 opacity-40" />
               <h2 className="mt-4 text-lg font-semibold">{publicos.length === 0 ? "Por ahora no hay modelos publicados" : "Ningún modelo coincide con estos filtros"}</h2>

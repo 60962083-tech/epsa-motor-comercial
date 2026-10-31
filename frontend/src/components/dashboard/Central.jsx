@@ -12,12 +12,29 @@ import { ColorPunto, Pill } from "./Sprint2";
 
 export const hora = (iso) => (iso ? new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false }) : "");
 
-// Botón Actualizar (la vista también se actualiza sola y al volver a la pestaña)
+// Hora de una lectura: «15:32:10» si es de hoy, «29/10 15:32:10» si es de otro día
+export const momentoLectura = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const hms = d.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  return d.toDateString() === new Date().toDateString() ? hms : `${d.toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit" })} ${hms}`;
+};
+
+// Botón Actualizar con la hora de la última lectura correcta (la vista también se actualiza sola y al volver a la
+// pestaña). Si un intento falla, la hora no cambia: sigue mostrando la del último dato confirmado.
 export function BarraActualizacion({ consulta }) {
+  const hora = momentoLectura(consulta.actualizado);
   return (
-    <button className="btn btn-secondary ml-auto self-end !px-3.5 !py-2 text-[13px]" onClick={() => consulta.refrescar()} disabled={consulta.cargando} data-actualizar data-actualizado={consulta.actualizado || ""}>
-      {consulta.cargando ? "Actualizando…" : "Actualizar"}
-    </button>
+    <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1 self-end">
+      {hora && (
+        <span className={`text-[12.5px] ${consulta.fallo ? "font-semibold text-amber-700 dark:text-amber-300" : "text-slate-500"}`} data-ultima-lectura={consulta.actualizado} role="status">
+          {consulta.fallo ? `Último dato de las ${hora}` : `Actualizado a las ${hora}`}
+        </span>
+      )}
+      <button className="btn btn-secondary !px-3.5 !py-2 text-[13px]" onClick={() => consulta.refrescar()} disabled={consulta.cargando} data-actualizar data-actualizado={consulta.actualizado || ""}>
+        {consulta.cargando ? "Actualizando…" : "Actualizar"}
+      </button>
+    </div>
   );
 }
 
@@ -49,7 +66,7 @@ export function AvisoConexion({ consulta, que = "la información" }) {
     return (
       <div className="mb-4" data-desactualizado role="status">
         <Aviso tipo="aviso">
-          <b>No se pudo actualizar{consulta.fallo.status === 0 ? ": no hay conexión" : ""}.</b> Lo que ves puede estar desactualizado. Se vuelve a intentar sola, o usa Actualizar.
+          <b>No se pudo actualizar{consulta.fallo.status === 0 ? ": no hay conexión" : ""}.</b> Lo que ves es la última información confirmada{consulta.actualizado ? `, de las ${momentoLectura(consulta.actualizado)}` : ""}, y puede estar desactualizado. Se vuelve a intentar sola, o usa Actualizar.
         </Aviso>
       </div>
     );

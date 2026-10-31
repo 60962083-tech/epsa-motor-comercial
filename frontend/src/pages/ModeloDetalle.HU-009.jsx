@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useApp } from "../store/appStore.jsx";
+import { BloqueCatalogo } from "../components/EstadoCatalogo";
 import { useCotizar } from "../components/CotizarModal";
 import { OPCIONES_TECHO, SIN_TECHO, CUOTAS_INICIAL, PLAZOS, COLOR_HEX, formatoSoles } from "../data/mockData";
 import ModeloImg from "../components/ModeloImg";
@@ -29,10 +30,11 @@ export default function ModeloDetalleRuta() {
 
 // Página del modelo
 function ModeloDetalle({ id }) {
-  const { modelo: buscar, publicos } = useApp();
+  const { modelo: buscar, publicos, catalogo } = useApp();
   const cotizar = useCotizar();
   const m = publicos.find((x) => x.id === id);
-  const retirado = !m ? buscar(id) : null;
+  // Con la base conectada, el nombre de un modelo retirado no se toma de los datos de demostración
+  const retirado = !m && !MODO_REAL ? buscar(id) : null;
   const [color, setColor] = useState("");
   const [foto, setFoto] = useState(null);
   const [techo, setTecho] = useState(SIN_TECHO.id);
@@ -46,6 +48,8 @@ function ModeloDetalle({ id }) {
     return () => { vivo = false; };
   }, [m?.codmodApi]); // eslint-disable-line
 
+  // Mientras llega el catálogo de la base (o si falla), no se dice todavía que el modelo no está disponible
+  if (!m && catalogo?.estado !== "listo") return <div className="wrap py-16"><BloqueCatalogo n={1} className="mx-auto grid max-w-xl gap-6">{null}</BloqueCatalogo></div>;
   if (!m || despublicado) return <ProductoNoDisponible nombre={m?.nombre || retirado?.nombre} />;
 
   const desc = ficha?.desmod && !m.editadoEnPanel ? ficha.desmod : m.descripcion;

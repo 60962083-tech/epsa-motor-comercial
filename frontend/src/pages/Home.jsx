@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../store/appStore.jsx";
+import { BloqueCatalogo } from "../components/EstadoCatalogo";
 import { useCotizar } from "../components/CotizarModal";
 import Carousel from "../components/Carousel";
 import { TarjetaModelo } from "./Modelos.HU-008";
@@ -100,13 +101,15 @@ export default function Home() {
             </button>
           ))}
         </div>
-        {lista.length === 0 ? (
-          <p className="mt-10 rounded-2xl border border-dashed border-slate-300 py-12 text-center text-slate-500 dark:border-white/15">Por ahora no hay modelos publicados en esta familia. Escríbenos por WhatsApp.</p>
-        ) : (
-          <div className="mt-10 grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {lista.map((m) => <TarjetaModelo key={m.id} m={m} colores={false} />)}
-          </div>
-        )}
+        <BloqueCatalogo n={4}>
+          {lista.length === 0 ? (
+            <p className="mt-10 rounded-2xl border border-dashed border-slate-300 py-12 text-center text-slate-500 dark:border-white/15">Por ahora no hay modelos publicados en esta familia. Escríbenos por WhatsApp.</p>
+          ) : (
+            <div className="mt-10 grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {lista.map((m) => <TarjetaModelo key={m.id} m={m} colores={false} />)}
+            </div>
+          )}
+        </BloqueCatalogo>
       </section>
 
       {/* ------------------------------------------------------------------------------------- */}

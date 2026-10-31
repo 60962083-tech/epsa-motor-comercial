@@ -93,6 +93,23 @@ export function filtrarUnidades(lista = [], f = FILTRO_INICIAL) {
 }
 
 // Conteo por clave
+// Modelos para el filtro Modelo: salen de las motos del inventario (no del catálogo de la web), así también
+// aparecen los modelos retirados de la web que aún tienen motos. Cada uno con su cantidad (cuenta). El modelo
+// elegido se mantiene en la lista aunque con otro filtro quede en 0, para que se vea que no hay coincidencias.
+const nombresModelo = new Map();
+export function modelosDeUnidades(unidades = [], seleccionado = "", cuenta = () => true) {
+  const m = new Map();
+  unidades.forEach((u) => {
+    if (!u.codmod) return;
+    nombresModelo.set(u.codmod, u.nommod);
+    const x = m.get(u.codmod) || { codmod: u.codmod, nommod: u.nommod || "Modelo", n: 0 };
+    if (cuenta(u)) x.n += 1;
+    m.set(u.codmod, x);
+  });
+  if (seleccionado && !m.has(seleccionado)) m.set(seleccionado, { codmod: seleccionado, nommod: nombresModelo.get(seleccionado) || "Modelo elegido", n: 0 });
+  return [...m.values()].sort((a, b) => a.nommod.localeCompare(b.nommod, "es"));
+}
+
 export const contar = (lista, fn) => lista.reduce((o, x) => { const k = fn(x); o[k] = (o[k] || 0) + 1; return o; }, {});
 
 // Nombre corto de la moto: modelo y motor
