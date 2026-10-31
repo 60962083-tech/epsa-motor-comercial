@@ -1,7 +1,7 @@
 // HU-030 · Facturas recibidas (gerente y administradora)
 // Las facturas de Crosland llegan a Gmail y el proceso automático (Apps Script cada 5 minutos → API) las registra
 // solas: compra, una ficha por moto en Almacén Crosland Ancón y sin duplicados. Aquí se ven todas, sus motos y lo
-// que quedó por revisar; también se puede subir una factura (XML y PDF) y asignar los códigos de producto de
+// que quedó por revisar; también se puede subir el XML de una factura y asignar los códigos de producto de
 // Crosland a cada modelo. Todo se lee y guarda en la base central (docs/supabase-sprint2-mejoras.sql).
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -166,18 +166,17 @@ function CorreosRecibidos() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Subir una factura (XML obligatorio, PDF opcional): se revisa antes de registrar
+// Subir una factura: solo el XML, que es de donde salen modelos, motores, chasis y cantidades; se revisa antes de registrar
 // ---------------------------------------------------------------------------------------------
 function SubirFactura() {
   const toast = useToast();
   const nav = useNavigate();
-  const [xml, setXml] = useState(null); const [pdf, setPdf] = useState(null);
   const [revision, setRevision] = useState({ estado: "vacio" }); // vacio | leyendo | listo | error
   const [registrando, setRegistrando] = useState(false);
   const [resultado, setResultado] = useState(null);
 
   async function revisar(archivo) {
-    setXml(archivo); setResultado(null);
+    setResultado(null);
     if (!archivo) { setRevision({ estado: "vacio" }); return; }
     if (!/\.xml$/i.test(archivo.name) && !/xml/i.test(archivo.type)) { setRevision({ estado: "error", error: "Elige el archivo .xml de la factura." }); return; }
     setRevision({ estado: "leyendo" });
@@ -190,10 +189,9 @@ function SubirFactura() {
 
   async function registrar() {
     if (registrando || revision.estado !== "listo") return;
-    if (pdf && !/\.pdf$/i.test(pdf.name) && pdf.type !== "application/pdf") { toast("El PDF debe ser un archivo .pdf.", "error"); return; }
     setRegistrando(true);
     try {
-      const r = await registrarFactura(revision.lectura, revision.preparada, pdf);
+      const r = await registrarFactura(revision.lectura, revision.preparada);
       setResultado(r);
       toast(r.estadoDocumento === "Importado" ? `Factura registrada: ${r.conteos?.importados || 0} moto(s) ingresada(s)` : `Factura registrada como «${ESTADO_DOCUMENTO[r.estadoDocumento] || r.estadoDocumento}»`);
     } catch (e) { toast(mensajeError(e), "error"); }
@@ -201,15 +199,14 @@ function SubirFactura() {
   }
 
   const doc = revision.lectura?.documento;
-  const lineas = doc ? doc.lineas.map((l, i) => ({ ...l, ...(revision.preparada?.clasificacion[i] || {}) })) : [];
+  const lineas = doc ? doc.lineas.map((l, i) => ({ ...l, ...revision.preparada?.clasificacion[i] })) : [];
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]" data-subir-factura>
       <Card>
-        <p className="font-semibold text-marino dark:text-white">Archivos de la factura</p>
-        <p className="mb-4 text-[13px] text-slate-500">Sube el XML que Crosland envía con la factura. El PDF es opcional y queda guardado para consultarlo.</p>
+        <p className="font-semibold text-marino dark:text-white">Archivo de la factura</p>
+        <p className="mb-4 text-[13px] text-slate-500">Sube el XML que Crosland envía con la factura: de ahí se leen los modelos, motores, chasis y cantidades.</p>
         <div className="space-y-4">
           <Campo etiqueta="XML de la factura"><input id="fac-xml" type="file" accept=".xml,text/xml,application/xml" className="field-input" onChange={(e) => revisar(e.target.files?.[0] || null)} /></Campo>
-          <Campo etiqueta="PDF (opcional)"><input id="fac-pdf" type="file" accept=".pdf,application/pdf" className="field-input" onChange={(e) => setPdf(e.target.files?.[0] || null)} /></Campo>
           {revision.estado === "leyendo" && <Aviso>Leyendo la factura…</Aviso>}
           {revision.estado === "error" && <div data-error-factura><Aviso tipo="error">{revision.error}</Aviso></div>}
           {revision.estado === "listo" && !revision.lectura.validacion.valido && (

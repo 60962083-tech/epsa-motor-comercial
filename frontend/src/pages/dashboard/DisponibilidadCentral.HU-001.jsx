@@ -1,13 +1,14 @@
 // HU-001 · Consultar disponibilidad compartida (base central)
 // La misma lectura para gerente, administradora y vendedores: ubicación, modelo, color, techo, preparación y
-// situación comercial, cada una por separado. Sin clientes, costos ni boletas. Ubicación y modelo se filtran en el
-// servidor; la vista se actualiza sola, con «Actualizar» y al volver a la pestaña.
+// situación comercial, cada una por separado. Sin clientes, costos ni boletas. La ubicación se filtra en el servidor
+// y el modelo aquí (con la lista de modelos que tienen motos); la vista se actualiza sola, con «Actualizar» y al volver
+// a la pestaña.
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "../../components/dashboard/LinkPanel";
 import { useApp } from "../../store/appStore.jsx";
 import { COLORES } from "../../data/mockData";
 import { inventarioApi, useConsultaCentral } from "../../servicios/central";
-import { ETAPAS_FILTRO_CENTRAL as ETAPAS_FILTRO, FILTRO_INICIAL, GRUPOS_LUGAR_API, TONO_COMERCIAL, contar, filtrarUnidades, ubicacionDe } from "../../servicios/inventarioCentral";
+import { ETAPAS_FILTRO_CENTRAL as ETAPAS_FILTRO, FILTRO_INICIAL, GRUPOS_LUGAR_API, TONO_COMERCIAL, contar, filtrarUnidades, modelosDeUnidades, ubicacionDe } from "../../servicios/inventarioCentral";
 import ModeloImg from "../../components/ModeloImg";
 import MotoIllustration from "../../components/MotoIllustration";
 import { Card, PageHeader, Stat, Tabla, btnMini } from "../../components/ui";
@@ -33,13 +34,16 @@ export default function DisponibilidadCentral() {
   const [abierto, setAbierto] = useState({});
   useEffect(() => { try { sessionStorage.setItem(CLAVE_FILTROS, JSON.stringify({ servidor, f, vista })); } catch {} }, [servidor, f, vista]);
 
-  // Lectura central (ubicación y modelo los filtra el servidor)
-  const consulta = useConsultaCentral(() => inventarioApi(servidor), [servidor.codubi, servidor.codmod], { clave: `inventario:${servidor.codubi || ""}:${servidor.codmod || ""}` });
+  // Lectura central: la ubicación la filtra el servidor; el modelo se filtra aquí, para que la lista de modelos
+  // muestre todos los que tienen motos en esa ubicación y se pueda combinar con los demás filtros
+  const consulta = useConsultaCentral(() => inventarioApi({ codubi: servidor.codubi }), [servidor.codubi], { clave: `inventario:${servidor.codubi || ""}:` });
   const datos = consulta.data;
-  const unidades = datos?.unidades || [];
+  const todas = useMemo(() => datos?.unidades || [], [datos]);
+  const unidades = useMemo(() => (servidor.codmod ? todas.filter((u) => String(u.codmod) === String(servidor.codmod)) : todas), [todas, servidor.codmod]);
   const lista = useMemo(() => filtrarUnidades(unidades, f), [unidades, f]);
   const ubicaciones = datos?.ubicaciones || [];
-  const modelos = datos?.modelos || [];
+  // Cantidad por modelo sin contar las vendidas (igual que el indicador «Unidades»)
+  const modelos = useMemo(() => modelosDeUnidades(todas, servidor.codmod, (u) => u.comercial !== "Vendida"), [todas, servidor.codmod]);
   const provisionales = servidor.codubi ? [] : datos?.provisionales || [];
 
   const cambiar = (k, v) => setF((x) => ({ ...x, [k]: v }));
@@ -115,7 +119,7 @@ export default function DisponibilidadCentral() {
             </select></div>
           <div><label className="field-label" htmlFor="disp-modelo">Modelo</label>
             <select id="disp-modelo" className="field-input" value={servidor.codmod} onChange={(e) => setServidor((s) => ({ ...s, codmod: e.target.value }))}>
-              <option value="">Todos</option>{modelos.map((m) => <option key={m.codmod} value={m.codmod}>{m.nommod}</option>)}
+              <option value="">Todos los modelos</option>{modelos.map((m) => <option key={m.codmod} value={m.codmod}>{m.nommod} ({m.n})</option>)}
             </select></div>
           <div><label className="field-label" htmlFor="disp-prep">Preparación</label>
             <select id="disp-prep" className="field-input" value={f.prep} onChange={(e) => cambiar("prep", e.target.value)}><option value="">Todas las etapas</option>{ETAPAS_FILTRO.map((e) => <option key={e}>{e}</option>)}</select></div>

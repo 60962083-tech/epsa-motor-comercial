@@ -39,7 +39,8 @@ export default function RegistrarCompraCarrito() {
   const [enviando, setEnviando] = useState(false);
   const [hecho, setHecho] = useState(null);
 
-  // Todos los modelos de la base (publicados o no), con sus colores y fotos: un modelo nuevo aparece solo
+  // Modelos publicados de la base, con sus colores y fotos (decisión aceptada en EMT-140: el modelo se publica
+  // antes de comprarlo). Se relee cada 30 s: un modelo recién publicado aparece solo
   const [base, setBase] = useState(null);
   const leerModelos = () => api.modelosAdminApi().then((r) => setBase(Array.isArray(r.data) ? r.data : [])).catch(() => setBase((x) => x ?? []));
   useEffect(() => { leerModelos(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -55,10 +56,10 @@ export default function RegistrarCompraCarrito() {
   const modelos = useMemo(() => {
     if (!base?.length) return (publicos || []).filter((m) => m.codmod);
     const ocupados = new Set();
-    return base.map((a) => {
+    return base.filter((a) => a.estmod === "Publicado").map((a) => {
       const m = modeloDesdeApi(a, ocupados); ocupados.add(m.id);
-      return { ...aplicarFotosCentrales(m, a.imagenes), colores: a.colores || [], publicado: a.estmod === "Publicado" };
-    }).sort((x, y) => Number(y.publicado) - Number(x.publicado) || x.nombre.localeCompare(y.nombre, "es"));
+      return { ...aplicarFotosCentrales(m, a.imagenes), colores: a.colores || [] };
+    }).sort((x, y) => x.nombre.localeCompare(y.nombre, "es"));
   }, [base, publicos]);
   const porCodigo = useMemo(() => new Map(modelos.map((m) => [String(m.codmod), m])), [modelos]);
   const visibles = modelos.filter((m) => (!filtro.comb || m.combustible === filtro.comb) && (!filtro.q.trim() || m.nombre.toLowerCase().includes(filtro.q.trim().toLowerCase())));
@@ -181,7 +182,7 @@ export default function RegistrarCompraCarrito() {
           </Card>
 
           {base === null && <p className="py-10 text-center text-slate-400">Cargando modelos…</p>}
-          {base !== null && visibles.length === 0 && <p className="py-10 text-center text-slate-400">{modelos.length ? "Ningún modelo coincide con la búsqueda." : "Todavía no hay modelos registrados."}</p>}
+          {base !== null && visibles.length === 0 && <p className="py-10 text-center text-slate-400">{modelos.length ? "Ningún modelo coincide con la búsqueda." : "Todavía no hay modelos publicados."}</p>}
           <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
             {visibles.map((m) => {
               const e = eleccion(m); const ya = enCompra(m.codmod);
@@ -193,7 +194,6 @@ export default function RegistrarCompraCarrito() {
                   <div className="h-36 overflow-hidden bg-escenario dark:bg-escenario-oscuro"><ModeloImg modelo={m} color={e.color || undefined} className="h-full w-full object-contain p-3" /></div>
                   <div className="p-4">
                     <h3 className="font-bold leading-tight text-marino dark:text-white">{m.nombre}</h3>
-                    {m.publicado === false && <span className="mt-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-white/10 dark:text-white/70">No publicado en la web</span>}
                     <p className="text-[12.5px] text-slate-400">{m.combustible}{m.colores?.length ? ` · ${colores.length === 1 ? `solo en ${colores[0]}` : `${colores.length} colores`}` : " · elige el color de la compra"}</p>
                     <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label={`Color del ${m.nombre}`}>
                       {colores.map((c) => (
@@ -217,6 +217,12 @@ export default function RegistrarCompraCarrito() {
               );
             })}
           </div>
+          {base !== null && (
+            <p className="mt-4 text-[13px] text-slate-500" data-nota-publicar>
+              ¿No ves un modelo? Primero publícalo en Modelos y aparecerá aquí.
+              {puede("modelos.publicar") && <> <Link to="/admin/modelos" className="font-semibold text-marino underline-offset-2 hover:underline dark:text-white">Ir a Modelos</Link></>}
+            </p>
+          )}
         </section>
 
         <aside className="xl:sticky xl:top-4 xl:self-start">

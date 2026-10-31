@@ -95,6 +95,9 @@ function unirSedes(api, ubicaciones) {
 export function AppProvider({ children }) {
   const [s, setS] = useState(cargar);
   const [apiModelos, setApiModelos] = useState(null);
+  // Estado del catálogo central en la web: «cargando» hasta la primera respuesta, «error» si la primera lectura falla
+  // (después de una lectura correcta, un fallo deja el último catálogo confirmado y se reintenta solo)
+  const [catalogoError, setCatalogoError] = useState(null);
   const [apiSedes, setApiSedes] = useState(null);
   const guardado = useRef("");
 
@@ -123,7 +126,7 @@ export function AppProvider({ children }) {
   const refrescarWeb = useCallback(() => {
     if (!MODO_REAL) return Promise.resolve();
     return Promise.all([
-      modelosPublicos().then((r) => setApiModelos(r.data)).catch(() => {}),
+      modelosPublicos().then((r) => { setApiModelos(Array.isArray(r.data) ? r.data : []); setCatalogoError(null); }).catch((e) => setCatalogoError(e || new Error("Sin respuesta"))),
       sedesPublicasApi().then((r) => setApiSedes(Array.isArray(r.data) ? r.data : null)).catch(() => {}),
     ]);
   }, []);
@@ -169,7 +172,9 @@ export function AppProvider({ children }) {
 
   // Catálogo público (modelos publicados). Con la API conectada, toda la información sale de la base (HU-036):
   // precio, colores, descripción, ficha técnica (carmod) y fotos de GET /api/modelos, sin datos guardados en el front.
-  let publicos = modelosConFotos.filter((m) => m.estado === "Publicado");
+  // Mientras llega la primera respuesta (o si falla) el catálogo queda vacío: los modelos de demostración del front
+  // solo se usan en el modo sin base.
+  let publicos = MODO_REAL ? [] : modelosConFotos.filter((m) => m.estado === "Publicado");
   const sinFicha = [];
   if (apiModelos) {
     const ocupados = new Set();
@@ -181,8 +186,10 @@ export function AppProvider({ children }) {
   // Sedes de la web
   const sedes = apiSedes?.length ? unirSedes(apiSedes, s.ubicaciones) : s.ubicaciones.filter((u) => u.tipo === "Sede propia" && u.activo);
 
+  const catalogo = { estado: !MODO_REAL || apiModelos ? "listo" : catalogoError ? "error" : "cargando", reintentar: refrescarWeb };
+
   const api = {
-    ...s, publicos, apiModelos, sinFicha, apiSedes,
+    ...s, publicos, apiModelos, sinFicha, apiSedes, catalogo,
     agregar, actualizar, eliminar, reemplazar, restablecer, registrar, configurar,
     sedes, refrescarWeb, modelosConFotos, urlsFotos,
     modelo: (id) => s.modelos.find((m) => m.id === id),
